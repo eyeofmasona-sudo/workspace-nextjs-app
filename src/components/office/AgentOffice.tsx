@@ -9,7 +9,7 @@ import { useState, useCallback } from 'react';
 import { useOfficeData } from '@/hooks/useOfficeData';
 import { useEventStream } from '@/hooks/useEventStream';
 import { useOfficeAnimations } from '@/hooks/useOfficeAnimations';
-import { OfficeCanvas } from './OfficeCanvas';
+import { IsometricOffice } from './IsometricOffice';
 import { TaskBoard } from './TaskBoard';
 import { SituationRoom } from './SituationRoom';
 import { OrchestratorPanel } from './OrchestratorPanel';
@@ -165,8 +165,8 @@ export function AgentOffice({ workspaceId, onSeed }: AgentOfficeProps) {
 
       {/* ─── Main Content: Office Canvas (always primary) ─── */}
       <div className="flex-1 min-h-0 relative">
-        {/* Office Canvas — the hero */}
-        <OfficeCanvas
+        {/* Isometric Office — the hero */}
+        <IsometricOffice
           agents={agents}
           tasks={tasks}
           onAgentClick={handleAgentClick}
