@@ -71,7 +71,7 @@ class TaskDecompositionEngine {
 
     // 2. Create epics and their tasks
     for (const planEpic of plan.epics) {
-      const epic = await this.createEpic(planEpic, currentProjectId);
+      const epic = await this.createEpic(planEpic, currentProjectId, workspaceId);
       events.push({ eventType: 'epic.created', entityId: epic.id, timestamp: Date.now() });
 
       // 3. Create tasks under the epic
@@ -95,6 +95,7 @@ class TaskDecompositionEngine {
               summary: `Approval required for: ${planTask.title}`,
               risk: planTask.riskLevel,
               payload: { planTask },
+              workspaceId,
             });
             approvals.push(approval);
             events.push({
@@ -132,7 +133,7 @@ class TaskDecompositionEngine {
   /**
    * Create a single epic in the database
    */
-  private async createEpic(planEpic: PlanEpic, projectId: string) {
+  private async createEpic(planEpic: PlanEpic, projectId: string, workspaceId?: string) {
     const epic = await db.epic.create({
       data: {
         projectId,
@@ -144,6 +145,7 @@ class TaskDecompositionEngine {
     });
 
     await eventBus.emit(EventTypes.EPIC_CREATED, {
+      workspaceId: workspaceId ?? null,
       epicId: epic.id,
       projectId,
       title: epic.title,
@@ -192,6 +194,7 @@ class TaskDecompositionEngine {
     });
 
     await eventBus.emit(EventTypes.TASK_CREATED, {
+      workspaceId,
       taskId: task.id,
       epicId,
       title: task.title,
@@ -203,6 +206,7 @@ class TaskDecompositionEngine {
     // Emit task.assigned if agent was found
     if (assignedAgentId && assignedAgentName) {
       await eventBus.emit(EventTypes.TASK_ASSIGNED, {
+        workspaceId,
         taskId: task.id,
         agentId: assignedAgentId,
         agentName: assignedAgentName,
@@ -264,6 +268,7 @@ class TaskDecompositionEngine {
     });
 
     await eventBus.emit(EventTypes.TASK_CREATED, {
+      workspaceId,
       taskId: task.id,
       epicId,
       title: task.title,
@@ -274,6 +279,7 @@ class TaskDecompositionEngine {
 
     if (assignedAgentId && assignedAgentName) {
       await eventBus.emit(EventTypes.TASK_ASSIGNED, {
+        workspaceId,
         taskId: task.id,
         agentId: assignedAgentId,
         agentName: assignedAgentName,
@@ -339,6 +345,7 @@ class TaskDecompositionEngine {
       epicId = epic.id;
 
       await eventBus.emit(EventTypes.EPIC_CREATED, {
+        workspaceId: params.workspaceId ?? null,
         epicId: epic.id,
         projectId: params.projectId,
         title: epic.title,
@@ -366,6 +373,7 @@ class TaskDecompositionEngine {
     });
 
     await eventBus.emit(EventTypes.TASK_CREATED, {
+      workspaceId: params.workspaceId,
       taskId: task.id,
       epicId,
       title: task.title,
@@ -376,6 +384,7 @@ class TaskDecompositionEngine {
 
     if (assignment.agentId && assignment.agentName) {
       await eventBus.emit(EventTypes.TASK_ASSIGNED, {
+        workspaceId: params.workspaceId,
         taskId: task.id,
         agentId: assignment.agentId,
         agentName: assignment.agentName,
@@ -393,6 +402,7 @@ class TaskDecompositionEngine {
         actionType: 'execute',
         summary: `Approval required for: ${params.title}`,
         risk: params.riskLevel ?? 'medium',
+        workspaceId: params.workspaceId,
       });
       approvals.push(approval);
       events.push({ eventType: 'approval.requested', entityId: approval.id, timestamp: Date.now() });

@@ -625,3 +625,37 @@ Stage Summary:
 - C6 VERIFIED: No regression — current protection adequate for MVP
 - 6 files modified, 2 new files created, schema migrated
 - All lint checks pass, all API endpoints tested and working
+
+---
+Task ID: 5-post-fix-audit
+Agent: Main
+Task: Post-Fix Audit for Stage 5 — Verify C5, C7, C1/C2, C6 fixes are correct and complete
+
+Work Log:
+- C5 AUDIT: Read OrchestratorEngine.ts — confirmed approvePlan() calls decompose() exactly once (line 173). No fallthrough, no second call.
+- C7 AUDIT: Found approve/reject endpoints existed but lacked workspaceId verification. FIXED:
+  - Added workspaceId guard to approve/reject endpoints (403 if cross-workspace)
+  - ApprovalQueue.tsx now passes workspaceId as query param
+  - AgentOffice.tsx now passes workspaceId prop to ApprovalQueue
+  - ApprovalEngine.createApprovalRequest() now accepts and propagates workspaceId
+  - All 3 createApprovalRequest calls now pass workspaceId
+- C1/C2 AUDIT: Infrastructure was in place but many events emitted without workspaceId. FIXED:
+  - Added workspaceId to all OrchestratorEngine event payloads (4 payloads)
+  - Added workspaceId to all TaskDecompositionEngine event payloads (9 payloads)
+  - Updated event type interfaces in events.ts (6 payload types)
+  - createEpic() now accepts workspaceId parameter
+- C6 AUDIT: No OrchestratorPlanRecord or planId flow exists. FIXED:
+  - Added useRef-based double-submit guard to OrchestratorPanel (sendMessage + approvePlan)
+  - Added useRef-based double-submit guard to ApprovalQueue (handleApprove + handleReject)
+- TS FIXES: Fixed pre-existing errors:
+  - CreatedApprovalInfo.taskId: string → string | null
+  - EventBus payload cast: two-step cast via unknown
+  - EventTimeline: replaced && pattern with typeof checks for unknown→ReactNode
+- VERIFICATION: tsc --noEmit ✓, lint ✓, prisma validate ✓, browser renders correctly
+
+Stage Summary:
+- C5: ✅ CONFIRMED FIXED — decompose() called exactly once
+- C7: ✅ FIXED — workspaceId verification + propagation
+- C1/C2: ✅ FIXED — all event payloads include workspaceId
+- C6: ⚠️ PARTIALLY FIXED — useRef guard added; no planId flow (Important debt)
+- Ready for Stage 6 with documented risks

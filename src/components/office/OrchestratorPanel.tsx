@@ -3,7 +3,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
@@ -40,9 +40,13 @@ export function OrchestratorPanel({ workspaceId, agents }: OrchestratorPanelProp
   const [mode, setMode] = useState<'manual' | 'balanced' | 'autonomous'>('balanced');
   const [loading, setLoading] = useState(false);
   const [pendingPlan, setPendingPlan] = useState<PlanPreview | null>(null);
+  // C6: Ref-based double-submit guard — synchronous check prevents concurrent fetches
+  // even when React batches state updates
+  const submittingRef = useRef(false);
 
   const sendMessage = async () => {
-    if (!input.trim() || loading) return;
+    if (!input.trim() || loading || submittingRef.current) return;
+    submittingRef.current = true;
     const msg = input.trim();
     setInput('');
 
@@ -88,12 +92,14 @@ export function OrchestratorPanel({ workspaceId, agents }: OrchestratorPanelProp
         },
       ]);
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   };
 
   const approvePlan = async () => {
-    if (!pendingPlan) return;
+    if (!pendingPlan || submittingRef.current) return;
+    submittingRef.current = true;
     setLoading(true);
     try {
       const res = await fetch('/api/orchestrator/approve-plan', {
@@ -126,6 +132,7 @@ export function OrchestratorPanel({ workspaceId, agents }: OrchestratorPanelProp
         },
       ]);
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   };

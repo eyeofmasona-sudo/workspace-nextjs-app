@@ -207,6 +207,7 @@ export function AgentOffice({ workspaceId, onSeed }: AgentOfficeProps) {
                 <TabsContent value="approvals" className="h-full m-0 p-3">
                   <ApprovalQueue
                     approvals={approvals}
+                    workspaceId={workspaceId!}
                     onAction={handleApprovalAction}
                   />
                 </TabsContent>

@@ -142,10 +142,12 @@ class ApprovalEngine {
     summary: string;
     risk: RiskLevel;
     payload?: Record<string, unknown>;
+    workspaceId?: string;
   }) {
     const request = await db.approvalRequest.create({
       data: {
         taskId: params.taskId,
+        workspaceId: params.workspaceId ?? null,
         agentId: params.agentId,
         actionType: params.actionType,
         summary: params.summary,
@@ -161,6 +163,7 @@ class ApprovalEngine {
       agentId: params.agentId,
       actionType: params.actionType,
       risk: params.risk,
+      workspaceId: params.workspaceId ?? undefined,
       timestamp: Date.now(),
       source: 'approval-engine',
     });

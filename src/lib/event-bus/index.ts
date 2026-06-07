@@ -50,7 +50,7 @@ class EventBus {
    */
   async emit<T extends EventType>(eventType: T, payload: EventMap[T]): Promise<void> {
     // Extract workspaceId from payload for scoped queries
-    const payloadObj = payload as Record<string, unknown>;
+    const payloadObj = payload as unknown as Record<string, unknown>;
     const workspaceId = typeof payloadObj.workspaceId === 'string' ? payloadObj.workspaceId : null;
 
     // Log to database

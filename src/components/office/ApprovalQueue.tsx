@@ -3,7 +3,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -21,47 +21,56 @@ const RISK_COLORS: Record<string, string> = {
 
 interface ApprovalQueueProps {
   approvals: OfficeApproval[];
+  workspaceId: string;
   onAction?: (approvalId: string, action: 'approve' | 'reject') => void;
 }
 
-export function ApprovalQueue({ approvals, onAction }: ApprovalQueueProps) {
+export function ApprovalQueue({ approvals, workspaceId, onAction }: ApprovalQueueProps) {
   const [processing, setProcessing] = useState<Set<string>>(new Set());
+  // C6: Ref-based double-submit guard — prevents concurrent fetches even during React render batching
+  const submittingRef = useRef<Set<string>>(new Set());
 
-  const handleApprove = async (approvalId: string) => {
+  const handleApprove = useCallback(async (approvalId: string) => {
+    if (submittingRef.current.has(approvalId)) return;
+    submittingRef.current.add(approvalId);
     setProcessing((prev) => new Set(prev).add(approvalId));
     try {
-      const res = await fetch(`/api/approvals/${approvalId}/approve`, { method: 'POST' });
+      const res = await fetch(`/api/approvals/${approvalId}/approve?workspaceId=${workspaceId}`, { method: 'POST' });
       if (res.ok) {
         onAction?.(approvalId, 'approve');
       }
     } catch {
       // Will be refreshed on next poll
     } finally {
+      submittingRef.current.delete(approvalId);
       setProcessing((prev) => {
         const next = new Set(prev);
         next.delete(approvalId);
         return next;
       });
     }
-  };
+  }, [workspaceId, onAction]);
 
-  const handleReject = async (approvalId: string) => {
+  const handleReject = useCallback(async (approvalId: string) => {
+    if (submittingRef.current.has(approvalId)) return;
+    submittingRef.current.add(approvalId);
     setProcessing((prev) => new Set(prev).add(approvalId));
     try {
-      const res = await fetch(`/api/approvals/${approvalId}/reject`, { method: 'POST' });
+      const res = await fetch(`/api/approvals/${approvalId}/reject?workspaceId=${workspaceId}`, { method: 'POST' });
       if (res.ok) {
         onAction?.(approvalId, 'reject');
       }
     } catch {
       // Will be refreshed on next poll
     } finally {
+      submittingRef.current.delete(approvalId);
       setProcessing((prev) => {
         const next = new Set(prev);
         next.delete(approvalId);
         return next;
       });
     }
-  };
+  }, [workspaceId, onAction]);
 
   return (
     <div className="h-full flex flex-col">

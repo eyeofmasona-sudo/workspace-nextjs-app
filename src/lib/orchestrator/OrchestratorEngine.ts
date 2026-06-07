@@ -126,6 +126,7 @@ class OrchestratorEngine {
     );
 
     await eventBus.emit(EventTypes.ORCHESTRATOR_PLAN_CREATED, {
+      workspaceId,
       planGoal: plan.goal,
       taskSize: plan.taskSize,
       epicCount: plan.epics.length,
@@ -138,6 +139,7 @@ class OrchestratorEngine {
 
     // Emit cost estimated event
     await eventBus.emit(EventTypes.ORCHESTRATOR_COST_ESTIMATED, {
+      workspaceId,
       costLevel: plan.estimatedCost.level,
       estimatedTokens: plan.estimatedCost.estimatedTokens,
       estimatedUsd: plan.estimatedCost.estimatedUsd,
@@ -176,6 +178,7 @@ class OrchestratorEngine {
 
       // Emit plan approved event
       await eventBus.emit(EventTypes.ORCHESTRATOR_PLAN_APPROVED, {
+        workspaceId,
         planGoal: plan.goal,
         createdEpicCount: plan.epics.length,
         createdTaskCount: result.createdTasks.length,
@@ -287,6 +290,7 @@ class OrchestratorEngine {
 
     // Emit cost estimated event
     await eventBus.emit(EventTypes.ORCHESTRATOR_COST_ESTIMATED, {
+      workspaceId,
       costLevel: costEstimate.level,
       estimatedTokens: costEstimate.estimatedTokens,
       estimatedUsd: costEstimate.estimatedUsd,

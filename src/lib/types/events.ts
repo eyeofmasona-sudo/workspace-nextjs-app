@@ -93,18 +93,21 @@ export interface ProjectCreatedPayload extends BaseEventPayload {
 }
 
 export interface EpicCreatedPayload extends BaseEventPayload {
+  workspaceId?: string | null;
   epicId: string;
   projectId: string;
   title: string;
 }
 
 export interface TaskCreatedPayload extends BaseEventPayload {
+  workspaceId?: string | null;
   taskId: string;
   epicId: string;
   title: string;
 }
 
 export interface TaskAssignedPayload extends BaseEventPayload {
+  workspaceId?: string | null;
   taskId: string;
   agentId: string;
   agentName: string;
@@ -199,6 +202,7 @@ export interface OrchestratorMessageReceivedPayload extends BaseEventPayload {
 }
 
 export interface OrchestratorPlanCreatedPayload extends BaseEventPayload {
+  workspaceId: string;
   planGoal: string;
   taskSize: string;
   epicCount: number;
@@ -208,6 +212,7 @@ export interface OrchestratorPlanCreatedPayload extends BaseEventPayload {
 }
 
 export interface OrchestratorPlanApprovedPayload extends BaseEventPayload {
+  workspaceId: string;
   planGoal: string;
   createdEpicCount: number;
   createdTaskCount: number;
@@ -216,6 +221,7 @@ export interface OrchestratorPlanApprovedPayload extends BaseEventPayload {
 }
 
 export interface OrchestratorCostEstimatedPayload extends BaseEventPayload {
+  workspaceId: string;
   costLevel: string;
   estimatedTokens?: number;
   estimatedUsd?: number;

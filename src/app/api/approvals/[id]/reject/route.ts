@@ -1,4 +1,5 @@
 // POST /api/approvals/:id/reject — Reject a pending approval request
+// C7 FIX: Workspace-scoped — caller must belong to the same workspace as the approval.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { approvalSystem } from '@/lib/approval';
@@ -9,6 +10,19 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
+    const { searchParams } = new URL(request.url);
+    const callerWorkspaceId = searchParams.get('workspaceId');
+
+    // Workspace guard: if caller provides workspaceId, verify ownership
+    if (callerWorkspaceId) {
+      const approval = await approvalSystem.get(id);
+      if (!approval) {
+        return NextResponse.json({ error: 'Approval request not found' }, { status: 404 });
+      }
+      if (approval.workspaceId && approval.workspaceId !== callerWorkspaceId) {
+        return NextResponse.json({ error: 'Forbidden: approval belongs to another workspace' }, { status: 403 });
+      }
+    }
 
     const result = await approvalSystem.reject(id);
 

@@ -85,9 +85,9 @@ export function EventTimeline({ events, maxItems = 30 }: EventTimelineProps) {
                   {/* Brief payload summary */}
                   {payload && (
                     <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-                      {payload.toolKey && `${payload.toolKey} `}
-                      {payload.agentId && `agent:${String(payload.agentId).slice(-6)} `}
-                      {payload.correlationId && `🔗${String(payload.correlationId).slice(-8)}`}
+                      {typeof payload.toolKey === 'string' ? `${payload.toolKey} ` : ''}
+                      {typeof payload.agentId === 'string' ? `agent:${payload.agentId.slice(-6)} ` : ''}
+                      {typeof payload.correlationId === 'string' ? `🔗${payload.correlationId.slice(-8)}` : ''}
                     </p>
                   )}
                 </div>

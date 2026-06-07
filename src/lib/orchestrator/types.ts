@@ -128,7 +128,7 @@ export interface CreatedTaskInfo {
 
 export interface CreatedApprovalInfo {
   id: string;
-  taskId: string;
+  taskId: string | null;
   actionType: string;
   summary: string;
   risk: RiskLevel;
