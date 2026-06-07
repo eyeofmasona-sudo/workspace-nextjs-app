@@ -3,12 +3,13 @@
 
 'use client';
 
+import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { getAgentVisual } from '@/lib/office/agentDefaults';
-import { Check, X, AlertTriangle } from 'lucide-react';
+import { Check, X, AlertTriangle, Loader2 } from 'lucide-react';
 import type { OfficeApproval } from '@/hooks/useOfficeData';
 
 const RISK_COLORS: Record<string, string> = {
@@ -24,30 +25,41 @@ interface ApprovalQueueProps {
 }
 
 export function ApprovalQueue({ approvals, onAction }: ApprovalQueueProps) {
+  const [processing, setProcessing] = useState<Set<string>>(new Set());
+
   const handleApprove = async (approvalId: string) => {
+    setProcessing((prev) => new Set(prev).add(approvalId));
     try {
-      const res = await fetch('/api/approvals', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ approvalId, action: 'approve' }),
-      });
-      // If no dedicated approve endpoint, try the approval route
-      if (!res.ok) {
-        // Try alternative: PATCH to a dedicated approve endpoint
-        await fetch(`/api/approvals/${approvalId}/approve`, { method: 'POST' });
+      const res = await fetch(`/api/approvals/${approvalId}/approve`, { method: 'POST' });
+      if (res.ok) {
+        onAction?.(approvalId, 'approve');
       }
-      onAction?.(approvalId, 'approve');
     } catch {
-      // Silent — will be refreshed on next poll
+      // Will be refreshed on next poll
+    } finally {
+      setProcessing((prev) => {
+        const next = new Set(prev);
+        next.delete(approvalId);
+        return next;
+      });
     }
   };
 
   const handleReject = async (approvalId: string) => {
+    setProcessing((prev) => new Set(prev).add(approvalId));
     try {
-      await fetch(`/api/approvals/${approvalId}/reject`, { method: 'POST' });
-      onAction?.(approvalId, 'reject');
+      const res = await fetch(`/api/approvals/${approvalId}/reject`, { method: 'POST' });
+      if (res.ok) {
+        onAction?.(approvalId, 'reject');
+      }
     } catch {
-      // Silent
+      // Will be refreshed on next poll
+    } finally {
+      setProcessing((prev) => {
+        const next = new Set(prev);
+        next.delete(approvalId);
+        return next;
+      });
     }
   };
 
@@ -107,16 +119,20 @@ export function ApprovalQueue({ approvals, onAction }: ApprovalQueueProps) {
                       size="sm"
                       className="h-6 text-[10px] px-2 bg-emerald-600 hover:bg-emerald-700"
                       onClick={() => handleApprove(approval.id)}
+                      disabled={processing.has(approval.id)}
                     >
-                      <Check className="w-3 h-3 mr-0.5" /> Approve
+                      {processing.has(approval.id) ? <Loader2 className="w-3 h-3 mr-0.5 animate-spin" /> : <Check className="w-3 h-3 mr-0.5" />}
+                      Approve
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
                       className="h-6 text-[10px] px-2 text-red-600 border-red-200 hover:bg-red-50"
                       onClick={() => handleReject(approval.id)}
+                      disabled={processing.has(approval.id)}
                     >
-                      <X className="w-3 h-3 mr-0.5" /> Reject
+                      {processing.has(approval.id) ? <Loader2 className="w-3 h-3 mr-0.5 animate-spin" /> : <X className="w-3 h-3 mr-0.5" />}
+                      Reject
                     </Button>
                   </div>
                 </CardContent>

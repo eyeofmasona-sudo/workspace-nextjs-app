@@ -65,8 +65,12 @@ export async function GET(request: NextRequest) {
       take: 50,
     });
 
-    // Fetch recent events
+    // Fetch recent events (workspace-scoped)
+    // FIX C1: Filter events by workspaceId — returns workspace events plus global events
     const recentEvents = await db.eventLog.findMany({
+      where: {
+        OR: [{ workspaceId }, { workspaceId: null }],
+      },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });

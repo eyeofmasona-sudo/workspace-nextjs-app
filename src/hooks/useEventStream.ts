@@ -14,7 +14,8 @@ export function useEventStream(workspaceId: string | null, pollInterval = 4000) 
   const fetchEvents = useCallback(async () => {
     if (!workspaceId) return;
     try {
-      const params = new URLSearchParams({ limit: '50' });
+      // FIX C2: Pass workspaceId to scope events to the current workspace
+      const params = new URLSearchParams({ limit: '50', workspaceId });
       const res = await fetch(`/api/events?${params}`);
       if (!res.ok) return;
       const data = await res.json();

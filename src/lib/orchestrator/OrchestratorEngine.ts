@@ -151,48 +151,25 @@ class OrchestratorEngine {
 
   /**
    * Approve a plan and create Epic/Task/Subtask in the database
+   *
+   * FIX C5: Previous code called decompose() twice when projectId was not
+   * provided — once to create the project, then again at the fallthrough.
+   * Now decompose() is called exactly once with the correct projectId.
    */
   async approvePlan(input: ApprovePlanInput): Promise<OrchestratorResponse> {
-    const { workspaceId, projectId, plan, createProject, projectName } = input;
+    const { workspaceId, projectId, plan, createProject } = input;
 
     try {
-      // Determine the project ID
+      // Determine the project to decompose into
       let effectiveProjectId = projectId;
 
-      if (!effectiveProjectId && (createProject || plan.epics.length > 0)) {
-        // Create a project for this plan
-        const project = await taskDecompositionEngine.decompose(
-          plan, workspaceId, undefined
-        );
-        effectiveProjectId = project.createdProjectId;
-      } else if (effectiveProjectId) {
-        // Decompose into existing project
-        const result = await taskDecompositionEngine.decompose(
-          plan, workspaceId, effectiveProjectId
-        );
-
-        // Emit plan approved event
-        await eventBus.emit(EventTypes.ORCHESTRATOR_PLAN_APPROVED, {
-          planGoal: plan.goal,
-          createdEpicCount: plan.epics.length,
-          createdTaskCount: result.createdTasks.length,
-          createdApprovalCount: result.approvals.length,
-          timestamp: Date.now(),
-          source: 'orchestrator-engine',
-        });
-
-        return {
-          type: 'plan_required', // plan was approved, tasks created
-          summary: `Plan approved and decomposed: ${plan.epics.length} epics, ${result.createdTasks.length} tasks created`,
-          plan,
-          createdTasks: result.createdTasks,
-          approvals: result.approvals.length > 0 ? result.approvals : undefined,
-          estimatedCost: plan.estimatedCost,
-          events: result.events,
-        };
+      if (!effectiveProjectId) {
+        // No project provided — decompose() will create one automatically
+        // when projectId is undefined. Call decompose exactly ONCE.
+        effectiveProjectId = undefined;
       }
 
-      // If we created a project via decompose without existing projectId
+      // Single decompose call — creates project if needed, then epics/tasks
       const result = await taskDecompositionEngine.decompose(
         plan, workspaceId, effectiveProjectId
       );

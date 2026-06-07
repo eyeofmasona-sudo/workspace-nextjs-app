@@ -272,12 +272,13 @@ model ApprovalRequest {
 // ─── Event Log ───────────────────────────────────────────────
 
 model EventLog {
-  id         String   @id @default(cuid())
-  eventType  String
-  entityType String? // project | epic | task | agent | approval | memory | cost
-  entityId   String?
-  payload    String? // JSON
-  createdAt  DateTime @default(now())
+  id          String   @id @default(cuid())
+  eventType   String
+  entityType  String?  // project | epic | task | agent | approval | memory | cost | orchestrator | tool
+  entityId    String?
+  workspaceId String?  // Workspace scope — extracted from payload on emit. Null for global/system events.
+  payload     String?  // JSON
+  createdAt   DateTime @default(now())
 
   @@map("event_logs")
 }

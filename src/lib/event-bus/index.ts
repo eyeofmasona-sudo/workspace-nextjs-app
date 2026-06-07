@@ -43,8 +43,16 @@ class EventBus {
 
   /**
    * Emit an event — notifies all subscribers and logs to DB
+   *
+   * FIX C1: Extracts workspaceId from payload to enable workspace-scoped
+   * event queries. Events without workspaceId in payload are stored as null
+   * (global/system events).
    */
   async emit<T extends EventType>(eventType: T, payload: EventMap[T]): Promise<void> {
+    // Extract workspaceId from payload for scoped queries
+    const payloadObj = payload as Record<string, unknown>;
+    const workspaceId = typeof payloadObj.workspaceId === 'string' ? payloadObj.workspaceId : null;
+
     // Log to database
     try {
       await db.eventLog.create({
@@ -52,6 +60,7 @@ class EventBus {
           eventType,
           entityType: (payload as BaseEventPayload & { entityType?: string }).entityType ?? this.extractEntityType(eventType),
           entityId: (payload as BaseEventPayload & { entityId?: string }).entityId ?? null,
+          workspaceId,
           payload: JSON.stringify(payload),
         },
       });
@@ -142,9 +151,17 @@ class EventBus {
 
   /**
    * Get recent events from the database
+   * FIX C1: Now supports optional workspaceId filtering.
+   * When workspaceId is provided, returns events for that workspace
+   * plus global events (where workspaceId is null).
    */
-  async getRecentEvents(limit = 50, offset = 0) {
+  async getRecentEvents(limit = 50, offset = 0, workspaceId?: string) {
+    const where = workspaceId
+      ? { OR: [{ workspaceId }, { workspaceId: null }] }
+      : undefined;
+
     return db.eventLog.findMany({
+      where,
       orderBy: { createdAt: 'desc' },
       take: limit,
       skip: offset,
@@ -153,13 +170,21 @@ class EventBus {
 
   /**
    * Get events by entity type
+   * FIX C1: Now supports optional workspaceId filtering.
    */
-  async getEventsByEntity(entityType: string, entityId?: string, limit = 50) {
+  async getEventsByEntity(entityType: string, entityId?: string, limit = 50, workspaceId?: string) {
+    const where: Record<string, unknown> = {
+      entityType,
+      ...(entityId ? { entityId } : {}),
+    };
+
+    if (workspaceId) {
+      where.OR = [{ workspaceId }, { workspaceId: null }];
+      delete where.workspaceId;
+    }
+
     return db.eventLog.findMany({
-      where: {
-        entityType,
-        ...(entityId ? { entityId } : {}),
-      },
+      where,
       orderBy: { createdAt: 'desc' },
       take: limit,
     });

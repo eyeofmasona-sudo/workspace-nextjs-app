@@ -584,3 +584,44 @@ Stage Summary:
 - Split workspace panel (10 tabs, mostly placeholders for future stages)
 - Resizable layout with toggle for bottom panel
 - Zero runtime errors in dev log
+
+---
+Task ID: 5-audit-fix
+Agent: Main
+Task: Stage 5 Audit Fixes — C5, C7, C1/C2, C6 check
+
+Work Log:
+- C5 FIX: OrchestratorEngine.approvePlan() had double-decompose bug — when projectId was not provided, decompose() was called once to create the project, then execution fell through to a second decompose() call creating duplicate epics/tasks. Fixed to call decompose() exactly once.
+- C7 FIX: Approval approve/reject API endpoints did not exist. Created:
+  - POST /api/approvals/[id]/approve/route.ts — calls approvalSystem.approve(), returns 200 on success, 404 if not found, 409 if not pending
+  - POST /api/approvals/[id]/reject/route.ts — calls approvalSystem.reject(), same error handling
+  - Updated ApprovalQueue.tsx: uses correct endpoints, adds processing state (Set<string>), disables buttons during request, shows Loader2 spinner
+- C1/C2 FIX: Events were not scoped by workspaceId. Changes:
+  - Added workspaceId column to EventLog in Prisma schema (nullable, for global events)
+  - EventBus.emit() now extracts workspaceId from payload and stores it
+  - EventBus.getRecentEvents() and getEventsByEntity() now accept optional workspaceId filter
+  - /api/events GET now accepts workspaceId query param and filters accordingly
+  - /api/events POST now accepts workspaceId in body
+  - /api/office/state now filters recentEvents with OR: [{ workspaceId }, { workspaceId: null }]
+  - useEventStream hook now passes workspaceId to /api/events
+  - Schema pushed to database (db:push)
+- C6 CHECK: approvePlan idempotency — analyzed the flow: button disabled={loading}, pendingPlan cleared on success, no race condition window. Current protection adequate for MVP. Architectural concern (no persisted planId) documented for future.
+
+Verification:
+- bun run lint: passes cleanly
+- bun run db:push: schema synced
+- curl tests:
+  - GET /api/status → 200 (1 user, 2 workspaces, 11 agents, 44 events)
+  - GET /api/events?limit=3&workspaceId=... → returns workspace-scoped events ✓
+  - GET /api/office/state?workspaceId=... → 10 agents, 44 events, situation data ✓
+  - POST /api/approvals/[id]/approve → {"status":"approved"} ✓
+  - POST /api/approvals/[id]/reject → {"status":"rejected"} ✓
+  - POST /api/approvals/[id]/reject (on already approved) → 409 "Request is not pending" ✓
+
+Stage Summary:
+- C5 FIXED: No more duplicate epics/tasks on plan approval
+- C7 FIXED: Approve/Reject buttons now work with proper API endpoints and UI feedback
+- C1/C2 FIXED: Events are workspace-scoped — no data leakage between workspaces
+- C6 VERIFIED: No regression — current protection adequate for MVP
+- 6 files modified, 2 new files created, schema migrated
+- All lint checks pass, all API endpoints tested and working

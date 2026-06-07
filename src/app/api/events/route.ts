@@ -12,16 +12,23 @@ export async function GET(request: NextRequest) {
     const offset = parseInt(searchParams.get('offset') ?? '0');
     const entityType = searchParams.get('entityType');
     const eventType = searchParams.get('eventType');
+    // FIX C2: Accept workspaceId to scope events to a workspace
+    const workspaceId = searchParams.get('workspaceId');
+
+    // Build workspace filter: workspace events + global events (workspaceId = null)
+    const workspaceFilter = workspaceId
+      ? { OR: [{ workspaceId }, { workspaceId: null }] }
+      : undefined;
 
     if (entityType) {
       const entityId = searchParams.get('entityId') ?? undefined;
-      const events = await eventBus.getEventsByEntity(entityType, entityId, limit);
+      const events = await eventBus.getEventsByEntity(entityType, entityId, limit, workspaceId ?? undefined);
       return NextResponse.json({ events });
     }
 
     if (eventType) {
       const events = await db.eventLog.findMany({
-        where: { eventType },
+        where: { eventType, ...(workspaceFilter ? { ...workspaceFilter } : {}) },
         orderBy: { createdAt: 'desc' },
         take: limit,
         skip: offset,
@@ -29,7 +36,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ events });
     }
 
-    const events = await eventBus.getRecentEvents(limit, offset);
+    const events = await eventBus.getRecentEvents(limit, offset, workspaceId ?? undefined);
     return NextResponse.json({ events });
   } catch (error) {
     console.error('[API] GET /events error:', error);
@@ -40,7 +47,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { eventType, entityType, entityId, payload } = body;
+    const { eventType, entityType, entityId, payload, workspaceId } = body;
 
     if (!eventType) {
       return NextResponse.json({ error: 'eventType is required' }, { status: 400 });
@@ -51,6 +58,7 @@ export async function POST(request: NextRequest) {
         eventType,
         entityType: entityType ?? null,
         entityId: entityId ?? null,
+        workspaceId: workspaceId ?? null,
         payload: payload ? JSON.stringify(payload) : null,
       },
     });
