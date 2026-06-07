@@ -1,6 +1,7 @@
 // ─── Agent OS — OfficeRoom ───────────────────────────────────
 // A single room/zone in the 2.5D office.
 // Has floor tiles, 3D walls, zone label, workstations, and agent sprites.
+// Runtime-first: uses agent.runtimeState?.status ?? agent.status
 
 'use client';
 
@@ -49,6 +50,14 @@ const ZONE_FURNITURE: Record<string, FurnitureType> = {
   lounge_area: 'lounge',
 };
 
+// Runtime-first helpers
+function getRuntimeStatus(agent: OfficeAgent): string {
+  return agent.runtimeState?.status ?? agent.status;
+}
+function getRuntimeZone(agent: OfficeAgent): string {
+  return agent.runtimeState?.locationZone ?? agent.locationZone;
+}
+
 export function OfficeRoom({
   zoneKey,
   agents,
@@ -61,59 +70,88 @@ export function OfficeRoom({
   const Icon = ZONE_ICONS[zoneKey] ?? Users;
   const furnitureType = ZONE_FURNITURE[zoneKey] ?? 'workstation';
   const isHighlighted = !!zoneAnimation;
-  const activeAgents = agents.filter((a) => a.status !== 'offline');
+
+  // Runtime-first: use runtimeState?.status for active filtering
+  const activeAgents = agents.filter((a) => getRuntimeStatus(a) !== 'offline');
   const activeTaskCount = tasks.filter(
     (t) => ['in_progress', 'review', 'waiting_approval'].includes(t.status) &&
       agents.some((a) => a.id === t.assignedAgentId)
   ).length;
+
+  // Runtime-first status checks for furniture
+  const hasWorkingAgent = agents.some((a) => getRuntimeStatus(a) === 'working');
+  const hasWaitingApiAgent = agents.some((a) => getRuntimeStatus(a) === 'waiting_api');
 
   return (
     <motion.div
       className={`
         relative rounded-lg overflow-hidden
         border-2 ${zone.borderColor}
-        min-h-[120px] flex flex-col
+        min-h-[130px] flex flex-col
         transition-shadow duration-300
       `}
       style={{
         background: `
-          linear-gradient(180deg, ${zone.color.replace('bg-', '').includes('-50') ? 'rgba(248,250,252,0.8)' : 'rgba(255,255,255,0.6)'} 0%, rgba(255,255,255,0.3) 100%),
+          linear-gradient(180deg, rgba(248,250,252,0.85) 0%, rgba(241,245,249,0.6) 40%, rgba(226,232,240,0.4) 100%),
           repeating-linear-gradient(
             0deg,
             transparent,
-            transparent 15px,
-            rgba(0,0,0,0.015) 15px,
-            rgba(0,0,0,0.015) 16px
+            transparent 18px,
+            rgba(0,0,0,0.03) 18px,
+            rgba(0,0,0,0.03) 19px
           ),
           repeating-linear-gradient(
             90deg,
             transparent,
-            transparent 15px,
-            rgba(0,0,0,0.015) 15px,
-            rgba(0,0,0,0.015) 16px
+            transparent 18px,
+            rgba(0,0,0,0.03) 18px,
+            rgba(0,0,0,0.03) 19px
           )
         `,
         boxShadow: isHighlighted
-          ? `0 0 20px rgba(59,130,246,0.2), inset 0 0 30px rgba(59,130,246,0.05)`
-          : `inset 0 0 15px rgba(0,0,0,0.03), 0 2px 8px rgba(0,0,0,0.06)`,
+          ? `0 0 24px rgba(59,130,246,0.25), inset 0 0 30px rgba(59,130,246,0.06)`
+          : `
+            inset 0 2px 4px rgba(255,255,255,0.4),
+            inset 0 -2px 8px rgba(0,0,0,0.06),
+            0 4px 16px rgba(0,0,0,0.1),
+            0 1px 4px rgba(0,0,0,0.06)
+          `,
       }}
       layout
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
     >
-      {/* 3D Wall effect — top & left lighter, bottom & right darker */}
+      {/* 3D Wall effect — top wall (ceiling edge light), bottom wall (floor shadow), side walls */}
       <div className="absolute inset-0 rounded-lg pointer-events-none" style={{
-        borderTop: '3px solid rgba(255,255,255,0.5)',
-        borderLeft: '2px solid rgba(255,255,255,0.3)',
-        borderRight: '2px solid rgba(0,0,0,0.06)',
-        borderBottom: '2px solid rgba(0,0,0,0.08)',
+        borderTop: '4px solid rgba(255,255,255,0.6)',
+        borderLeft: '3px solid rgba(255,255,255,0.35)',
+        borderRight: '3px solid rgba(0,0,0,0.08)',
+        borderBottom: '4px solid rgba(0,0,0,0.1)',
       }} />
 
-      {/* Zone header */}
-      <div className="flex items-center gap-1.5 px-2 py-1.5 bg-white/40 backdrop-blur-sm border-b border-black/5">
+      {/* Room inner depth — top shadow creates ceiling illusion */}
+      <div className="absolute inset-0 rounded-lg pointer-events-none" style={{
+        background: `
+          linear-gradient(180deg, rgba(203,213,225,0.15) 0%, transparent 12%),
+          linear-gradient(0deg, rgba(30,41,59,0.06) 0%, transparent 8%),
+          linear-gradient(90deg, rgba(0,0,0,0.03) 0%, transparent 5%),
+          linear-gradient(270deg, rgba(0,0,0,0.03) 0%, transparent 5%)
+        `,
+      }} />
+
+      {/* Zone header — room label bar with wall depth */}
+      <div
+        className="flex items-center gap-1.5 px-2 py-1.5 border-b relative z-10"
+        style={{
+          background: 'rgba(255,255,255,0.55)',
+          backdropFilter: 'blur(4px)',
+          borderBottom: '2px solid rgba(0,0,0,0.06)',
+          boxShadow: 'inset 0 -1px 0 rgba(255,255,255,0.4)',
+        }}
+      >
         <div className={`w-5 h-5 rounded flex items-center justify-center`} style={{
-          backgroundColor: `${zone.color.replace('bg-', '').includes('50') ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.6)'}`,
+          backgroundColor: 'rgba(255,255,255,0.75)',
         }}>
           <Icon className="w-3 h-3 text-gray-500" />
         </div>
@@ -138,14 +176,14 @@ export function OfficeRoom({
 
       {/* Room content — furniture + agents */}
       <div className="flex-1 p-2 relative">
-        {/* Furniture layer (behind agents) */}
-        <div className="absolute inset-2 flex items-end justify-center gap-2 pointer-events-none opacity-60">
-          {furnitureType === 'command' && <CommandBoard isActive={agents.some((a) => a.status === 'working')} />}
+        {/* Furniture layer (behind agents) — higher opacity for visibility */}
+        <div className="absolute inset-2 flex items-end justify-center gap-2 pointer-events-none opacity-85">
+          {furnitureType === 'command' && <CommandBoard isActive={hasWorkingAgent} />}
           {furnitureType === 'meeting' && <MeetingTable />}
           {furnitureType === 'server' && (
             <>
-              <ServerRack isActive={agents.some((a) => a.status === 'working')} />
-              <ServerRack isActive={agents.some((a) => a.status === 'waiting_api')} />
+              <ServerRack isActive={hasWorkingAgent} />
+              <ServerRack isActive={hasWaitingApiAgent} />
             </>
           )}
           {furnitureType === 'lounge' && <LoungeArea />}
@@ -153,8 +191,8 @@ export function OfficeRoom({
             <Workstation
               key={agent.id}
               role={agent.role}
-              occupied={agent.status !== 'offline'}
-              isActive={agent.status === 'working' || agent.status === 'thinking'}
+              occupied={getRuntimeStatus(agent) !== 'offline'}
+              isActive={getRuntimeStatus(agent) === 'working' || getRuntimeStatus(agent) === 'thinking'}
               compact
             />
           ))}
@@ -189,8 +227,8 @@ export function OfficeRoom({
         />
       )}
 
-      {/* Zone emoji decoration */}
-      <div className="absolute bottom-1 right-2 text-3xl opacity-[0.04] select-none pointer-events-none">
+      {/* Zone emoji decoration — watermark */}
+      <div className="absolute bottom-1 right-2 text-4xl opacity-[0.05] select-none pointer-events-none">
         {zone.emoji}
       </div>
     </motion.div>

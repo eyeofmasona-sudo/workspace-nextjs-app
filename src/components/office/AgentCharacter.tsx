@@ -1,6 +1,7 @@
 // ─── Agent OS — AgentCharacter ───────────────────────────────
 // A unique agent character in the Office UI.
 // Displays avatar, name, role, status with CSS-based animations.
+// Runtime-first: uses agent.runtimeState?.status ?? agent.status
 
 'use client';
 
@@ -16,9 +17,16 @@ interface AgentCharacterProps {
   compact?: boolean;
 }
 
+// Runtime-first helper
+function getRuntimeStatus(agent: OfficeAgent): string {
+  return agent.runtimeState?.status ?? agent.status;
+}
+
 export function AgentCharacter({ agent, onClick, compact = false }: AgentCharacterProps) {
+  // Runtime-first: prefer runtimeState.status over agent.status
+  const runtimeStatus = getRuntimeStatus(agent);
   const visual = getAgentVisual(agent.role);
-  const statusVisual = getStatusVisual(agent.status);
+  const statusVisual = getStatusVisual(runtimeStatus);
   const displayName = agent.profile?.displayName ?? agent.name;
 
   if (compact) {
@@ -36,7 +44,7 @@ export function AgentCharacter({ agent, onClick, compact = false }: AgentCharact
         <div className="min-w-0">
           <p className="text-xs font-medium truncate">{displayName}</p>
         </div>
-        <AgentStatusBadge status={agent.status} size="sm" />
+        <AgentStatusBadge status={runtimeStatus} size="sm" />
       </motion.div>
     );
   }
@@ -47,7 +55,7 @@ export function AgentCharacter({ agent, onClick, compact = false }: AgentCharact
         relative flex flex-col items-center gap-1 p-2 rounded-xl cursor-pointer
         bg-white/70 backdrop-blur-sm border ${statusVisual.borderColor}
         hover:bg-white/90 transition-all shadow-sm
-        ${agent.status === 'offline' ? 'opacity-50' : ''}
+        ${runtimeStatus === 'offline' ? 'opacity-50' : ''}
       `}
       onClick={onClick}
       whileHover={{ scale: 1.08, y: -4 }}
@@ -72,9 +80,9 @@ export function AgentCharacter({ agent, onClick, compact = false }: AgentCharact
           {visual.emoji}
         </motion.div>
 
-        {/* Status dot */}
+        {/* Status dot — runtime-first */}
         <div className="absolute -bottom-0.5 -right-0.5">
-          <AgentStatusBadge status={agent.status} size="sm" />
+          <AgentStatusBadge status={runtimeStatus} size="sm" />
         </div>
       </div>
 

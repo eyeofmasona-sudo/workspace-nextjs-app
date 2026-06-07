@@ -2,6 +2,7 @@
 // A 2.5D agent character for the Office UI.
 // CSS-only mini-person with head, body, legs, shadow.
 // Role-based color, status animation, event animation overlay.
+// Runtime-first: uses agent.runtimeState?.status ?? agent.status
 
 'use client';
 
@@ -16,6 +17,11 @@ interface AgentSpriteProps {
   animationState?: AgentAnimationState | null;
   onClick?: () => void;
   compact?: boolean;
+}
+
+// Runtime-first helper
+function getRuntimeStatus(agent: OfficeAgent): string {
+  return agent.runtimeState?.status ?? agent.status;
 }
 
 // Status animation configs — returns framer-motion animate + transition props
@@ -219,12 +225,14 @@ function NotificationPopup({ notification }: { notification: string }) {
 }
 
 export function AgentSprite({ agent, animationState, onClick, compact = false }: AgentSpriteProps) {
+  // Runtime-first: prefer runtimeState.status over agent.status
+  const runtimeStatus = getRuntimeStatus(agent);
   const visual = getAgentVisual(agent.role);
-  const statusVisual = getStatusVisual(agent.status);
+  const statusVisual = getStatusVisual(runtimeStatus);
   const displayName = agent.profile?.displayName ?? agent.name;
 
-  // Get animation configs
-  const statusAnim = getStatusAnim(agent.status);
+  // Get animation configs — runtime-first status
+  const statusAnim = getStatusAnim(runtimeStatus);
   const eventAnim = animationState?.animation ? getEventAnim(animationState.animation) : null;
   // Event animation takes priority over status animation
   const activeAnim = eventAnim ?? statusAnim;
@@ -270,12 +278,12 @@ export function AgentSprite({ agent, animationState, onClick, compact = false }:
         <NotificationPopup notification={animationState.notification} />
       )}
 
-      {/* Status-specific badges */}
-      {agent.status === 'thinking' && <ThoughtBubble />}
-      {agent.status === 'waiting_approval' && <WarningBadge />}
-      {agent.status === 'error' && <ErrorBadge />}
-      {agent.status === 'done' && <DoneBadge />}
-      {agent.status === 'waiting_api' && <WifiPulse />}
+      {/* Status-specific badges — runtime-first */}
+      {runtimeStatus === 'thinking' && <ThoughtBubble />}
+      {runtimeStatus === 'waiting_approval' && <WarningBadge />}
+      {runtimeStatus === 'error' && <ErrorBadge />}
+      {runtimeStatus === 'done' && <DoneBadge />}
+      {runtimeStatus === 'waiting_api' && <WifiPulse />}
 
       {/* Character body */}
       <div className="relative">
@@ -293,8 +301,8 @@ export function AgentSprite({ agent, animationState, onClick, compact = false }:
           >
             {visual.emoji}
           </div>
-          {/* Status indicator */}
-          <StatusBubble status={agent.status} />
+          {/* Status indicator — runtime-first */}
+          <StatusBubble status={runtimeStatus} />
         </div>
 
         {/* Body */}

@@ -34,9 +34,13 @@ export function AgentDetailsDrawer({
 }: AgentDetailsDrawerProps) {
   if (!agent) return null;
 
+  // Runtime-first: prefer runtimeState over static agent fields
+  const runtimeStatus = agent.runtimeState?.status ?? agent.status;
+  const runtimeZone = agent.runtimeState?.locationZone ?? agent.locationZone;
+
   const visual = getAgentVisual(agent.role);
   const displayName = agent.profile?.displayName ?? agent.name;
-  const zone = getZoneVisual(agent.locationZone);
+  const zone = getZoneVisual(runtimeZone);
 
   // Filter events and executions for this agent
   const agentEvents = recentEvents.filter(
@@ -61,7 +65,7 @@ export function AgentDetailsDrawer({
                 <Badge variant="outline" className="text-xs">
                   {agent.role.replace('_', ' ')}
                 </Badge>
-                <AgentStatusBadge status={agent.status} showLabel />
+                <AgentStatusBadge status={runtimeStatus} showLabel />
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {zone.emoji} {zone.label}

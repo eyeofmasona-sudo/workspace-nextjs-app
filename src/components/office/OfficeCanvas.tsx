@@ -33,6 +33,14 @@ const GRID_ZONES = [
   { zone: 'lounge_area', area: 'lounge' },
 ];
 
+// Runtime-first helper: prefer runtimeState over static agent fields
+function getRuntimeStatus(agent: OfficeAgent): string {
+  return agent.runtimeState?.status ?? agent.status;
+}
+function getRuntimeZone(agent: OfficeAgent): string {
+  return agent.runtimeState?.locationZone ?? agent.locationZone;
+}
+
 export function OfficeCanvas({
   agents,
   tasks,
@@ -40,10 +48,10 @@ export function OfficeCanvas({
   agentAnimations = {},
   zoneAnimations = {},
 }: OfficeCanvasProps) {
-  // Group agents by zone
+  // Group agents by runtime zone (runtime-first)
   const agentsByZone: Record<string, OfficeAgent[]> = {};
   for (const agent of agents) {
-    const zone = agent.locationZone ?? 'lounge_area';
+    const zone = getRuntimeZone(agent) ?? 'lounge_area';
     if (!agentsByZone[zone]) agentsByZone[zone] = [];
     agentsByZone[zone].push(agent);
   }
@@ -60,7 +68,7 @@ export function OfficeCanvas({
           Agent Office — Live
         </h2>
         <span className="text-[10px] text-gray-400">
-          {agents.filter((a) => a.status !== 'offline').length}/{agents.length} active
+          {agents.filter((a) => getRuntimeStatus(a) !== 'offline').length}/{agents.length} active
         </span>
       </div>
 
@@ -69,42 +77,80 @@ export function OfficeCanvas({
         <div
           className="min-w-[700px] max-w-[1000px] mx-auto"
           style={{
-            /* Subtle perspective for 2.5D feel */
-            perspective: '2000px',
+            /* Stronger perspective for 2.5D depth */
+            perspective: '1200px',
           }}
         >
-          {/* Floor plane with subtle tilt */}
+          {/* Floor plane with pseudo-isometric tilt */}
           <div
             className="relative rounded-xl p-3"
             style={{
-              /* Very subtle rotateX for isometric feel */
-              transform: 'rotateX(1.5deg)',
+              /* Pseudo-isometric tilt for 2.5D feel */
+              transform: 'rotateX(10deg) skewX(-2deg)',
               transformOrigin: 'center bottom',
-              /* Floor background with tile pattern */
+              /* Floor background with visible tile pattern */
               background: `
-                linear-gradient(180deg, rgba(241,245,249,0.5) 0%, rgba(248,250,252,0.3) 100%),
+                linear-gradient(180deg, rgba(226,232,240,0.5) 0%, rgba(241,245,249,0.3) 50%, rgba(248,250,252,0.2) 100%),
                 repeating-linear-gradient(
                   0deg,
                   transparent,
-                  transparent 23px,
-                  rgba(148,163,184,0.06) 23px,
-                  rgba(148,163,184,0.06) 24px
+                  transparent 28px,
+                  rgba(148,163,184,0.12) 28px,
+                  rgba(148,163,184,0.12) 29px
                 ),
                 repeating-linear-gradient(
                   90deg,
                   transparent,
-                  transparent 23px,
-                  rgba(148,163,184,0.06) 23px,
-                  rgba(148,163,184,0.06) 24px
+                  transparent 28px,
+                  rgba(148,163,184,0.12) 28px,
+                  rgba(148,163,184,0.12) 29px
                 ),
-                #f8fafc
+                #e2e8f0
               `,
-              boxShadow: '0 4px 20px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.5)',
+              boxShadow: `
+                0 8px 40px rgba(0,0,0,0.15),
+                0 2px 10px rgba(0,0,0,0.08),
+                inset 0 2px 4px rgba(255,255,255,0.6),
+                inset 0 -2px 8px rgba(0,0,0,0.06)
+              `,
             }}
           >
+            {/* Floor edge highlight — top wall */}
+            <div
+              className="absolute inset-x-0 top-0 h-3 rounded-t-xl pointer-events-none"
+              style={{
+                background: 'linear-gradient(180deg, rgba(148,163,184,0.15) 0%, transparent 100%)',
+                borderTop: '2px solid rgba(255,255,255,0.5)',
+              }}
+            />
+            {/* Floor edge shadow — bottom wall depth */}
+            <div
+              className="absolute inset-x-0 bottom-0 h-4 rounded-b-xl pointer-events-none"
+              style={{
+                background: 'linear-gradient(0deg, rgba(30,41,59,0.12) 0%, transparent 100%)',
+                borderBottom: '2px solid rgba(30,41,59,0.1)',
+              }}
+            />
+            {/* Left wall depth */}
+            <div
+              className="absolute inset-y-0 left-0 w-3 rounded-l-xl pointer-events-none"
+              style={{
+                background: 'linear-gradient(90deg, rgba(148,163,184,0.08) 0%, transparent 100%)',
+                borderLeft: '1px solid rgba(255,255,255,0.3)',
+              }}
+            />
+            {/* Right wall depth */}
+            <div
+              className="absolute inset-y-0 right-0 w-3 rounded-r-xl pointer-events-none"
+              style={{
+                background: 'linear-gradient(270deg, rgba(30,41,59,0.06) 0%, transparent 100%)',
+                borderRight: '1px solid rgba(30,41,59,0.06)',
+              }}
+            />
+
             {/* Floor plan grid */}
             <div
-              className="grid gap-2.5"
+              className="grid gap-3"
               style={{
                 gridTemplateColumns: '1fr 1fr 1.5fr',
                 gridTemplateRows: 'auto auto auto',

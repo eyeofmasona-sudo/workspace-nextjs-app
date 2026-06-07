@@ -1,10 +1,11 @@
 // ─── Agent OS — useOfficeAnimations Hook ──────────────────────
 // Processes events from useEventStream and provides animation state
 // to the 2.5D Office UI. Connects animationMapping.ts and eventToVisualState.ts.
+// FIX M1: intervals moved into useEffect with proper cleanup.
 
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { getAnimationForEvent, type AnimationTrigger } from '@/lib/office/animationMapping';
 import { eventToVisualState, type VisualStateChange } from '@/lib/office/eventToVisualState';
 import type { OfficeEvent, OfficeAgent } from '@/hooks/useOfficeData';
@@ -35,6 +36,10 @@ export function useOfficeAnimations(
   // React state for re-rendering when animations change
   const [agentAnimations, setAgentAnimations] = useState<Record<string, AgentAnimationState>>({});
   const [zoneAnimations, setZoneAnimations] = useState<Record<string, ZoneAnimationState>>({});
+
+  // Keep refs to latest values for use inside intervals (avoid stale closures)
+  const agentAnimsRefCopy = useRef(agentAnimsRef);
+  const zoneAnimsRefCopy = useRef(zoneAnimsRef);
 
   // Process new events — called synchronously, not in an effect
   if (newEvents.length > 0 && newEvents.length !== lastProcessedCount.current) {
@@ -88,10 +93,10 @@ export function useOfficeAnimations(
     }
   }
 
-  // Auto-expire animations — use a callback ref pattern
-  const expiryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  if (expiryTimerRef.current === null) {
-    expiryTimerRef.current = setInterval(() => {
+  // FIX M1: Move intervals into useEffect with proper cleanup
+  useEffect(() => {
+    // Auto-expire animations — check every 200ms
+    const expiryInterval = setInterval(() => {
       const now = Date.now();
       let agentChanged = false;
       let zoneChanged = false;
@@ -119,17 +124,20 @@ export function useOfficeAnimations(
         if (zoneChanged) setZoneAnimations({ ...nextZone });
       }
     }, 200);
-  }
 
-  // Clean up processed IDs set periodically
-  const cleanupTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  if (cleanupTimerRef.current === null) {
-    cleanupTimerRef.current = setInterval(() => {
+    // Clean up processed IDs set periodically
+    const cleanupInterval = setInterval(() => {
       if (processedIds.current.size > 500) {
         processedIds.current = new Set(Array.from(processedIds.current).slice(-200));
       }
     }, 30000);
-  }
+
+    // Cleanup both intervals on unmount
+    return () => {
+      clearInterval(expiryInterval);
+      clearInterval(cleanupInterval);
+    };
+  }, []); // Empty deps — runs once on mount, cleans up on unmount
 
   const clearAnimation = useCallback((agentId: string) => {
     const next = { ...agentAnimsRef.current };
