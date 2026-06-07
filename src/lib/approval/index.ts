@@ -26,7 +26,8 @@ class ApprovalSystem {
   async requestApproval(input: CreateApprovalInput) {
     const request = await db.approvalRequest.create({
       data: {
-        taskId: input.taskId,
+        taskId: input.taskId ?? null,
+        workspaceId: input.workspaceId ?? null,
         agentId: input.agentId,
         actionType: input.actionType,
         summary: input.summary,
@@ -38,10 +39,11 @@ class ApprovalSystem {
 
     await eventBus.emit(EventTypes.APPROVAL_REQUESTED, {
       approvalId: request.id,
-      taskId: input.taskId,
+      taskId: input.taskId ?? undefined,
       agentId: input.agentId,
       actionType: input.actionType,
       risk: (input.risk ?? 'medium') as RiskLevel,
+      workspaceId: input.workspaceId,
       timestamp: Date.now(),
       source: 'approval-system',
     });
@@ -67,7 +69,8 @@ class ApprovalSystem {
 
     await eventBus.emit(EventTypes.APPROVAL_APPROVED, {
       approvalId,
-      taskId: request.taskId,
+      taskId: request.taskId ?? undefined,
+      workspaceId: request.workspaceId ?? undefined,
       timestamp: Date.now(),
       source: 'approval-system',
     });
@@ -93,7 +96,8 @@ class ApprovalSystem {
 
     await eventBus.emit(EventTypes.APPROVAL_REJECTED, {
       approvalId,
-      taskId: request.taskId,
+      taskId: request.taskId ?? undefined,
+      workspaceId: request.workspaceId ?? undefined,
       timestamp: Date.now(),
       source: 'approval-system',
     });
@@ -108,16 +112,19 @@ class ApprovalSystem {
    * Get pending approvals
    */
   async getPending(workspaceId?: string, limit = 50) {
-    // If workspaceId is provided, filter by agents in that workspace
     const where: Record<string, unknown> = { status: 'pending' };
 
     if (workspaceId) {
+      // Filter by either direct workspaceId or via agent's workspace
       const agents = await db.agent.findMany({
         where: { workspaceId },
         select: { id: true },
       });
       const agentIds = agents.map((a) => a.id);
-      where.agentId = { in: agentIds };
+      where.OR = [
+        { workspaceId },
+        { agentId: { in: agentIds } },
+      ];
     }
 
     const requests = await db.approvalRequest.findMany({
@@ -152,7 +159,7 @@ class ApprovalSystem {
     const requests = await db.approvalRequest.findMany({
       where: { taskId },
       orderBy: { createdAt: 'desc' },
-    });
+    }); // Note: taskId can be null for task-independent approvals
 
     return requests.map((r) => ({
       ...r,

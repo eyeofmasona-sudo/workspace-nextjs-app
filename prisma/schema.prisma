@@ -250,19 +250,20 @@ model MemoryItem {
 // ─── Approval System ─────────────────────────────────────────
 
 model ApprovalRequest {
-  id         String   @id @default(cuid())
-  taskId     String
-  agentId    String
-  actionType String // execute | deploy | delete | modify | spend | access
-  summary    String
-  risk       String   @default("medium") // low | medium | high | critical
-  payload    String? // JSON: action details
-  status     String   @default("pending") // pending | approved | rejected | expired
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id          String   @id @default(cuid())
+  taskId      String?  // Optional: null when approval is for a tool execution without task context
+  workspaceId String?  // Direct workspace reference for task-independent approvals
+  agentId     String
+  actionType  String // execute | deploy | delete | modify | spend | access
+  summary     String
+  risk        String   @default("medium") // low | medium | high | critical
+  payload     String? // JSON: action details
+  status      String   @default("pending") // pending | approved | rejected | expired
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  task           Task            @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  agent          Agent           @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  task           Task?            @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  agent          Agent            @relation(fields: [agentId], references: [id], onDelete: Cascade)
   toolExecutions ToolExecution[]
 
   @@map("approval_requests")

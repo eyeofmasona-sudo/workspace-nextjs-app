@@ -322,7 +322,8 @@ export interface CreateMemoryInput {
 }
 
 export interface CreateApprovalInput {
-  taskId: string;
+  taskId?: string;          // Optional — null for task-independent approvals
+  workspaceId?: string;    // Direct workspace reference when taskId is null
   agentId: string;
   actionType: ApprovalActionType;
   summary: string;

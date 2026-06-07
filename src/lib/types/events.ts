@@ -154,20 +154,24 @@ export interface AgentLocationChangedPayload extends BaseEventPayload {
 
 export interface ApprovalRequestedPayload extends BaseEventPayload {
   approvalId: string;
-  taskId: string;
+  taskId?: string;
   agentId: string;
   actionType: string;
   risk: RiskLevel;
+  correlationId?: string;
+  workspaceId?: string;
 }
 
 export interface ApprovalApprovedPayload extends BaseEventPayload {
   approvalId: string;
-  taskId: string;
+  taskId?: string;
+  workspaceId?: string;
 }
 
 export interface ApprovalRejectedPayload extends BaseEventPayload {
   approvalId: string;
-  taskId: string;
+  taskId?: string;
+  workspaceId?: string;
 }
 
 export interface MemoryCreatedPayload extends BaseEventPayload {
@@ -191,6 +195,7 @@ export interface OrchestratorMessageReceivedPayload extends BaseEventPayload {
   workspaceId: string;
   message: string;
   mode: string;
+  correlationId?: string;
 }
 
 export interface OrchestratorPlanCreatedPayload extends BaseEventPayload {
@@ -199,6 +204,7 @@ export interface OrchestratorPlanCreatedPayload extends BaseEventPayload {
   epicCount: number;
   taskCount: number;
   estimatedCostLevel: string;
+  correlationId?: string;
 }
 
 export interface OrchestratorPlanApprovedPayload extends BaseEventPayload {
@@ -206,12 +212,14 @@ export interface OrchestratorPlanApprovedPayload extends BaseEventPayload {
   createdEpicCount: number;
   createdTaskCount: number;
   createdApprovalCount: number;
+  correlationId?: string;
 }
 
 export interface OrchestratorCostEstimatedPayload extends BaseEventPayload {
   costLevel: string;
   estimatedTokens?: number;
   estimatedUsd?: number;
+  correlationId?: string;
 }
 
 // ─── Agent System Event Payloads (Stage 3) ──────────────────

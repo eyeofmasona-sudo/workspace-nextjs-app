@@ -9,6 +9,7 @@ export const orchestratorMessageSchema = z.object({
   projectId: z.string().optional(),
   message: z.string().min(1, 'message is required').max(5000, 'message is too long (max 5000 characters)'),
   mode: z.enum(['manual', 'balanced', 'autonomous']).default('balanced'),
+  correlationId: z.string().optional(), // Auto-generated if not provided. Links orchestrator → tool events for office animation.
 });
 
 export const orchestratorPlanSchema = z.object({

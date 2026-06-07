@@ -482,3 +482,55 @@ Stage Summary:
 - correlationId support added: ToolExecution records can link orchestrator events via correlationId
 - 5 files modified: types.ts, events.ts, event-bus/index.ts, ToolExecutionService.ts, ToolHub.ts
 - Total event types now 39 (added tool.execution_resumed)
+
+---
+Task ID: audit-fix
+Agent: Main
+Task: Tool Hub Audit Fix — Remove synthetic entity pollution, add correlationId, fix schema
+
+Work Log:
+- Audited createToolApproval: discovered it creates synthetic Project + Epic + Task per approval without taskId
+- Root cause: ApprovalRequest.taskId was required (non-nullable) FK in Prisma schema
+- Made ApprovalRequest.taskId optional (String?) and added workspaceId (String?) field
+- Changed ApprovalRequest→Task relation from onDelete:Cascade to onDelete:SetNull
+- Removed ALL synthetic Project/Epic/Task creation from ToolExecutionService.createToolApproval()
+- Added correlationId param to createToolApproval and propagated from ToolHub
+- Updated ApprovalRequestedPayload: taskId now optional, added correlationId and workspaceId
+- Updated ApprovalApprovedPayload and ApprovalRejectedPayload: taskId optional, added workspaceId
+- Updated ApprovalSystem: requestApproval handles optional taskId, approve/reject emit workspaceId, getPending uses OR filter
+- Updated CreateApprovalInput: taskId and workspaceId optional
+- Added correlationId generation utility (src/lib/utils/correlation.ts) using uuid v4 with corr_ prefix
+- Added correlationId to OrchestratorInput, OrchestratorResponse, orchestratorMessageSchema
+- OrchestratorEngine now generates correlationId at processMessage entry and propagates through all events
+- All orchestrator event payloads (message_received, plan_created, plan_approved, cost_estimated) now include correlationId
+- Removed dead defence-in-depth guard from ToolHub (replaced with documentation comment)
+- Passed correlationId from API route to orchestratorEngine.processMessage()
+- Ran db:push — schema changes applied successfully
+- Ran lint — passes cleanly
+
+Key decisions:
+1. ApprovalRequest.taskId → optional: Approval now works independently of task context
+2. ApprovalRequest.workspaceId → added: Direct workspace reference for task-independent approvals
+3. No synthetic entities: Approval correlation uses ToolExecution ↔ ApprovalRequest ↔ correlationId chain
+4. correlationId format: corr_<uuid_v4> — easy to identify in logs and DB queries
+5. Defence-in-depth guard removed: Was dead code (exact duplicate of approval check condition)
+
+Retention strategy (documented, not yet automated):
+- ToolExecution: cleanupOldExecutions() already exists — deletes completed/failed/blocked >30 days
+- No auto-cleanup scheduled yet — should be added as cron or startup hook in Stage 5
+- Synthetic entities (if any were created before this fix): should be cleaned up manually
+
+Approval lifecycle gap (documented for Stage 5):
+- Current flow: approval.approved → resumeApprovedExecution → re-execute tool with resumedFromApproval=true
+- Works correctly for the happy path
+- Missing: no re-approval flow if the resumed execution fails again
+- Missing: no expiration mechanism for pending approvals
+- These are documented as Stage 5 TODO items
+
+Stage Summary:
+- 🔴 CRITICAL FIX: Synthetic entity pollution eliminated — no more Project/Epic/Task creation for approvals
+- 🟢 correlationId now flows: Orchestrator → Task → Tool Execution → Approval → Event
+- 🟢 Schema: ApprovalRequest.taskId optional, workspaceId added
+- 🟢 Dead code removed (defence-in-depth guard)
+- 🟢 All event payloads carry correlationId for office animation
+- Schema pushed, lint clean, dev server running

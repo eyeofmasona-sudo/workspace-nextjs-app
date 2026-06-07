@@ -19,6 +19,7 @@ import type {
   TaskSize,
 } from './types';
 import type { RiskLevel } from '../types/domain';
+import { generateCorrelationId } from '../utils/correlation';
 
 class OrchestratorEngine {
   private static instance: OrchestratorEngine | null = null;
@@ -38,11 +39,15 @@ class OrchestratorEngine {
   async processMessage(input: OrchestratorInput): Promise<OrchestratorResponse> {
     const { workspaceId, projectId, message, mode = 'balanced' } = input;
 
+    // Generate correlationId for this orchestrator run — propagated through all events
+    const correlationId = input.correlationId ?? generateCorrelationId();
+
     // 1. Emit message received event
     await eventBus.emit(EventTypes.ORCHESTRATOR_MESSAGE_RECEIVED, {
       workspaceId,
       message,
       mode,
+      correlationId,
       timestamp: Date.now(),
       source: 'orchestrator-engine',
     });
@@ -71,29 +76,29 @@ class OrchestratorEngine {
       // 6. Based on mode and classification, decide the path
       if (mode === 'manual') {
         // In manual mode, always create a plan first
-        return await this.handlePlanRequired(workspaceId, projectId, message, classification.size);
+        return await this.handlePlanRequired(workspaceId, projectId, message, classification.size, correlationId);
       }
 
       if (mode === 'autonomous') {
         // In autonomous mode, small/medium tasks are created immediately
         if (classification.size === 'small' || classification.size === 'medium') {
           return await this.handleTaskStarted(
-            workspaceId, projectId, message, classification.size, approvalAssessment.riskLevel
+            workspaceId, projectId, message, classification.size, approvalAssessment.riskLevel, correlationId
           );
         }
         // Large/epic tasks still get a plan
-        return await this.handlePlanRequired(workspaceId, projectId, message, classification.size);
+        return await this.handlePlanRequired(workspaceId, projectId, message, classification.size, correlationId);
       }
 
       // Balanced mode (default)
       if (classification.size === 'small' && !approvalAssessment.requiresApproval) {
         return await this.handleTaskStarted(
-          workspaceId, projectId, message, classification.size, approvalAssessment.riskLevel
+          workspaceId, projectId, message, classification.size, approvalAssessment.riskLevel, correlationId
         );
       }
 
       // Medium+ tasks or tasks requiring approval → plan first
-      return await this.handlePlanRequired(workspaceId, projectId, message, classification.size);
+      return await this.handlePlanRequired(workspaceId, projectId, message, classification.size, correlationId);
     } catch (error) {
       console.error('[OrchestratorEngine] Error processing message:', error);
       return {
@@ -109,7 +114,8 @@ class OrchestratorEngine {
   async createPlan(
     workspaceId: string,
     message: string,
-    _projectId?: string
+    _projectId?: string,
+    correlationId?: string
   ): Promise<OrchestratorPlan> {
     const plan = await planningEngine.createPlan(message, workspaceId);
 
@@ -125,6 +131,7 @@ class OrchestratorEngine {
       epicCount: plan.epics.length,
       taskCount: totalTasks,
       estimatedCostLevel: plan.estimatedCost.level,
+      correlationId,
       timestamp: Date.now(),
       source: 'orchestrator-engine',
     });
@@ -134,6 +141,7 @@ class OrchestratorEngine {
       costLevel: plan.estimatedCost.level,
       estimatedTokens: plan.estimatedCost.estimatedTokens,
       estimatedUsd: plan.estimatedCost.estimatedUsd,
+      correlationId,
       timestamp: Date.now(),
       source: 'orchestrator-engine',
     });
@@ -226,9 +234,10 @@ class OrchestratorEngine {
     workspaceId: string,
     projectId: string | undefined,
     message: string,
-    taskSize: TaskSize
+    taskSize: TaskSize,
+    correlationId?: string
   ): Promise<OrchestratorResponse> {
-    const plan = await this.createPlan(workspaceId, message, projectId);
+    const plan = await this.createPlan(workspaceId, message, projectId, correlationId);
 
     return {
       type: 'plan_required',
@@ -246,7 +255,8 @@ class OrchestratorEngine {
     projectId: string | undefined,
     message: string,
     taskSize: TaskSize,
-    riskLevel: RiskLevel
+    riskLevel: RiskLevel,
+    correlationId?: string
   ): Promise<OrchestratorResponse> {
     const costEstimate = costEstimationEngine.estimate(taskSize, message);
     const approvalAssessment = approvalEngine.assess(message, '');
@@ -303,6 +313,7 @@ class OrchestratorEngine {
       costLevel: costEstimate.level,
       estimatedTokens: costEstimate.estimatedTokens,
       estimatedUsd: costEstimate.estimatedUsd,
+      correlationId,
       timestamp: Date.now(),
       source: 'orchestrator-engine',
     });
@@ -310,6 +321,7 @@ class OrchestratorEngine {
     return {
       type: 'task_started',
       summary: `Task created and assigned: "${message.slice(0, 80)}"${result.task.assignedAgentName ? ` → ${result.task.assignedAgentName}` : ''}`,
+      correlationId,
       createdTasks: [result.task],
       approvals: result.approvals.length > 0 ? result.approvals : undefined,
       estimatedCost: costEstimate,

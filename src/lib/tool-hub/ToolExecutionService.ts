@@ -256,7 +256,14 @@ class ToolExecutionService {
   }
 
   /**
-   * Create an approval request for a tool execution
+   * Create an approval request for a tool execution.
+   *
+   * IMPORTANT: No synthetic Project/Epic/Task records are created.
+   * ApprovalRequest.taskId is optional — when null, the approval is
+   * linked to the workspace directly via workspaceId and to the
+   * ToolExecution via ToolExecution.approvalRequestId.
+   *
+   * Correlation chain: ToolExecution ↔ ApprovalRequest ↔ EventLog
    */
   async createToolApproval(params: {
     workspaceId: string;
@@ -267,55 +274,12 @@ class ToolExecutionService {
     action: string;
     risk: RiskLevel;
     inputSummary?: string;
+    correlationId?: string;
   }) {
-    // We need a taskId for ApprovalRequest — create a placeholder or use the provided one
-    // If no taskId, we create a synthetic task for this approval
-    let taskId = params.taskId;
-
-    if (!taskId) {
-      // Find or create a placeholder epic/project for tool approvals
-      const workspace = await db.workspace.findUnique({
-        where: { id: params.workspaceId },
-        include: { projects: { take: 1 } },
-      });
-
-      let projectId: string;
-      if (workspace?.projects[0]) {
-        projectId = workspace.projects[0].id;
-      } else {
-        const project = await db.project.create({
-          data: {
-            workspaceId: params.workspaceId,
-            name: 'Tool Approvals',
-            description: 'Auto-created project for tool approval requests',
-          },
-        });
-        projectId = project.id;
-      }
-
-      const epic = await db.epic.create({
-        data: {
-          projectId,
-          title: 'Tool Approval Requests',
-          status: 'in_progress',
-        },
-      });
-
-      const task = await db.task.create({
-        data: {
-          epicId: epic.id,
-          title: `Tool approval: ${params.toolKey} ${params.action}`,
-          status: 'waiting_approval',
-          riskLevel: params.risk,
-          requiresApproval: true,
-        },
-      });
-      taskId = task.id;
-    }
-
     const approvalRequest = await db.approvalRequest.create({
       data: {
-        taskId,
+        taskId: params.taskId ?? null,
+        workspaceId: params.workspaceId,
         agentId: params.agentId,
         actionType: 'execute',
         summary: `Tool execution approval: ${params.toolKey} (${params.action}) by agent ${params.agentId}`,
@@ -325,6 +289,7 @@ class ToolExecutionService {
           toolKey: params.toolKey,
           action: params.action,
           inputSummary: params.inputSummary,
+          correlationId: params.correlationId,
         }),
         status: 'pending',
       },
@@ -332,10 +297,12 @@ class ToolExecutionService {
 
     await eventBus.emit(EventTypes.APPROVAL_REQUESTED, {
       approvalId: approvalRequest.id,
-      taskId,
+      taskId: params.taskId,
       agentId: params.agentId,
       actionType: 'execute',
       risk: params.risk,
+      correlationId: params.correlationId,
+      workspaceId: params.workspaceId,
       timestamp: Date.now(),
       source: 'tool-execution-service',
     });

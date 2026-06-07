@@ -110,7 +110,7 @@ class ToolHub {
 
     // 6. Check if approval is required — skip if resumed from an approved state
     if (!resumedFromApproval && (tool.requiresApproval || tool.riskLevel === 'critical')) {
-      // Create approval request
+      // Create approval request — no synthetic Project/Epic/Task created
       const approvalRequest = await toolExecutionService.createToolApproval({
         workspaceId,
         agentId,
@@ -120,6 +120,7 @@ class ToolHub {
         action,
         risk: tool.riskLevel as 'low' | 'medium' | 'high' | 'critical',
         inputSummary: JSON.stringify(input).slice(0, 500),
+        correlationId,
       });
 
       await toolExecutionService.markRequiresApproval(execution.id, approvalRequest.id);
@@ -131,20 +132,11 @@ class ToolHub {
       };
     }
 
-    // 7. Defence-in-depth guard: even if the flow above is bypassed,
-    //    block execution of high-risk/critical tools without proper approval confirmation
-    if ((tool.requiresApproval || tool.riskLevel === 'critical') && !resumedFromApproval) {
-      // This should never happen because the approval check above should have caught it.
-      // But as a safety net, block execution here.
-      await toolExecutionService.markBlocked(execution.id, 'SAFETY: Tool requires approval but no approval confirmation provided');
-      return {
-        status: 'blocked',
-        executionId: execution.id,
-        error: 'Tool requires approval',
-      };
-    }
-
-    // 8. Execute adapter
+    // 7. Execute adapter
+    // NOTE: If we reach here, either:
+    //   a) The tool doesn't require approval, OR
+    //   b) resumedFromApproval=true (approval was granted)
+    // The approval check in step 6 guarantees we never reach here without proper confirmation.
     await toolExecutionService.markRunning(execution.id);
 
     try {

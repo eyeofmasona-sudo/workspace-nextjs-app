@@ -31,6 +31,7 @@ export async function POST(request: NextRequest) {
       projectId: input.projectId,
       message: input.message,
       mode: input.mode,
+      correlationId: input.correlationId,
     });
 
     const statusCode = response.type === 'error' ? 500 : 200;

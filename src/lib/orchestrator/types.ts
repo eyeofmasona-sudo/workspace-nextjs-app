@@ -11,6 +11,7 @@ export interface OrchestratorInput {
   projectId?: string;
   message: string;
   mode?: OrchestratorMode;
+  correlationId?: string; // Optional: auto-generated if not provided. Links orchestrator → tool events for office animation.
 }
 
 // ─── Orchestrator Output ─────────────────────────────────────
@@ -24,6 +25,7 @@ export type OrchestratorResponseType =
 export interface OrchestratorResponse {
   type: OrchestratorResponseType;
   summary: string;
+  correlationId?: string; // Links this response to the orchestrator run
   plan?: OrchestratorPlan;
   createdTasks?: CreatedTaskInfo[];
   approvals?: CreatedApprovalInfo[];
