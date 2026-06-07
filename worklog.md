@@ -534,3 +534,53 @@ Stage Summary:
 - 🟢 Dead code removed (defence-in-depth guard)
 - 🟢 All event payloads carry correlationId for office animation
 - Schema pushed, lint clean, dev server running
+
+---
+Task ID: 5
+Agent: Main
+Task: Stage 5 — Agent Office MVP
+
+Work Log:
+- Studied entire codebase: 18 Prisma models, 37 event types, 10 agents, 15 tools, 49 shadcn/ui components, Framer Motion/Zustand/Recharts installed
+- Current UI: flat dashboard with card grid, no office visualization
+- Created backend: GET /api/office/state — aggregated office state endpoint with workspace guard
+- Created utility files:
+  - src/lib/office/statusMapping.ts — 9 agent statuses → visual states (color, animation, emoji, label)
+  - src/lib/office/zoneMapping.ts — 8 office zones → layout properties (icon, color, grid area)
+  - src/lib/office/animationMapping.ts — event types → animation triggers (pulse/glow/shake/bounce/slide/fade)
+  - src/lib/office/eventToVisualState.ts — events → agent visual state changes
+  - src/lib/office/agentDefaults.ts — 10 agent roles → visual defaults (emoji, color, initials)
+- Created hooks:
+  - src/hooks/useOfficeData.ts — polls /api/office/state every 5s, returns full OfficeState
+  - src/hooks/useEventStream.ts — polls /api/events every 4s, tracks new events
+  - src/hooks/useAgentRuntime.ts — manages agent runtime state updates
+- Created 12 office components:
+  - AgentOffice.tsx — main container with tabs, resizable panels, agent drawer
+  - OfficeLayout.tsx — 2D grid floor plan with 8 zones
+  - OfficeZone.tsx — individual zone card with agents and task count
+  - AgentCharacter.tsx — agent avatar with Framer Motion animations, status ring
+  - AgentStatusBadge.tsx — status dot/label with pulse animation
+  - TaskBoard.tsx — Kanban board with 7 columns (backlog→failed)
+  - SituationRoom.tsx — dashboard with stats, utilization bar, activity feed
+  - OrchestratorPanel.tsx — chat-style orchestrator with mode selector, plan approval
+  - ApprovalQueue.tsx — pending approvals with approve/reject buttons
+  - AgentDetailsDrawer.tsx — Sheet with tabs (Profile/Skills/Access/Activity)
+  - EventTimeline.tsx — timeline with category-colored dots and payload summary
+  - SplitWorkspacePanel.tsx — bottom panel with 10 tabs (Preview/Files/Terminal/Logs/Tests/Documents/RAG/Translations/OCR/Approvals)
+- Replaced page.tsx — full-screen Agent Office instead of flat dashboard
+- Verified: lint clean, page renders (200), API endpoints working
+
+Stage Summary:
+- 12 office components, 3 hooks, 5 utility files, 1 backend endpoint
+- 2.5D office layout with 8 zones and 10 agent characters
+- Real-time polling (5s office state, 4s events)
+- Framer Motion animations on agent characters (pulse, hover, click)
+- Full orchestrator integration (send messages, view plans, approve)
+- Kanban task board with 7 status columns
+- Situation room with utilization, stats, activity
+- Approval queue with approve/reject
+- Agent details drawer with profile/capabilities/permissions/activity
+- Event timeline with correlation tracking
+- Split workspace panel (10 tabs, mostly placeholders for future stages)
+- Resizable layout with toggle for bottom panel
+- Zero runtime errors in dev log
