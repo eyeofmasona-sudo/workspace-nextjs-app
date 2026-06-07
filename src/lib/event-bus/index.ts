@@ -101,6 +101,10 @@ class EventBus {
       APPROVAL_REJECTED: 'approval.rejected',
       MEMORY_CREATED: 'memory.created',
       COST_LOGGED: 'cost.logged',
+      ORCHESTRATOR_MESSAGE_RECEIVED: 'orchestrator.message_received',
+      ORCHESTRATOR_PLAN_CREATED: 'orchestrator.plan_created',
+      ORCHESTRATOR_PLAN_APPROVED: 'orchestrator.plan_approved',
+      ORCHESTRATOR_COST_ESTIMATED: 'orchestrator.cost_estimated',
     } satisfies Record<string, EventType>) as EventType[];
 
     for (const eventType of allEventTypes) {

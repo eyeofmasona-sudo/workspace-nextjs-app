@@ -44,6 +44,12 @@ export const EventTypes = {
 
   // Cost events
   COST_LOGGED: 'cost.logged',
+
+  // Orchestrator events
+  ORCHESTRATOR_MESSAGE_RECEIVED: 'orchestrator.message_received',
+  ORCHESTRATOR_PLAN_CREATED: 'orchestrator.plan_created',
+  ORCHESTRATOR_PLAN_APPROVED: 'orchestrator.plan_approved',
+  ORCHESTRATOR_COST_ESTIMATED: 'orchestrator.cost_estimated',
 } as const;
 
 export type EventType = (typeof EventTypes)[keyof typeof EventTypes];
@@ -154,6 +160,35 @@ export interface CostLoggedPayload extends BaseEventPayload {
   cost: number;
 }
 
+// ─── Orchestrator Event Payloads ─────────────────────────────
+
+export interface OrchestratorMessageReceivedPayload extends BaseEventPayload {
+  workspaceId: string;
+  message: string;
+  mode: string;
+}
+
+export interface OrchestratorPlanCreatedPayload extends BaseEventPayload {
+  planGoal: string;
+  taskSize: string;
+  epicCount: number;
+  taskCount: number;
+  estimatedCostLevel: string;
+}
+
+export interface OrchestratorPlanApprovedPayload extends BaseEventPayload {
+  planGoal: string;
+  createdEpicCount: number;
+  createdTaskCount: number;
+  createdApprovalCount: number;
+}
+
+export interface OrchestratorCostEstimatedPayload extends BaseEventPayload {
+  costLevel: string;
+  estimatedTokens?: number;
+  estimatedUsd?: number;
+}
+
 // ─── Event Map (for type-safe subscriptions) ─────────────────
 
 export interface EventMap {
@@ -176,6 +211,10 @@ export interface EventMap {
   [EventTypes.APPROVAL_REJECTED]: ApprovalRejectedPayload;
   [EventTypes.MEMORY_CREATED]: MemoryCreatedPayload;
   [EventTypes.COST_LOGGED]: CostLoggedPayload;
+  [EventTypes.ORCHESTRATOR_MESSAGE_RECEIVED]: OrchestratorMessageReceivedPayload;
+  [EventTypes.ORCHESTRATOR_PLAN_CREATED]: OrchestratorPlanCreatedPayload;
+  [EventTypes.ORCHESTRATOR_PLAN_APPROVED]: OrchestratorPlanApprovedPayload;
+  [EventTypes.ORCHESTRATOR_COST_ESTIMATED]: OrchestratorCostEstimatedPayload;
 }
 
 // ─── Event Handler Types ─────────────────────────────────────

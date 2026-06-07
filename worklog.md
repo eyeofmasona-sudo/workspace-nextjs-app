@@ -184,3 +184,52 @@ Work Log:
 Stage Summary:
 - All verification checks passed
 - Project compiles and runs correctly
+
+---
+Task ID: 2-1
+Agent: Main
+Task: Study existing project for Stage 2 (Orchestrator Core)
+
+Work Log:
+- Read all existing files: schema.prisma, db.ts, event-bus, agent-registry, approval, memory, cost, seed, types, API routes, page.tsx
+- Identified 10 Prisma models, 18 event types, 10 default agents, 9 API routes
+- Found no Zod schemas existed (all validation manual)
+- Found no orchestrator module existed
+- Identified placement: src/lib/orchestrator/
+
+Stage Summary:
+- Full understanding of existing codebase
+- Orchestrator should go in src/lib/orchestrator/ alongside other lib modules
+- Need to add 4 orchestrator event types to EventBus
+- Need to create Zod validation schemas
+
+---
+Task ID: 2-2
+Agent: Main
+Task: Implement Orchestrator Core (6 engines + types + API + UI)
+
+Work Log:
+- Created src/lib/orchestrator/types.ts with all orchestrator types
+- Added 4 orchestrator event types to events.ts: orchestrator.message_received, plan_created, plan_approved, cost_estimated
+- Updated EventBus onAny with new event types
+- Created CostEstimationEngine: heuristic cost estimation by task size + keyword matching
+- Created AgentAssignmentEngine: keyword-to-role mapping with confidence scoring
+- Created ApprovalEngine: risk keyword detection with 10 risk groups
+- Created TaskDecompositionEngine: creates Epic/Task/Subtask in DB with event emission
+- Created PlanningEngine: task classification (small/medium/large/epic) + plan templates (CRM, Dashboard, RAG, Auth)
+- Created OrchestratorEngine: main service with 3 modes (manual/balanced/autonomous)
+- Created Zod validation schemas for orchestrator + existing entities
+- Created 3 API endpoints: /api/orchestrator/message, /plan, /approve-plan
+- Updated landing page with Orchestrator command center UI
+- Fixed all TypeScript errors (Zod v4 issues, type mismatches)
+- Tested: small task → task_started, large task → plan_required, clarification → clarification_needed, validation → Zod errors
+
+Stage Summary:
+- Full orchestrator pipeline working: message → classify → plan/execute → decompose → assign → approve
+- 3 execution modes: manual (always plan), balanced (plan for large), autonomous (execute small directly)
+- 4 plan templates: CRM, Dashboard, RAG, Auth
+- Keyword-based agent assignment with 10 role mappings
+- Risk detection with 10 keyword groups (delete, deploy, secret, payment, etc.)
+- Cost estimation with 4 levels + high-cost keyword detection
+- All API endpoints tested and verified
+- ESLint: clean, TypeScript: clean, Prisma: valid
