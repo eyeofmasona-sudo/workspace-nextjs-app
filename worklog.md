@@ -70,3 +70,49 @@ Stage Summary:
 - Old components (OfficeCanvas, OfficeRoom, AgentSprite, etc.) preserved but no longer rendered
 - Visual layer is now a true isometric 2.5D office diorama
 - Ready for Stage 6
+
+---
+Task ID: 3
+Agent: code
+Task: Rewrite OfficeSceneV2.tsx to make all 8 zones visible without scrolling (flat top-down view)
+
+Work Log:
+- Read existing OfficeSceneV2.tsx (1043 lines) and worklog.md
+- Key changes made:
+  1. FLOOR_H: 360 → 350 (fits 1280×800 viewport with top bar)
+  2. Scene description comment updated: "flat top-down view with 3D-looking furniture and walls, NOT from floor rotation"
+  3. ZoneWalls: wallHeight 24→20, wallThick 8→7 (per spec)
+  4. ZONE_FURNITURE: Repositioned all furniture items to fit within 233×112 zone boundaries
+     - command_area: command_screen, desk, monitors, keyboard, chair, plant adjusted
+     - meeting_room: meeting_table and chairs repositioned to fit within bounds
+     - situation_room: Replaced oversized command_screen with dual desk setup; added second desk/monitor/chair
+     - development_area: Desks and chairs moved up to fit (y: 28 instead of 35)
+     - design_area: Similar vertical compression (y: 28 instead of 35)
+     - server_room: Kept 2 server racks + 1 desk setup (removed second desk that overflowed)
+     - research_area: Bookshelf and desk positions adjusted to fit
+     - lounge_area: Sofa and coffee machine positions adjusted
+  5. ZONE_SEATS: Repositioned all seats to fit within zone boundaries
+     - server_room: Second seat changed to standing position near racks
+     - situation_room: Added second seat for the second desk
+     - All y-values adjusted to stay within 112px zone height
+  6. Removed all isometric transforms: No rotateX/rotateZ anywhere in the scene
+  7. Removed counter-rotation: labelCounterRotate = '' (already was)
+  8. labelStyle: No transform property (plain text readable in flat view)
+  9. Cleaned up imports: Removed unused useState, useEffect, useCallback, useRef
+  10. Fixed lint errors:
+      - Removed prevZonesRef (ref accessed during render) → replaced with direct seat-based rendering
+      - Removed useMemo from statusAnim/animTransition (React Compiler complaint) → used IIFE instead
+      - Removed position tracking useEffect (set-state-in-effect) → simplified to direct render
+  11. Preserved ALL: runtime-first pattern, all 12 furniture components, AgentCharacterV2 (26px heads, 34px wide bodies), all 3 effects (ToolExecutionGlow, ErrorZoneEffect, ApprovalZoneEffect), agent animations, zone highlights
+
+Checks:
+- npx tsc --noEmit: 0 errors ✅
+- bun run lint: 0 errors, 0 warnings ✅
+- Dev server: Running, no errors ✅
+
+Stage Summary:
+- 1 file modified: OfficeSceneV2.tsx (complete rewrite preserving all components)
+- All 8 zones visible in a 960×350 floor that fits in a 1280×800 viewport
+- Flat top-down view with 3D-looking furniture and volumetric walls (2.5D feel without floor rotation)
+- Clean div structure with no extra wrapping divs for rotation
+- All furniture and seats positioned within 233×112 zone boundaries

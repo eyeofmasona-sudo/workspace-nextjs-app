@@ -1,7 +1,7 @@
-// ─── Agent OS — AgentOffice ──────────────────────────────────
-// Main Agent Office component — the 2.5D office visualization.
-// Office is the PRIMARY view. Dashboard/Tasks/Situation are secondary panels.
-// Office always stays the main screen.
+// ─── Agent OS — AgentOffice V2 ────────────────────────────────
+// Main Agent Office component — the isometric office simulation.
+// Office is the PRIMARY and ONLY view. Management panels are overlays.
+// The office always fills the screen. Panels slide over, never replace.
 
 'use client';
 
@@ -9,7 +9,7 @@ import { useState, useCallback } from 'react';
 import { useOfficeData } from '@/hooks/useOfficeData';
 import { useEventStream } from '@/hooks/useEventStream';
 import { useOfficeAnimations } from '@/hooks/useOfficeAnimations';
-import { IsometricOffice } from './IsometricOffice';
+import { OfficeSceneV2 } from './OfficeSceneV2';
 import { TaskBoard } from './TaskBoard';
 import { SituationRoom } from './SituationRoom';
 import { OrchestratorPanel } from './OrchestratorPanel';
@@ -19,15 +19,14 @@ import { AgentDetailsDrawer } from './AgentDetailsDrawer';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Skeleton } from '@/components/ui/skeleton';
 import {
-  LayoutDashboard, ListChecks, BarChart3, Crown,
-  AlertTriangle, Radio, X, Loader2, RefreshCw,
-  Building2, ChevronRight,
+  ListChecks, BarChart3, Crown,
+  AlertTriangle, Radio, Loader2, RefreshCw,
+  Building2,
 } from 'lucide-react';
 import type { OfficeAgent } from '@/hooks/useOfficeData';
 
-// Panel types for the management drawer
+// Panel types for the management overlay
 type ManagementPanel = 'tasks' | 'situation' | 'orchestrator' | 'approvals' | 'events';
 
 interface AgentOfficeProps {
@@ -79,12 +78,12 @@ export function AgentOffice({ workspaceId, onSeed }: AgentOfficeProps) {
     setActivePanel(null);
   }, []);
 
-  // Loading state
+  // Loading state — show minimal loader over the office background
   if (loading && !state) {
     return (
-      <div className="h-full flex items-center justify-center">
+      <div className="h-full flex items-center justify-center bg-gradient-to-b from-slate-100 to-slate-200">
         <div className="text-center space-y-3">
-          <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
+          <Loader2 className="w-8 h-8 animate-spin mx-auto text-violet-500" />
           <p className="text-sm text-muted-foreground">Loading Agent Office...</p>
         </div>
       </div>
@@ -94,7 +93,7 @@ export function AgentOffice({ workspaceId, onSeed }: AgentOfficeProps) {
   // Error state
   if (error && !state) {
     return (
-      <div className="h-full flex items-center justify-center">
+      <div className="h-full flex items-center justify-center bg-gradient-to-b from-slate-100 to-slate-200">
         <div className="text-center space-y-3">
           <p className="text-sm text-red-600">Error: {error}</p>
           <Button variant="outline" onClick={refetch}>
@@ -108,14 +107,14 @@ export function AgentOffice({ workspaceId, onSeed }: AgentOfficeProps) {
   // No workspace — show seed prompt
   if (!state || state.agents.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center">
+      <div className="h-full flex items-center justify-center bg-gradient-to-b from-slate-100 to-slate-200">
         <div className="text-center space-y-4 max-w-md">
           <div className="text-5xl">🏢</div>
           <h2 className="text-xl font-bold">Welcome to Agent OS</h2>
           <p className="text-sm text-muted-foreground">
             Initialize your workspace to see the Agent Office with 10 AI specialists.
           </p>
-          <Button onClick={onSeed} size="lg">
+          <Button onClick={onSeed} size="lg" className="bg-violet-600 hover:bg-violet-700">
             🚀 Initialize System
           </Button>
         </div>
@@ -126,15 +125,21 @@ export function AgentOffice({ workspaceId, onSeed }: AgentOfficeProps) {
   const { agents, tasks, approvals, toolExecutions, recentEvents, situation } = state;
 
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-slate-50/30">
-      {/* ─── Top Bar ─── */}
-      <div className="flex items-center justify-between px-3 py-1.5 border-b bg-white/80 backdrop-blur-sm shadow-sm z-10">
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* ─── Minimal Top Bar (translucent, overlays office) ─── */}
+      <div className="flex items-center justify-between px-3 py-1 bg-white/70 backdrop-blur-md border-b border-slate-200/50 z-30 flex-shrink-0">
         <div className="flex items-center gap-2">
           <Building2 className="w-4 h-4 text-violet-500" />
           <h1 className="text-sm font-bold text-gray-800">Agent OS</h1>
           <Badge variant="outline" className="text-[9px] h-4 px-1.5">
             {workspaceId?.slice(-8)}
           </Badge>
+          <span className="text-[9px] text-gray-400 ml-1">
+            {agents.filter(a => {
+              const s = a.runtimeState?.status ?? a.status;
+              return s !== 'offline';
+            }).length}/{agents.length} active
+          </span>
         </div>
 
         {/* Situation indicators */}
@@ -163,10 +168,10 @@ export function AgentOffice({ workspaceId, onSeed }: AgentOfficeProps) {
         </div>
       </div>
 
-      {/* ─── Main Content: Office Canvas (always primary) ─── */}
+      {/* ─── Main Content: Office Scene fills everything ─── */}
       <div className="flex-1 min-h-0 relative">
-        {/* Isometric Office — the hero */}
-        <IsometricOffice
+        {/* Office Scene V2 — the hero, fills the entire area */}
+        <OfficeSceneV2
           agents={agents}
           tasks={tasks}
           onAgentClick={handleAgentClick}
@@ -174,8 +179,8 @@ export function AgentOffice({ workspaceId, onSeed }: AgentOfficeProps) {
           zoneAnimations={zoneAnimations}
         />
 
-        {/* ─── Floating Management Toolbar ─── */}
-        <div className="absolute right-2 top-2 flex flex-col gap-1.5 z-20">
+        {/* ─── Floating Management Toolbar (overlays office) ─── */}
+        <div className="absolute right-3 top-3 flex flex-col gap-1.5 z-40">
           {(Object.entries(PANEL_CONFIG) as [ManagementPanel, typeof PANEL_CONFIG[ManagementPanel]][]).map(
             ([key, config]) => {
               const Icon = config.icon;
@@ -189,13 +194,17 @@ export function AgentOffice({ workspaceId, onSeed }: AgentOfficeProps) {
                   key={key}
                   variant={activePanel === key ? 'default' : 'outline'}
                   size="sm"
-                  className="h-8 w-8 p-0 shadow-md bg-white/90 backdrop-blur-sm hover:bg-white relative"
+                  className={`h-9 w-9 p-0 shadow-lg backdrop-blur-sm relative transition-all ${
+                    activePanel === key
+                      ? 'bg-violet-600 hover:bg-violet-700 text-white border-violet-600'
+                      : 'bg-white/85 hover:bg-white border-slate-200'
+                  }`}
                   onClick={() => activePanel === key ? closePanel() : openPanel(key)}
                   title={config.label}
                 >
-                  <Icon className={`w-3.5 h-3.5 ${config.color}`} />
+                  <Icon className={`w-4 h-4 ${activePanel === key ? 'text-white' : config.color}`} />
                   {count > 0 && key !== 'situation' && key !== 'orchestrator' && (
-                    <span className="absolute -top-1 -right-1 text-[7px] font-bold bg-red-500 text-white rounded-full w-3.5 h-3.5 flex items-center justify-center">
+                    <span className="absolute -top-1 -right-1 text-[7px] font-bold bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center shadow-sm">
                       {count > 9 ? '9+' : count}
                     </span>
                   )}
@@ -205,7 +214,7 @@ export function AgentOffice({ workspaceId, onSeed }: AgentOfficeProps) {
           )}
         </div>
 
-        {/* ─── Management Panel Slide-over ─── */}
+        {/* ─── Management Panel Slide-over (overlays office) ─── */}
         <Sheet open={!!activePanel} onOpenChange={(open) => { if (!open) closePanel(); }}>
           <SheetContent side="right" className="w-[420px] sm:w-[480px] p-0">
             <SheetHeader className="px-4 py-3 border-b">
