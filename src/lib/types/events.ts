@@ -74,6 +74,7 @@ export const EventTypes = {
   TOOL_EXECUTION_FAILED: 'tool.execution_failed',
   TOOL_EXECUTION_BLOCKED: 'tool.execution_blocked',
   TOOL_APPROVAL_REQUIRED: 'tool.approval_required',
+  TOOL_EXECUTION_RESUMED: 'tool.execution_resumed',
 } as const;
 
 export type EventType = (typeof EventTypes)[keyof typeof EventTypes];
@@ -310,6 +311,7 @@ export interface ToolExecutionRequestedPayload extends BaseEventPayload {
   agentId?: string;
   action: string;
   workspaceId: string;
+  correlationId?: string;
 }
 
 export interface ToolExecutionStartedPayload extends BaseEventPayload {
@@ -317,6 +319,7 @@ export interface ToolExecutionStartedPayload extends BaseEventPayload {
   toolId: string;
   toolKey: string;
   agentId?: string;
+  correlationId?: string;
 }
 
 export interface ToolExecutionSucceededPayload extends BaseEventPayload {
@@ -324,6 +327,7 @@ export interface ToolExecutionSucceededPayload extends BaseEventPayload {
   toolId: string;
   toolKey: string;
   agentId?: string;
+  correlationId?: string;
 }
 
 export interface ToolExecutionFailedPayload extends BaseEventPayload {
@@ -332,6 +336,7 @@ export interface ToolExecutionFailedPayload extends BaseEventPayload {
   toolKey: string;
   agentId?: string;
   error: string;
+  correlationId?: string;
 }
 
 export interface ToolExecutionBlockedPayload extends BaseEventPayload {
@@ -340,6 +345,7 @@ export interface ToolExecutionBlockedPayload extends BaseEventPayload {
   toolKey: string;
   agentId?: string;
   reason: string;
+  correlationId?: string;
 }
 
 export interface ToolApprovalRequiredPayload extends BaseEventPayload {
@@ -348,6 +354,16 @@ export interface ToolApprovalRequiredPayload extends BaseEventPayload {
   toolKey: string;
   agentId?: string;
   approvalRequestId: string;
+  correlationId?: string;
+}
+
+export interface ToolExecutionResumedPayload extends BaseEventPayload {
+  executionId: string;
+  toolId: string;
+  toolKey: string;
+  agentId?: string;
+  approvalRequestId: string;
+  correlationId?: string;
 }
 
 // ─── Event Map (for type-safe subscriptions) ─────────────────
@@ -396,6 +412,7 @@ export interface EventMap {
   [EventTypes.TOOL_EXECUTION_FAILED]: ToolExecutionFailedPayload;
   [EventTypes.TOOL_EXECUTION_BLOCKED]: ToolExecutionBlockedPayload;
   [EventTypes.TOOL_APPROVAL_REQUIRED]: ToolApprovalRequiredPayload;
+  [EventTypes.TOOL_EXECUTION_RESUMED]: ToolExecutionResumedPayload;
 }
 
 // ─── Event Handler Types ─────────────────────────────────────

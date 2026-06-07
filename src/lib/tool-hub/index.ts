@@ -7,3 +7,4 @@ export { toolExecutionService } from './ToolExecutionService';
 export { toolAdapterRegistry } from './ToolAdapterRegistry';
 export { toolHub } from './ToolHub';
 export { DEFAULT_TOOLS } from './defaults';
+export { initApprovalLifecycle } from './approval-lifecycle';

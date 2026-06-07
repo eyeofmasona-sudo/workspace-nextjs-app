@@ -441,3 +441,44 @@ Stage Summary:
 - 15 skeleton adapters (no real dangerous execution)
 - model.resolve uses AgentModelConfigService without real API calls
 - Sandbox environment: dev server occasionally crashes after ~3 requests but all endpoints verified working
+
+---
+Task ID: 2-fix
+Agent: Sub Agent (Task 2)
+Task: Fix ToolHub execution boundaries + fix empty toolKey in events + add defence-in-depth guard
+
+Work Log:
+- Read worklog.md and all relevant source files: ToolHub.ts, ToolExecutionService.ts, types.ts, events.ts, event-bus/index.ts, schema.prisma
+- Updated src/lib/tool-hub/types.ts: Added `correlationId?: string` and `resumedFromApproval?: boolean` to ExecuteToolRequest interface
+- Updated src/lib/types/events.ts:
+  - Added TOOL_EXECUTION_RESUMED event type constant ('tool.execution_resumed')
+  - Added ToolExecutionResumedPayload interface { executionId, toolId, toolKey, agentId?, approvalRequestId }
+  - Added TOOL_EXECUTION_RESUMED entry to EventMap interface
+- Updated src/lib/event-bus/index.ts: Added TOOL_EXECUTION_RESUMED to onAny's allEventTypes array
+- Rewrote src/lib/tool-hub/ToolExecutionService.ts with all fixes:
+  - Added extractToolKey() helper to parse toolKey from execution metadata JSON
+  - createExecution(): Added `toolKey` and `correlationId` parameters; toolKey merged into metadata JSON; correlationId stored in DB field; event emission now uses actual toolKey instead of ''
+  - markRunning(): Reads execution record and extracts toolKey from metadata for event emission (was toolKey: '')
+  - markSuccess(): Same fix — reads toolKey from metadata for event emission (was toolKey: '')
+  - markFailed(): Same fix — reads toolKey from metadata for event emission (was toolKey: '')
+  - markBlocked(): Same fix — reads toolKey from metadata for event emission (was toolKey: '')
+  - markRequiresApproval(): Same fix — reads toolKey from metadata for event emission (was toolKey: '')
+  - Added resumeApprovedExecution(executionId): Verifies execution status=requires_approval, verifies linked approval request exists and is approved, resets status to pending + clears completedAt, emits tool.execution_resumed event, returns execution + toolKey
+  - Added getExecutionsNeedingCleanup(params): Finds old completed/failed/blocked executions (never pending/running/requires_approval), supports workspaceId filter, olderThanDays (default 30), limit (default 1000)
+  - Added cleanupOldExecutions(params): Deletes old execution records, only cleans success/failed/blocked statuses (never deletes pending/running/requires_approval), supports workspaceId/status/olderThanDays/limit filters, returns { deleted: number }
+- Rewrote src/lib/tool-hub/ToolHub.ts with all fixes:
+  - executeTool() now destructures correlationId and resumedFromApproval from request
+  - createExecution() call now passes toolKey and correlationId
+  - Approval check (step 6): Skipped when resumedFromApproval=true — directly proceeds to execution
+  - Defence-in-depth guard (step 7): Added safety check after approval flow — if tool requires approval OR riskLevel=critical AND NOT resumedFromApproval, blocks execution with "SAFETY: Tool requires approval but no approval confirmation provided". This is a belt-and-suspenders approach that prevents execution even if the flow above is somehow bypassed
+  - Step numbers updated in JSDoc (now 9 steps instead of 8)
+- TypeScript verification: tsc --noEmit passes with 0 errors in src/lib/ and src/app/ (only pre-existing errors in examples/ and skills/ directories)
+
+Stage Summary:
+- Critical bug fixed: All tool events now include actual toolKey instead of empty string
+- Defence-in-depth guard added: Critical/approval-required tools blocked even if approval check bypassed
+- Resume flow implemented: resumeApprovedExecution() allows restarting approved executions
+- Cleanup methods added: cleanupOldExecutions() and getExecutionsNeedingCleanup() for old record management
+- correlationId support added: ToolExecution records can link orchestrator events via correlationId
+- 5 files modified: types.ts, events.ts, event-bus/index.ts, ToolExecutionService.ts, ToolHub.ts
+- Total event types now 39 (added tool.execution_resumed)

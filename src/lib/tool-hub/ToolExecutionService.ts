@@ -6,6 +6,19 @@ import { eventBus } from '../event-bus';
 import { EventTypes } from '../types/events';
 import type { RiskLevel } from '../types/domain';
 
+/**
+ * Helper: parse metadata JSON from a ToolExecution record and extract toolKey
+ */
+function extractToolKey(metadata: string | null): string {
+  if (!metadata) return '';
+  try {
+    const parsed = JSON.parse(metadata);
+    return (parsed && typeof parsed === 'object' && 'toolKey' in parsed) ? String(parsed.toolKey) : '';
+  } catch {
+    return '';
+  }
+}
+
 class ToolExecutionService {
   private static instance: ToolExecutionService | null = null;
 
@@ -26,11 +39,16 @@ class ToolExecutionService {
     agentId?: string;
     taskId?: string;
     toolId: string;
+    toolKey: string;
     action: string;
     inputSummary?: string;
     riskLevel?: string;
+    correlationId?: string;
     metadata?: Record<string, unknown>;
   }) {
+    // Merge toolKey into metadata so it can be recovered later
+    const mergedMetadata = { ...params.metadata, toolKey: params.toolKey };
+
     const execution = await db.toolExecution.create({
       data: {
         workspaceId: params.workspaceId,
@@ -38,20 +56,22 @@ class ToolExecutionService {
         taskId: params.taskId ?? null,
         toolId: params.toolId,
         action: params.action,
+        correlationId: params.correlationId ?? null,
         inputSummary: params.inputSummary ?? null,
         status: 'pending',
         riskLevel: params.riskLevel ?? 'low',
-        metadata: params.metadata ? JSON.stringify(params.metadata) : null,
+        metadata: JSON.stringify(mergedMetadata),
       },
     });
 
     await eventBus.emit(EventTypes.TOOL_EXECUTION_REQUESTED, {
       executionId: execution.id,
       toolId: params.toolId,
-      toolKey: '', // Will be filled by caller
+      toolKey: params.toolKey,
       agentId: params.agentId,
       action: params.action,
       workspaceId: params.workspaceId,
+      correlationId: params.correlationId,
       timestamp: Date.now(),
       source: 'tool-execution-service',
     });
@@ -68,11 +88,14 @@ class ToolExecutionService {
       data: { status: 'running' },
     });
 
+    const toolKey = extractToolKey(execution.metadata);
+
     await eventBus.emit(EventTypes.TOOL_EXECUTION_STARTED, {
       executionId,
       toolId: execution.toolId,
-      toolKey: '', // Caller should augment
+      toolKey,
       agentId: execution.agentId ?? undefined,
+      correlationId: execution.correlationId ?? undefined,
       timestamp: Date.now(),
       source: 'tool-execution-service',
     });
@@ -93,11 +116,14 @@ class ToolExecutionService {
       },
     });
 
+    const toolKey = extractToolKey(execution.metadata);
+
     await eventBus.emit(EventTypes.TOOL_EXECUTION_SUCCEEDED, {
       executionId,
       toolId: execution.toolId,
-      toolKey: '',
+      toolKey,
       agentId: execution.agentId ?? undefined,
+      correlationId: execution.correlationId ?? undefined,
       timestamp: Date.now(),
       source: 'tool-execution-service',
     });
@@ -118,12 +144,15 @@ class ToolExecutionService {
       },
     });
 
+    const toolKey = extractToolKey(execution.metadata);
+
     await eventBus.emit(EventTypes.TOOL_EXECUTION_FAILED, {
       executionId,
       toolId: execution.toolId,
-      toolKey: '',
+      toolKey,
       agentId: execution.agentId ?? undefined,
       error: errorMessage,
+      correlationId: execution.correlationId ?? undefined,
       timestamp: Date.now(),
       source: 'tool-execution-service',
     });
@@ -144,12 +173,15 @@ class ToolExecutionService {
       },
     });
 
+    const toolKey = extractToolKey(execution.metadata);
+
     await eventBus.emit(EventTypes.TOOL_EXECUTION_BLOCKED, {
       executionId,
       toolId: execution.toolId,
-      toolKey: '',
+      toolKey,
       agentId: execution.agentId ?? undefined,
       reason,
+      correlationId: execution.correlationId ?? undefined,
       timestamp: Date.now(),
       source: 'tool-execution-service',
     });
@@ -170,12 +202,15 @@ class ToolExecutionService {
       },
     });
 
+    const toolKey = extractToolKey(execution.metadata);
+
     await eventBus.emit(EventTypes.TOOL_APPROVAL_REQUIRED, {
       executionId,
       toolId: execution.toolId,
-      toolKey: '',
+      toolKey,
       agentId: execution.agentId ?? undefined,
       approvalRequestId,
+      correlationId: execution.correlationId ?? undefined,
       timestamp: Date.now(),
       source: 'tool-execution-service',
     });
@@ -306,6 +341,142 @@ class ToolExecutionService {
     });
 
     return approvalRequest;
+  }
+
+  /**
+   * Resume an execution that was waiting for approval.
+   * Verifies approval was granted, resets status to pending, returns toolKey.
+   */
+  async resumeApprovedExecution(executionId: string): Promise<{ execution: Awaited<ReturnType<typeof db.toolExecution.findUnique>>; toolKey: string }> {
+    // Find the execution
+    const execution = await db.toolExecution.findUnique({
+      where: { id: executionId },
+      include: { approvalRequest: true },
+    });
+
+    if (!execution) {
+      throw new Error(`Execution not found: ${executionId}`);
+    }
+
+    if (execution.status !== 'requires_approval') {
+      throw new Error(`Execution is not in requires_approval status (current: ${execution.status})`);
+    }
+
+    // Verify linked approval request exists and is approved
+    if (!execution.approvalRequest) {
+      throw new Error(`No approval request linked to execution ${executionId}`);
+    }
+
+    if (execution.approvalRequest.status !== 'approved') {
+      throw new Error(`Approval request is not approved (current: ${execution.approvalRequest.status})`);
+    }
+
+    // Update execution status back to pending and clear completedAt
+    const updatedExecution = await db.toolExecution.update({
+      where: { id: executionId },
+      data: {
+        status: 'pending',
+        completedAt: null,
+      },
+    });
+
+    const toolKey = extractToolKey(execution.metadata);
+
+    // Emit tool.execution_resumed event
+    await eventBus.emit(EventTypes.TOOL_EXECUTION_RESUMED, {
+      executionId,
+      toolId: execution.toolId,
+      toolKey,
+      agentId: execution.agentId ?? undefined,
+      approvalRequestId: execution.approvalRequestId ?? '',
+      correlationId: execution.correlationId ?? undefined,
+      timestamp: Date.now(),
+      source: 'tool-execution-service',
+    });
+
+    return { execution: updatedExecution, toolKey };
+  }
+
+  /**
+   * Get executions that are eligible for cleanup (old completed/failed/blocked).
+   * Never returns pending, running, or requires_approval executions.
+   */
+  async getExecutionsNeedingCleanup(params: {
+    workspaceId?: string;
+    olderThanDays?: number;
+    limit?: number;
+  }): Promise<Array<{ id: string; status: string; createdAt: Date; workspaceId: string }>> {
+    const olderThanDays = params.olderThanDays ?? 30;
+    const limit = params.limit ?? 1000;
+    const cutoffDate = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000);
+
+    const where: Record<string, unknown> = {
+      status: { in: ['success', 'failed', 'blocked'] },
+      completedAt: { lt: cutoffDate },
+    };
+    if (params.workspaceId) where.workspaceId = params.workspaceId;
+
+    return db.toolExecution.findMany({
+      where,
+      orderBy: { createdAt: 'asc' },
+      take: limit,
+      select: { id: true, status: true, createdAt: true, workspaceId: true },
+    });
+  }
+
+  /**
+   * Clean up old ToolExecution records.
+   * Only deletes completed/failed/blocked executions older than N days.
+   * Never deletes pending, running, or requires_approval executions.
+   */
+  async cleanupOldExecutions(params: {
+    workspaceId?: string;
+    olderThanDays?: number;
+    status?: string;
+    limit?: number;
+  }): Promise<{ deleted: number }> {
+    const olderThanDays = params.olderThanDays ?? 30;
+    const limit = params.limit ?? 1000;
+    const cutoffDate = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000);
+
+    // Build the list of statuses eligible for cleanup
+    const eligibleStatuses: string[] = params.status
+      ? [params.status]
+      : ['success', 'failed', 'blocked'];
+
+    // Safety: never delete active executions
+    const safeStatuses = eligibleStatuses.filter(
+      (s) => !['pending', 'running', 'requires_approval'].includes(s)
+    );
+
+    if (safeStatuses.length === 0) {
+      return { deleted: 0 };
+    }
+
+    const where: Record<string, unknown> = {
+      status: { in: safeStatuses },
+      completedAt: { lt: cutoffDate },
+    };
+    if (params.workspaceId) where.workspaceId = params.workspaceId;
+
+    // Find IDs to delete (with limit)
+    const executions = await db.toolExecution.findMany({
+      where,
+      orderBy: { createdAt: 'asc' },
+      take: limit,
+      select: { id: true },
+    });
+
+    if (executions.length === 0) {
+      return { deleted: 0 };
+    }
+
+    const idsToDelete = executions.map((e) => e.id);
+    const result = await db.toolExecution.deleteMany({
+      where: { id: { in: idsToDelete } },
+    });
+
+    return { deleted: result.count };
   }
 }
 

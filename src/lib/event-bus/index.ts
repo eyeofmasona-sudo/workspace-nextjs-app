@@ -125,6 +125,7 @@ class EventBus {
       TOOL_EXECUTION_FAILED: 'tool.execution_failed',
       TOOL_EXECUTION_BLOCKED: 'tool.execution_blocked',
       TOOL_APPROVAL_REQUIRED: 'tool.approval_required',
+      TOOL_EXECUTION_RESUMED: 'tool.execution_resumed',
     } satisfies Record<string, EventType>) as EventType[];
 
     for (const eventType of allEventTypes) {

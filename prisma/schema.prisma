@@ -330,6 +330,7 @@ model ToolExecution {
   taskId            String?
   toolId            String
   action            String // e.g. "read", "write", "run", "deploy"
+  correlationId     String? // Links orchestrator → tool events for UI animation correlation
   inputSummary      String? // JSON: safe summary of input
   outputSummary     String? // JSON: safe summary of output
   status            String    @default("pending") // pending | running | success | failed | blocked | requires_approval

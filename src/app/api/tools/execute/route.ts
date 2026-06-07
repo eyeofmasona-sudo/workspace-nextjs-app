@@ -23,6 +23,8 @@ export async function POST(request: NextRequest) {
       toolKey: parsed.data.toolKey,
       action: parsed.data.action,
       input: parsed.data.input,
+      correlationId: parsed.data.correlationId,
+      resumedFromApproval: parsed.data.resumedFromApproval,
     });
 
     // Return appropriate status codes

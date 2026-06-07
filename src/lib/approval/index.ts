@@ -1,5 +1,6 @@
-// ─── Agent OS — Approval System Skeleton ─────────────────────
+// ─── Agent OS — Approval System ─────────────────────────────
 // Human-in-the-loop approval workflow for risky operations.
+// Stage 4 audit: Wired approval.approved → ToolExecution resume.
 
 import { db } from '../db';
 import { eventBus } from '../event-bus';
@@ -157,6 +158,18 @@ class ApprovalSystem {
       ...r,
       payload: r.payload ? JSON.parse(r.payload) : null,
     }));
+  }
+
+  /**
+   * Find any ToolExecution linked to this approval request.
+   * Returns the execution ID if found, or null.
+   */
+  async getLinkedToolExecutionId(approvalId: string): Promise<string | null> {
+    const execution = await db.toolExecution.findFirst({
+      where: { approvalRequestId: approvalId },
+      select: { id: true },
+    });
+    return execution?.id ?? null;
   }
 }
 

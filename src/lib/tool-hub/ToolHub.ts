@@ -1,9 +1,8 @@
 // ─── Agent OS — Tool Hub ─────────────────────────────────────
 // Central orchestrator for tool execution.
-// Flow: Agent → ToolHub → Permission Check → Tool Adapter → ToolExecution Log → EventLog
+// Flow: Agent → ToolHub → Permission Check → Approval Check → Defence Guard → Tool Adapter → ToolExecution Log → EventLog
 
 import { db } from '../db';
-import { agentPermissionService } from '../agent-system/AgentPermissionService';
 import { agentModelConfigService } from '../agent-system/AgentModelConfigService';
 import { toolRegistryService } from './ToolRegistryService';
 import { toolPermissionService } from './ToolPermissionService';
@@ -30,14 +29,15 @@ class ToolHub {
    * 1. Verify workspace exists
    * 2. Verify agent exists and belongs to workspace
    * 3. Verify tool exists and is enabled
-   * 4. Resolve ToolPermissionPolicy
-   * 5. Check AgentPermission
+   * 4. Create ToolExecution record (with toolKey + correlationId)
+   * 5. Check AgentPermission via ToolPermissionPolicy
    * 6. If insufficient → block and log
-   * 7. If requires approval or risk critical → create ApprovalRequest
-   * 8. Otherwise execute adapter skeleton
+   * 7. If requires approval or risk critical (and NOT resumed from approval) → create ApprovalRequest
+   * 8. Defence-in-depth guard: block if approval required but not confirmed
+   * 9. Execute adapter
    */
   async executeTool(request: ExecuteToolRequest): Promise<ExecuteToolResult> {
-    const { workspaceId, agentId, taskId, toolKey, action, input } = request;
+    const { workspaceId, agentId, taskId, toolKey, action, input, correlationId, resumedFromApproval } = request;
 
     // 1. Verify workspace exists
     const workspace = await db.workspace.findUnique({ where: { id: workspaceId } });
@@ -83,19 +83,21 @@ class ToolHub {
       };
     }
 
-    // Create ToolExecution record
+    // 4. Create ToolExecution record — pass toolKey and correlationId
     const execution = await toolExecutionService.createExecution({
       workspaceId,
       agentId,
       taskId,
       toolId: tool.id,
+      toolKey,
       action,
       inputSummary: JSON.stringify(input).slice(0, 500), // Truncate for safety
       riskLevel: tool.riskLevel,
+      correlationId,
       metadata: { toolKey },
     });
 
-    // 4 & 5. Check permissions via ToolPermissionPolicy → AgentPermission
+    // 5. Check permissions via ToolPermissionPolicy → AgentPermission
     const permissionCheck = await toolPermissionService.checkToolPermission(agentId, tool.id);
     if (!permissionCheck.allowed) {
       await toolExecutionService.markBlocked(execution.id, permissionCheck.reason ?? 'Insufficient permissions');
@@ -106,8 +108,8 @@ class ToolHub {
       };
     }
 
-    // 6. Check if approval is required
-    if (tool.requiresApproval || tool.riskLevel === 'critical') {
+    // 6. Check if approval is required — skip if resumed from an approved state
+    if (!resumedFromApproval && (tool.requiresApproval || tool.riskLevel === 'critical')) {
       // Create approval request
       const approvalRequest = await toolExecutionService.createToolApproval({
         workspaceId,
@@ -129,7 +131,20 @@ class ToolHub {
       };
     }
 
-    // 7. Execute adapter
+    // 7. Defence-in-depth guard: even if the flow above is bypassed,
+    //    block execution of high-risk/critical tools without proper approval confirmation
+    if ((tool.requiresApproval || tool.riskLevel === 'critical') && !resumedFromApproval) {
+      // This should never happen because the approval check above should have caught it.
+      // But as a safety net, block execution here.
+      await toolExecutionService.markBlocked(execution.id, 'SAFETY: Tool requires approval but no approval confirmation provided');
+      return {
+        status: 'blocked',
+        executionId: execution.id,
+        error: 'Tool requires approval',
+      };
+    }
+
+    // 8. Execute adapter
     await toolExecutionService.markRunning(execution.id);
 
     try {

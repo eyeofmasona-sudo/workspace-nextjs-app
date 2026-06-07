@@ -2,6 +2,7 @@
 // Creates the default user, workspace, and agents on first run.
 // Stage 3: Also seeds agent profiles, capabilities, permissions, models, runtime states.
 // Stage 4: Also seeds default tools and tool permission policies.
+// Stage 4 audit: Wires approval lifecycle (approval.approved → ToolExecution resume).
 
 import { db } from '../db';
 import { agentRegistry } from '../agent-registry';
@@ -11,6 +12,7 @@ import { agentPermissionService } from '../agent-system/AgentPermissionService';
 import { agentModelConfigService } from '../agent-system/AgentModelConfigService';
 import { agentRuntimeService } from '../agent-system/AgentRuntimeService';
 import { toolRegistryService } from '../tool-hub/ToolRegistryService';
+import { initApprovalLifecycle } from '../tool-hub/approval-lifecycle';
 
 const DEFAULT_USER_EMAIL = 'admin@agent-os.local';
 const DEFAULT_USER_NAME = 'Admin';
@@ -93,6 +95,10 @@ export async function initializeSystem() {
   if (toolResult.created > 0) {
     console.log(`[Seed] Created ${toolResult.created} tools with policies (skipped ${toolResult.skipped})`);
   }
+
+  // 6. Wire approval lifecycle (Stage 4 audit)
+  // approval.approved → ToolExecution resume → re-execute tool
+  initApprovalLifecycle();
 
   return {
     user,

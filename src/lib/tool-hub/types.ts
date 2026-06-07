@@ -85,6 +85,8 @@ export interface ExecuteToolRequest {
   toolKey: string;
   action: string;
   input: unknown;
+  correlationId?: string;
+  resumedFromApproval?: boolean;
 }
 
 export interface ExecuteToolResult {
