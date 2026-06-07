@@ -1,0 +1,55 @@
+// ─── Agent OS — Agent Configuration Types ────────────────────
+
+import type { AgentStatus, OfficeZone, AgentType } from './domain';
+
+// ─── Default Agent Definitions ───────────────────────────────
+
+export interface DefaultAgentConfig {
+  name: string;
+  role: string;
+  type: AgentType;
+  professionalStyle: {
+    communicationStyle: string;
+    decisionMaking: string;
+    attentionToDetail: string;
+    collaborationStyle: string;
+  };
+  visualProfile: {
+    color: string;       // Agent's theme color (hex)
+    icon: string;        // Lucide icon name
+    avatarEmoji: string; // Emoji representation
+  };
+  defaultStatus: AgentStatus;
+  defaultLocationZone: OfficeZone;
+  systemPrompt: string;
+}
+
+// ─── Agent Role Constants ────────────────────────────────────
+
+export const AgentRoles = {
+  ORCHESTRATOR: 'orchestrator',
+  ANALYST: 'analyst',
+  ARCHITECT: 'architect',
+  DESIGNER: 'designer',
+  FRONTEND_ENGINEER: 'frontend_engineer',
+  BACKEND_ENGINEER: 'backend_engineer',
+  DATA_ENGINEER: 'data_engineer',
+  QA_ENGINEER: 'qa_engineer',
+  DEVOPS_ENGINEER: 'devops_engineer',
+  RESEARCHER: 'researcher',
+} as const;
+
+export type AgentRole = (typeof AgentRoles)[keyof typeof AgentRoles];
+
+// ─── Zone-Agent Mapping ──────────────────────────────────────
+
+export const ZoneDefaultAgents: Record<OfficeZone, string[]> = {
+  command_area: [AgentRoles.ORCHESTRATOR],
+  situation_room: [AgentRoles.ANALYST, AgentRoles.ORCHESTRATOR],
+  development_area: [AgentRoles.FRONTEND_ENGINEER, AgentRoles.BACKEND_ENGINEER],
+  design_area: [AgentRoles.DESIGNER],
+  research_area: [AgentRoles.RESEARCHER, AgentRoles.ANALYST],
+  server_room: [AgentRoles.DEVOPS_ENGINEER, AgentRoles.DATA_ENGINEER],
+  meeting_room: [AgentRoles.ARCHITECT, AgentRoles.ANALYST],
+  lounge_area: [],
+};

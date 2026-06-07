@@ -1,0 +1,191 @@
+// Agent OS — Foundation Schema
+// Single-user now, SaaS-ready architecture
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Core Entities ───────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  settings  String?  // JSON: flexible user settings
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaces Workspace[]
+
+  @@map("users")
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  ownerId   String
+  name      String
+  mode      String   @default("single") // single | team | saas
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner    User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  projects Project[]
+  agents   Agent[]
+
+  @@map("workspaces")
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  sourceType  String   @default("local") // local | git | cloud
+  sourcePath  String?
+  repoUrl     String?
+  status      String   @default("active") // active | archived | deleted
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  epics     Epic[]
+
+  @@map("projects")
+}
+
+model Epic {
+  id          String   @id @default(cuid())
+  projectId   String
+  title       String
+  description String?
+  status      String   @default("planned") // backlog | planned | in_progress | review | done | cancelled
+  priority    String   @default("medium")  // low | medium | high | critical
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks   Task[]
+
+  @@map("epics")
+}
+
+model Task {
+  id               String   @id @default(cuid())
+  epicId           String
+  parentTaskId     String?
+  title            String
+  description      String?
+  status           String   @default("backlog")  // backlog | planned | in_progress | review | waiting_approval | done | failed | cancelled
+  priority         String   @default("medium")   // low | medium | high | critical
+  assignedAgentId  String?
+  riskLevel        String   @default("low")      // low | medium | high | critical
+  requiresApproval Boolean  @default(false)
+  costEstimate     Float?
+  costActual       Float?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  epic             Epic              @relation(fields: [epicId], references: [id], onDelete: Cascade)
+  parentTask       Task?             @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: SetNull)
+  subtasks         Task[]            @relation("TaskSubtasks")
+  assignedAgent    Agent?            @relation("TaskAssignee", fields: [assignedAgentId], references: [id], onDelete: SetNull)
+  approvalRequests ApprovalRequest[]
+  costLogs         CostLog[]
+
+  @@map("tasks")
+}
+
+model Agent {
+  id                String   @id @default(cuid())
+  workspaceId       String
+  name              String
+  role              String
+  type              String   @default("permanent")   // permanent | temporary
+  visualProfile     String?  // JSON: appearance, avatar config
+  professionalStyle String?  // JSON: behavior, communication style
+  systemPrompt      String?  // System prompt for AI model
+  status            String   @default("offline")     // idle | thinking | working | waiting_api | reviewing | waiting_approval | done | error | offline
+  locationZone      String   @default("lounge_area") // command_area | situation_room | development_area | design_area | research_area | server_room | meeting_room | lounge_area
+  activeTaskId      String?  // Currently active task (not FK to avoid circular)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  tasks            Task[]            @relation("TaskAssignee")
+  approvalRequests ApprovalRequest[]
+  costLogs         CostLog[]
+
+  @@map("agents")
+}
+
+// ─── Memory System ───────────────────────────────────────────
+
+model MemoryItem {
+  id        String   @id @default(cuid())
+  scope     String   // global | workspace | project | agent | task
+  scopeId   String?  // ID of the scope entity (workspace_id, project_id, etc.)
+  type      String   // context | decision | fact | lesson | conversation_summary | error
+  content   String
+  metadata  String?  // JSON
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("memory_items")
+}
+
+// ─── Approval System ─────────────────────────────────────────
+
+model ApprovalRequest {
+  id         String   @id @default(cuid())
+  taskId     String
+  agentId    String
+  actionType String   // execute | deploy | delete | modify | spend | access
+  summary    String
+  risk       String   @default("medium") // low | medium | high | critical
+  payload    String?  // JSON: action details
+  status     String   @default("pending") // pending | approved | rejected | expired
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  task  Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@map("approval_requests")
+}
+
+// ─── Event Log ───────────────────────────────────────────────
+
+model EventLog {
+  id         String   @id @default(cuid())
+  eventType  String
+  entityType String?  // project | epic | task | agent | approval | memory | cost
+  entityId   String?
+  payload    String?  // JSON
+  createdAt  DateTime @default(now())
+
+  @@map("event_logs")
+}
+
+// ─── Cost Tracking ───────────────────────────────────────────
+
+model CostLog {
+  id        String   @id @default(cuid())
+  agentId   String
+  taskId    String?
+  provider  String?  // openai | anthropic | google | local | etc.
+  model     String?
+  tokensIn  Int      @default(0)
+  tokensOut Int      @default(0)
+  cost      Float    @default(0)
+  createdAt DateTime @default(now())
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  task  Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@map("cost_logs")
+}
