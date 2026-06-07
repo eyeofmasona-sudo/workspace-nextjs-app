@@ -120,3 +120,40 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ─── Agent OS — 2.5D Office Animations ─── */
+
+/* Office floor tile pattern (isometric feel) */
+.office-floor-tiles {
+  background-image:
+    linear-gradient(30deg, rgba(0,0,0,0.02) 12%, transparent 12.5%, transparent 87%, rgba(0,0,0,0.02) 87.5%),
+    linear-gradient(150deg, rgba(0,0,0,0.02) 12%, transparent 12.5%, transparent 87%, rgba(0,0,0,0.02) 87.5%),
+    linear-gradient(30deg, rgba(0,0,0,0.02) 12%, transparent 12.5%, transparent 87%, rgba(0,0,0,0.02) 87.5%),
+    linear-gradient(150deg, rgba(0,0,0,0.02) 12%, transparent 12.5%, transparent 87%, rgba(0,0,0,0.02) 87.5%);
+  background-size: 40px 70px;
+  background-position: 0 0, 0 0, 20px 35px, 20px 35px;
+}
+
+/* Custom scrollbar for office canvas */
+.office-canvas-scroll::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+.office-canvas-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.office-canvas-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+  border-radius: 3px;
+}
+.office-canvas-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
+}
+
+/* 3D wall effect for office rooms */
+.office-wall-3d {
+  border-top: 3px solid rgba(255,255,255,0.5);
+  border-left: 2px solid rgba(255,255,255,0.3);
+  border-right: 2px solid rgba(0,0,0,0.06);
+  border-bottom: 2px solid rgba(0,0,0,0.08);
+}

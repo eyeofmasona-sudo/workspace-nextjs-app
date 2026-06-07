@@ -1,45 +1,63 @@
 // ─── Agent OS — AgentOffice ──────────────────────────────────
 // Main Agent Office component — the 2.5D office visualization.
-// Combines all sub-components into a cohesive layout.
+// Office is the PRIMARY view. Dashboard/Tasks/Situation are secondary panels.
+// Office always stays the main screen.
 
 'use client';
 
 import { useState, useCallback } from 'react';
 import { useOfficeData } from '@/hooks/useOfficeData';
 import { useEventStream } from '@/hooks/useEventStream';
-import { OfficeLayout } from './OfficeLayout';
+import { useOfficeAnimations } from '@/hooks/useOfficeAnimations';
+import { OfficeCanvas } from './OfficeCanvas';
 import { TaskBoard } from './TaskBoard';
 import { SituationRoom } from './SituationRoom';
 import { OrchestratorPanel } from './OrchestratorPanel';
 import { ApprovalQueue } from './ApprovalQueue';
 import { EventTimeline } from './EventTimeline';
 import { AgentDetailsDrawer } from './AgentDetailsDrawer';
-import { SplitWorkspacePanel } from './SplitWorkspacePanel';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import {
   LayoutDashboard, ListChecks, BarChart3, Crown,
-  AlertTriangle, Radio, ChevronDown, ChevronUp,
-  Loader2, RefreshCw,
+  AlertTriangle, Radio, X, Loader2, RefreshCw,
+  Building2, ChevronRight,
 } from 'lucide-react';
 import type { OfficeAgent } from '@/hooks/useOfficeData';
+
+// Panel types for the management drawer
+type ManagementPanel = 'tasks' | 'situation' | 'orchestrator' | 'approvals' | 'events';
 
 interface AgentOfficeProps {
   workspaceId: string | null;
   onSeed?: () => void;
 }
 
+const PANEL_CONFIG: Record<ManagementPanel, {
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  color: string;
+}> = {
+  tasks: { label: 'Tasks', icon: ListChecks, color: 'text-blue-500' },
+  situation: { label: 'Situation', icon: BarChart3, color: 'text-emerald-500' },
+  orchestrator: { label: 'Orchestrator', icon: Crown, color: 'text-violet-500' },
+  approvals: { label: 'Approvals', icon: AlertTriangle, color: 'text-orange-500' },
+  events: { label: 'Events', icon: Radio, color: 'text-sky-500' },
+};
+
 export function AgentOffice({ workspaceId, onSeed }: AgentOfficeProps) {
   const { state, loading, error, refetch } = useOfficeData(workspaceId, 5000);
   const { newEvents, clearNewEvents } = useEventStream(workspaceId, 4000);
+  const { agentAnimations, zoneAnimations } = useOfficeAnimations(
+    newEvents,
+    clearNewEvents,
+    state?.agents ?? [],
+  );
   const [selectedAgent, setSelectedAgent] = useState<OfficeAgent | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [showSplitPanel, setShowSplitPanel] = useState(true);
-  const [activeTab, setActiveTab] = useState('office');
+  const [activePanel, setActivePanel] = useState<ManagementPanel | null>(null);
 
   const handleAgentClick = useCallback((agentId: string) => {
     const agent = state?.agents.find((a) => a.id === agentId);
@@ -50,9 +68,16 @@ export function AgentOffice({ workspaceId, onSeed }: AgentOfficeProps) {
   }, [state?.agents]);
 
   const handleApprovalAction = useCallback((_approvalId: string, _action: 'approve' | 'reject') => {
-    // Refresh after approval action
     setTimeout(() => refetch(), 500);
   }, [refetch]);
+
+  const openPanel = useCallback((panel: ManagementPanel) => {
+    setActivePanel(panel);
+  }, []);
+
+  const closePanel = useCallback(() => {
+    setActivePanel(null);
+  }, []);
 
   // Loading state
   if (loading && !state) {
@@ -101,163 +126,120 @@ export function AgentOffice({ workspaceId, onSeed }: AgentOfficeProps) {
   const { agents, tasks, approvals, toolExecutions, recentEvents, situation } = state;
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      {/* Top bar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b bg-background/80 backdrop-blur-sm">
-        <div className="flex items-center gap-3">
-          <h1 className="text-lg font-bold flex items-center gap-1.5">
-            🏢 Agent OS
-          </h1>
-          <Badge variant="outline" className="text-[10px]">
+    <div className="h-full flex flex-col overflow-hidden bg-slate-50/30">
+      {/* ─── Top Bar ─── */}
+      <div className="flex items-center justify-between px-3 py-1.5 border-b bg-white/80 backdrop-blur-sm shadow-sm z-10">
+        <div className="flex items-center gap-2">
+          <Building2 className="w-4 h-4 text-violet-500" />
+          <h1 className="text-sm font-bold text-gray-800">Agent OS</h1>
+          <Badge variant="outline" className="text-[9px] h-4 px-1.5">
             {workspaceId?.slice(-8)}
           </Badge>
         </div>
-        <div className="flex items-center gap-2">
-          {/* Situation indicators */}
+
+        {/* Situation indicators */}
+        <div className="flex items-center gap-1.5">
           {situation.approvalsNeeded > 0 && (
-            <Badge variant="destructive" className="text-[10px] h-5">
-              <AlertTriangle className="w-3 h-3 mr-0.5" />
-              {situation.approvalsNeeded} approval{situation.approvalsNeeded > 1 ? 's' : ''}
+            <Badge variant="destructive" className="text-[9px] h-4 px-1.5 cursor-pointer" onClick={() => openPanel('approvals')}>
+              <AlertTriangle className="w-2.5 h-2.5 mr-0.5" />
+              {situation.approvalsNeeded}
             </Badge>
           )}
           {situation.runningTools > 0 && (
-            <Badge variant="outline" className="text-[10px] h-5">
-              <Loader2 className="w-3 h-3 mr-0.5 animate-spin" />
-              {situation.runningTools} running
+            <Badge variant="outline" className="text-[9px] h-4 px-1.5">
+              <Loader2 className="w-2.5 h-2.5 mr-0.5 animate-spin" />
+              {situation.runningTools}
             </Badge>
           )}
           {newEvents.length > 0 && (
-            <Badge variant="secondary" className="text-[10px] h-5">
-              <Radio className="w-3 h-3 mr-0.5" />
-              {newEvents.length} new
+            <Badge variant="secondary" className="text-[9px] h-4 px-1.5 cursor-pointer" onClick={() => openPanel('events')}>
+              <Radio className="w-2.5 h-2.5 mr-0.5" />
+              {newEvents.length}
             </Badge>
           )}
-          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={refetch}>
+          <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={refetch}>
             <RefreshCw className="w-3 h-3" />
           </Button>
         </div>
       </div>
 
-      {/* Main content area */}
-      <div className="flex-1 min-h-0 overflow-hidden">
-        <ResizablePanelGroup direction="vertical">
-          <ResizablePanel defaultSize={showSplitPanel ? 72 : 95} minSize={40}>
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-              <div className="border-b px-2">
-                <TabsList className="h-9">
-                  <TabsTrigger value="office" className="text-xs gap-1">
-                    <LayoutDashboard className="w-3 h-3" /> Office
-                  </TabsTrigger>
-                  <TabsTrigger value="tasks" className="text-xs gap-1">
-                    <ListChecks className="w-3 h-3" /> Tasks
-                    {tasks.length > 0 && (
-                      <Badge variant="secondary" className="text-[9px] h-3.5 px-1 ml-0.5">
-                        {tasks.length}
-                      </Badge>
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger value="situation" className="text-xs gap-1">
-                    <BarChart3 className="w-3 h-3" /> Situation
-                  </TabsTrigger>
-                  <TabsTrigger value="orchestrator" className="text-xs gap-1">
-                    <Crown className="w-3 h-3" /> Orchestrator
-                  </TabsTrigger>
-                  <TabsTrigger value="approvals" className="text-xs gap-1">
-                    <AlertTriangle className="w-3 h-3" /> Approvals
-                    {approvals.length > 0 && (
-                      <Badge variant="destructive" className="text-[9px] h-3.5 px-1 ml-0.5">
-                        {approvals.length}
-                      </Badge>
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger value="events" className="text-xs gap-1">
-                    <Radio className="w-3 h-3" /> Events
-                  </TabsTrigger>
-                </TabsList>
-              </div>
+      {/* ─── Main Content: Office Canvas (always primary) ─── */}
+      <div className="flex-1 min-h-0 relative">
+        {/* Office Canvas — the hero */}
+        <OfficeCanvas
+          agents={agents}
+          tasks={tasks}
+          onAgentClick={handleAgentClick}
+          agentAnimations={agentAnimations}
+          zoneAnimations={zoneAnimations}
+        />
 
-              <div className="flex-1 min-h-0 overflow-hidden">
-                <TabsContent value="office" className="h-full m-0 p-3 overflow-auto">
-                  <OfficeLayout
-                    agents={agents}
-                    tasks={tasks}
-                    onAgentClick={handleAgentClick}
-                  />
-                </TabsContent>
+        {/* ─── Floating Management Toolbar ─── */}
+        <div className="absolute right-2 top-2 flex flex-col gap-1.5 z-20">
+          {(Object.entries(PANEL_CONFIG) as [ManagementPanel, typeof PANEL_CONFIG[ManagementPanel]][]).map(
+            ([key, config]) => {
+              const Icon = config.icon;
+              const count =
+                key === 'tasks' ? tasks.length :
+                key === 'approvals' ? approvals.length :
+                key === 'events' ? recentEvents.length : 0;
 
-                <TabsContent value="tasks" className="h-full m-0 p-3">
-                  <TaskBoard tasks={tasks} />
-                </TabsContent>
-
-                <TabsContent value="situation" className="h-full m-0 p-3">
-                  <SituationRoom
-                    situation={situation}
-                    agents={agents}
-                    recentEvents={recentEvents}
-                  />
-                </TabsContent>
-
-                <TabsContent value="orchestrator" className="h-full m-0 p-3">
-                  <OrchestratorPanel
-                    workspaceId={workspaceId!}
-                    agents={agents}
-                  />
-                </TabsContent>
-
-                <TabsContent value="approvals" className="h-full m-0 p-3">
-                  <ApprovalQueue
-                    approvals={approvals}
-                    workspaceId={workspaceId!}
-                    onAction={handleApprovalAction}
-                  />
-                </TabsContent>
-
-                <TabsContent value="events" className="h-full m-0 p-3">
-                  <EventTimeline events={recentEvents} />
-                </TabsContent>
-              </div>
-            </Tabs>
-          </ResizablePanel>
-
-          {showSplitPanel && (
-            <>
-              <ResizableHandle withHandle />
-              <ResizablePanel defaultSize={28} minSize={15} maxSize={40}>
-                <div className="flex items-center justify-between px-2 py-1 border-b bg-slate-50">
-                  <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
-                    Workspace
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-5 w-5 p-0"
-                    onClick={() => setShowSplitPanel(false)}
-                  >
-                    <ChevronDown className="w-3 h-3" />
-                  </Button>
-                </div>
-                <SplitWorkspacePanel approvals={approvals} events={recentEvents} />
-              </ResizablePanel>
-            </>
+              return (
+                <Button
+                  key={key}
+                  variant={activePanel === key ? 'default' : 'outline'}
+                  size="sm"
+                  className="h-8 w-8 p-0 shadow-md bg-white/90 backdrop-blur-sm hover:bg-white relative"
+                  onClick={() => activePanel === key ? closePanel() : openPanel(key)}
+                  title={config.label}
+                >
+                  <Icon className={`w-3.5 h-3.5 ${config.color}`} />
+                  {count > 0 && key !== 'situation' && key !== 'orchestrator' && (
+                    <span className="absolute -top-1 -right-1 text-[7px] font-bold bg-red-500 text-white rounded-full w-3.5 h-3.5 flex items-center justify-center">
+                      {count > 9 ? '9+' : count}
+                    </span>
+                  )}
+                </Button>
+              );
+            },
           )}
-        </ResizablePanelGroup>
+        </div>
+
+        {/* ─── Management Panel Slide-over ─── */}
+        <Sheet open={!!activePanel} onOpenChange={(open) => { if (!open) closePanel(); }}>
+          <SheetContent side="right" className="w-[420px] sm:w-[480px] p-0">
+            <SheetHeader className="px-4 py-3 border-b">
+              <div className="flex items-center gap-2">
+                {activePanel && (() => {
+                  const config = PANEL_CONFIG[activePanel];
+                  const Icon = config.icon;
+                  return (
+                    <>
+                      <Icon className={`w-4 h-4 ${config.color}`} />
+                      <SheetTitle className="text-sm">{config.label}</SheetTitle>
+                    </>
+                  );
+                })()}
+              </div>
+            </SheetHeader>
+            <div className="flex-1 overflow-auto p-4">
+              {activePanel === 'tasks' && <TaskBoard tasks={tasks} />}
+              {activePanel === 'situation' && (
+                <SituationRoom situation={situation} agents={agents} recentEvents={recentEvents} />
+              )}
+              {activePanel === 'orchestrator' && (
+                <OrchestratorPanel workspaceId={workspaceId!} agents={agents} />
+              )}
+              {activePanel === 'approvals' && (
+                <ApprovalQueue approvals={approvals} workspaceId={workspaceId!} onAction={handleApprovalAction} />
+              )}
+              {activePanel === 'events' && <EventTimeline events={recentEvents} />}
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
 
-      {/* Toggle split panel button */}
-      {!showSplitPanel && (
-        <div className="border-t">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full h-6 text-[10px] text-muted-foreground"
-            onClick={() => setShowSplitPanel(true)}
-          >
-            <ChevronUp className="w-3 h-3 mr-1" /> Show Workspace Panel
-          </Button>
-        </div>
-      )}
-
-      {/* Agent details drawer */}
+      {/* ─── Agent Details Drawer ─── */}
       <AgentDetailsDrawer
         agent={selectedAgent}
         open={drawerOpen}
