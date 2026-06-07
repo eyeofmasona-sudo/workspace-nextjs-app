@@ -116,6 +116,15 @@ class EventBus {
       AGENT_DEACTIVATED: 'agent.deactivated',
       AGENT_MEMORY_LINKED: 'agent.memory_linked',
       AGENT_MEMORY_UNLINKED: 'agent.memory_unlinked',
+      TOOL_CREATED: 'tool.created',
+      TOOL_UPDATED: 'tool.updated',
+      TOOL_POLICY_UPDATED: 'tool.policy_updated',
+      TOOL_EXECUTION_REQUESTED: 'tool.execution_requested',
+      TOOL_EXECUTION_STARTED: 'tool.execution_started',
+      TOOL_EXECUTION_SUCCEEDED: 'tool.execution_succeeded',
+      TOOL_EXECUTION_FAILED: 'tool.execution_failed',
+      TOOL_EXECUTION_BLOCKED: 'tool.execution_blocked',
+      TOOL_APPROVAL_REQUIRED: 'tool.approval_required',
     } satisfies Record<string, EventType>) as EventType[];
 
     for (const eventType of allEventTypes) {

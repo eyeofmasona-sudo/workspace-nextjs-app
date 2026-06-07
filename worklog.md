@@ -384,3 +384,60 @@ Stage Summary:
 - 6 new Prisma models, 7 singleton services, 8+ Zod schemas, 10 API route files
 - All verification checks passed
 - Dev server stable (occasional OOM in sandbox environment under heavy request load, but functional)
+
+---
+Task ID: 4
+Agent: Main
+Task: Implement Stage 4 — Tool Hub
+
+Work Log:
+- Studied all existing files: prisma/schema.prisma (16 models), src/lib/agent-system/* (7 services), src/lib/types/events.ts (29 event types), src/lib/agent-system/AgentPermissionService.ts (12 permission keys, hierarchy), src/lib/event-bus/index.ts, src/lib/validations/index.ts, src/lib/seed/index.ts, all API routes
+- Added 3 new Prisma models: Tool, ToolExecution, ToolPermissionPolicy
+- Added ApprovalRequest → ToolExecution relation
+- Pushed schema to SQLite database (db:push), validated, formatted
+- Added 9 new tool event types to events.ts: tool.created, tool.updated, tool.policy_updated, tool.execution_requested, tool.execution_started, tool.execution_succeeded, tool.execution_failed, tool.execution_blocked, tool.approval_required
+- Added 9 new event payload interfaces to events.ts
+- Updated EventMap with 9 new tool event entries
+- Updated EventBus onAny with 9 new event type strings
+- Created src/lib/tool-hub/types.ts: ToolCategory (15), ToolRiskLevel, ToolExecutionStatus, ToolPermissionLevel, ToolAdapter interface, ExecuteToolRequest/Result, ToolConfig, CreateToolInput, UpdateToolInput
+- Created src/lib/tool-hub/defaults.ts: 15 DEFAULT_TOOLS with policies (filesystem.read/write, terminal.run, git.status/diff, browser.search, database.query, document.parse, ocr.extract, translation.translate, rag.index/query, deployment.deploy, model.resolve, notification.send)
+- Created src/lib/tool-hub/adapters/index.ts: 15 skeleton adapters (filesystem read returns mock files, terminal/deployment/database return blocked, model.resolve returns null for ToolHub to fill)
+- Created src/lib/tool-hub/ToolRegistryService.ts: getTools, getTool, getToolByKey (workspace→global fallback), getToolsByCategory, createTool, updateTool, seedDefaultTools (idempotent)
+- Created src/lib/tool-hub/ToolPermissionService.ts: getToolPolicies, setToolPolicy (upsert), checkToolPermission (bridges ToolPermissionPolicy→AgentPermission), getRequiredPermissions, compareLevels
+- Created src/lib/tool-hub/ToolExecutionService.ts: createExecution, markRunning, markSuccess, markFailed, markBlocked, markRequiresApproval, getExecution, getExecutions, createToolApproval (creates ApprovalRequest with synthetic task if needed)
+- Created src/lib/tool-hub/ToolAdapterRegistry.ts: getAdapter, registerAdapter (custom), getRegisteredKeys, hasAdapter
+- Created src/lib/tool-hub/ToolHub.ts: executeTool (7-step flow: verify workspace → verify agent → verify tool → create execution → check permissions → check approval → execute adapter). Special handling for model.resolve using AgentModelConfigService
+- Created src/lib/tool-hub/index.ts: barrel export
+- Added 5 Zod validation schemas: createToolSchema, updateToolSchema, updateToolPolicySchema, executeToolSchema, executionQuerySchema
+- Created 6 API route files: GET/POST /api/tools, GET/PATCH /api/tools/[id], GET/PATCH /api/tools/[id]/policies, POST /api/tools/execute, GET /api/tools/executions, GET /api/tools/executions/[executionId]
+- Updated seed system: added toolRegistryService.seedDefaultTools(), added tool/toolExecution/toolPolicy counts to getSystemStatus
+- Seeded 15 tools + 13 permission policies via direct DB script
+- Fixed TypeScript errors: ToolRegistryService getToolByKey null handling, policies route result type annotation
+- Verification: prisma validate ✓, prisma format ✓, tsc --noEmit ✓, eslint ✓
+
+API Tests performed:
+1. GET /api/tools → 15 tools returned with policies ✓
+2. GET /api/tools/[id] → single tool with policies ✓
+3. POST /api/tools/execute filesystem.read with orchestrator (files:write) → success, mock output ✓
+4. POST /api/tools/execute filesystem.write with analyst (files:read only) → blocked, "Insufficient permissions: files:write" ✓
+5. POST /api/tools/execute terminal.run with backend_engineer (terminal:write) → requires_approval, approvalRequestId returned ✓
+6. POST /api/tools/execute deployment.deploy with orchestrator (deployment:read, needs admin) → blocked ✓
+7. POST /api/tools/execute with wrong workspace agent → failed, "does not belong to workspace" ✓
+8. POST /api/tools/execute model.resolve → success, returns {provider:"openai", model:"gpt-4o"} ✓
+9. GET /api/tools/executions → 6 execution records with all statuses ✓
+10. EventLog contains 11+ tool events (execution_requested, execution_started, execution_succeeded, execution_blocked, approval_required) ✓
+11. Idempotent seed: tools=15, policies=13, no duplicates after re-seed ✓
+
+Stage Summary:
+- Stage 4 fully implemented: Tool Hub layer complete
+- 3 new Prisma models (Tool, ToolExecution, ToolPermissionPolicy)
+- 9 new event types (total now 38)
+- 5 new Zod validation schemas
+- 6 new API route files
+- 15 default tools seeded with 13 permission policies
+- Full permission check flow: Agent → ToolHub → ToolPermissionPolicy → AgentPermission → allow/block/approval
+- ToolExecution logging for all attempts (success/blocked/requires_approval/failed)
+- Approval integration for high/critical tools (creates ApprovalRequest)
+- 15 skeleton adapters (no real dangerous execution)
+- model.resolve uses AgentModelConfigService without real API calls
+- Sandbox environment: dev server occasionally crashes after ~3 requests but all endpoints verified working

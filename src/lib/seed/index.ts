@@ -1,6 +1,7 @@
 // ─── Agent OS — Seed / Initialization ───────────────────────
 // Creates the default user, workspace, and agents on first run.
 // Stage 3: Also seeds agent profiles, capabilities, permissions, models, runtime states.
+// Stage 4: Also seeds default tools and tool permission policies.
 
 import { db } from '../db';
 import { agentRegistry } from '../agent-registry';
@@ -9,6 +10,7 @@ import { agentCapabilityService } from '../agent-system/AgentCapabilityService';
 import { agentPermissionService } from '../agent-system/AgentPermissionService';
 import { agentModelConfigService } from '../agent-system/AgentModelConfigService';
 import { agentRuntimeService } from '../agent-system/AgentRuntimeService';
+import { toolRegistryService } from '../tool-hub/ToolRegistryService';
 
 const DEFAULT_USER_EMAIL = 'admin@agent-os.local';
 const DEFAULT_USER_NAME = 'Admin';
@@ -86,6 +88,12 @@ export async function initializeSystem() {
     console.log(`[Seed] Created ${runtimeResult.created} agent runtime states (skipped ${runtimeResult.skipped})`);
   }
 
+  // 5. Seed default tools and policies (Stage 4)
+  const toolResult = await toolRegistryService.seedDefaultTools(workspace.id);
+  if (toolResult.created > 0) {
+    console.log(`[Seed] Created ${toolResult.created} tools with policies (skipped ${toolResult.skipped})`);
+  }
+
   return {
     user,
     workspace,
@@ -95,6 +103,7 @@ export async function initializeSystem() {
     permissionsSeeded: permissionResult,
     modelsSeeded: modelResult,
     runtimeStatesSeeded: runtimeResult,
+    toolsSeeded: toolResult,
   };
 }
 
@@ -119,6 +128,9 @@ export async function getSystemStatus() {
     agentPermissionCount,
     agentRuntimeStateCount,
     agentMemoryLinkCount,
+    toolCount,
+    toolExecutionCount,
+    toolPolicyCount,
   ] = await Promise.all([
     db.user.count(),
     db.workspace.count(),
@@ -136,6 +148,9 @@ export async function getSystemStatus() {
     db.agentPermission.count(),
     db.agentRuntimeState.count(),
     db.agentMemoryLink.count(),
+    db.tool.count(),
+    db.toolExecution.count(),
+    db.toolPermissionPolicy.count(),
   ]);
 
   return {
@@ -155,5 +170,8 @@ export async function getSystemStatus() {
     agentPermissions: agentPermissionCount,
     agentRuntimeStates: agentRuntimeStateCount,
     agentMemoryLinks: agentMemoryLinkCount,
+    tools: toolCount,
+    toolExecutions: toolExecutionCount,
+    toolPolicies: toolPolicyCount,
   };
 }

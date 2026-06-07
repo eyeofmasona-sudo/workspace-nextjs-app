@@ -63,6 +63,17 @@ export const EventTypes = {
   AGENT_DEACTIVATED: 'agent.deactivated',
   AGENT_MEMORY_LINKED: 'agent.memory_linked',
   AGENT_MEMORY_UNLINKED: 'agent.memory_unlinked',
+
+  // Tool Hub events (Stage 4)
+  TOOL_CREATED: 'tool.created',
+  TOOL_UPDATED: 'tool.updated',
+  TOOL_POLICY_UPDATED: 'tool.policy_updated',
+  TOOL_EXECUTION_REQUESTED: 'tool.execution_requested',
+  TOOL_EXECUTION_STARTED: 'tool.execution_started',
+  TOOL_EXECUTION_SUCCEEDED: 'tool.execution_succeeded',
+  TOOL_EXECUTION_FAILED: 'tool.execution_failed',
+  TOOL_EXECUTION_BLOCKED: 'tool.execution_blocked',
+  TOOL_APPROVAL_REQUIRED: 'tool.approval_required',
 } as const;
 
 export type EventType = (typeof EventTypes)[keyof typeof EventTypes];
@@ -271,6 +282,74 @@ export interface AgentMemoryUnlinkedPayload extends BaseEventPayload {
   memoryItemId: string;
 }
 
+// ─── Tool Hub Event Payloads (Stage 4) ─────────────────────
+
+export interface ToolCreatedPayload extends BaseEventPayload {
+  toolId: string;
+  key: string;
+  category: string;
+  workspaceId?: string;
+}
+
+export interface ToolUpdatedPayload extends BaseEventPayload {
+  toolId: string;
+  key: string;
+  updatedFields: string[];
+}
+
+export interface ToolPolicyUpdatedPayload extends BaseEventPayload {
+  toolId: string;
+  permissionKey: string;
+  requiredLevel: string;
+}
+
+export interface ToolExecutionRequestedPayload extends BaseEventPayload {
+  executionId: string;
+  toolId: string;
+  toolKey: string;
+  agentId?: string;
+  action: string;
+  workspaceId: string;
+}
+
+export interface ToolExecutionStartedPayload extends BaseEventPayload {
+  executionId: string;
+  toolId: string;
+  toolKey: string;
+  agentId?: string;
+}
+
+export interface ToolExecutionSucceededPayload extends BaseEventPayload {
+  executionId: string;
+  toolId: string;
+  toolKey: string;
+  agentId?: string;
+}
+
+export interface ToolExecutionFailedPayload extends BaseEventPayload {
+  executionId: string;
+  toolId: string;
+  toolKey: string;
+  agentId?: string;
+  error: string;
+}
+
+export interface ToolExecutionBlockedPayload extends BaseEventPayload {
+  executionId: string;
+  toolId: string;
+  toolKey: string;
+  agentId?: string;
+  reason: string;
+}
+
+export interface ToolApprovalRequiredPayload extends BaseEventPayload {
+  executionId: string;
+  toolId: string;
+  toolKey: string;
+  agentId?: string;
+  approvalRequestId: string;
+}
+
 // ─── Event Map (for type-safe subscriptions) ─────────────────
 
 export interface EventMap {
@@ -308,6 +387,15 @@ export interface EventMap {
   [EventTypes.AGENT_DEACTIVATED]: AgentDeactivatedPayload;
   [EventTypes.AGENT_MEMORY_LINKED]: AgentMemoryLinkedPayload;
   [EventTypes.AGENT_MEMORY_UNLINKED]: AgentMemoryUnlinkedPayload;
+  [EventTypes.TOOL_CREATED]: ToolCreatedPayload;
+  [EventTypes.TOOL_UPDATED]: ToolUpdatedPayload;
+  [EventTypes.TOOL_POLICY_UPDATED]: ToolPolicyUpdatedPayload;
+  [EventTypes.TOOL_EXECUTION_REQUESTED]: ToolExecutionRequestedPayload;
+  [EventTypes.TOOL_EXECUTION_STARTED]: ToolExecutionStartedPayload;
+  [EventTypes.TOOL_EXECUTION_SUCCEEDED]: ToolExecutionSucceededPayload;
+  [EventTypes.TOOL_EXECUTION_FAILED]: ToolExecutionFailedPayload;
+  [EventTypes.TOOL_EXECUTION_BLOCKED]: ToolExecutionBlockedPayload;
+  [EventTypes.TOOL_APPROVAL_REQUIRED]: ToolApprovalRequiredPayload;
 }
 
 // ─── Event Handler Types ─────────────────────────────────────

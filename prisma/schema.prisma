@@ -261,8 +261,9 @@ model ApprovalRequest {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  task  Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  task           Task            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  agent          Agent           @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  toolExecutions ToolExecution[]
 
   @@map("approval_requests")
 }
@@ -297,4 +298,66 @@ model CostLog {
   task  Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
   @@map("cost_logs")
+}
+
+// ─── Tool Hub ────────────────────────────────────────────────
+
+model Tool {
+  id               String   @id @default(cuid())
+  workspaceId      String? // null = global tool
+  name             String
+  key              String // unique per workspace/global, e.g. "filesystem.read"
+  category         String // model_provider | filesystem | terminal | git | browser | database | document | ocr | translation | rag | deployment | notification | media | cost | internal
+  description      String?
+  configSchema     String? // JSON: expected input schema
+  enabled          Boolean  @default(true)
+  riskLevel        String   @default("low") // low | medium | high | critical
+  requiresApproval Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  policies   ToolPermissionPolicy[]
+  executions ToolExecution[]
+
+  @@unique([key, workspaceId])
+  @@map("tools")
+}
+
+model ToolExecution {
+  id                String    @id @default(cuid())
+  workspaceId       String
+  agentId           String?
+  taskId            String?
+  toolId            String
+  action            String // e.g. "read", "write", "run", "deploy"
+  inputSummary      String? // JSON: safe summary of input
+  outputSummary     String? // JSON: safe summary of output
+  status            String    @default("pending") // pending | running | success | failed | blocked | requires_approval
+  riskLevel         String    @default("low") // low | medium | high | critical
+  approvalRequestId String? // FK to ApprovalRequest if requires_approval
+  errorMessage      String?
+  metadata          String? // JSON: extended execution info
+  startedAt         DateTime  @default(now())
+  completedAt       DateTime?
+  createdAt         DateTime  @default(now())
+
+  tool            Tool             @relation(fields: [toolId], references: [id], onDelete: Cascade)
+  approvalRequest ApprovalRequest? @relation(fields: [approvalRequestId], references: [id], onDelete: SetNull)
+
+  @@map("tool_executions")
+}
+
+model ToolPermissionPolicy {
+  id            String   @id @default(cuid())
+  toolId        String
+  permissionKey String // maps to AgentPermission.permissionKey
+  requiredLevel String   @default("read") // none | read | write | admin
+  constraints   String? // JSON: additional constraints
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tool Tool @relation(fields: [toolId], references: [id], onDelete: Cascade)
+
+  @@unique([toolId, permissionKey])
+  @@map("tool_permission_policies")
 }

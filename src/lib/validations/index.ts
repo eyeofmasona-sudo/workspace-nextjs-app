@@ -233,3 +233,62 @@ export type UpdateModelConfigInput = z.infer<typeof updateModelConfigSchema>;
 export type UpdateRuntimeInput = z.infer<typeof updateRuntimeSchema>;
 export type ProposeTemporaryAgentInput = z.infer<typeof proposeTemporaryAgentSchema>;
 export type CreateTemporaryAgentInput = z.infer<typeof createTemporaryAgentSchema>;
+
+// ─── Tool Hub Schemas (Stage 4) ───────────────────────────
+
+export const createToolSchema = z.object({
+  workspaceId: z.string().optional(),
+  name: z.string().min(1, 'name is required').max(200),
+  key: z.string().min(1, 'key is required').max(200),
+  category: z.enum([
+    'model_provider', 'filesystem', 'terminal', 'git', 'browser',
+    'database', 'document', 'ocr', 'translation', 'rag',
+    'deployment', 'notification', 'media', 'cost', 'internal',
+  ]),
+  description: z.string().max(2000).optional(),
+  configSchema: z.record(z.string(), z.unknown()).optional(),
+  enabled: z.boolean().default(true),
+  riskLevel: z.enum(['low', 'medium', 'high', 'critical']).default('low'),
+  requiresApproval: z.boolean().default(false),
+});
+
+export const updateToolSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  description: z.string().max(2000).optional(),
+  configSchema: z.record(z.string(), z.unknown()).optional(),
+  enabled: z.boolean().optional(),
+  riskLevel: z.enum(['low', 'medium', 'high', 'critical']).optional(),
+  requiresApproval: z.boolean().optional(),
+});
+
+export const updateToolPolicySchema = z.array(z.object({
+  permissionKey: z.string().min(1, 'permissionKey is required'),
+  requiredLevel: z.enum(['none', 'read', 'write', 'admin']).default('read'),
+  constraints: z.record(z.string(), z.unknown()).optional(),
+}));
+
+export const executeToolSchema = z.object({
+  workspaceId: z.string().min(1, 'workspaceId is required'),
+  agentId: z.string().min(1, 'agentId is required'),
+  taskId: z.string().optional(),
+  toolKey: z.string().min(1, 'toolKey is required'),
+  action: z.string().min(1, 'action is required'),
+  input: z.unknown().optional(),
+});
+
+export const executionQuerySchema = z.object({
+  workspaceId: z.string().min(1, 'workspaceId is required'),
+  agentId: z.string().optional(),
+  toolId: z.string().optional(),
+  status: z.enum(['pending', 'running', 'success', 'failed', 'blocked', 'requires_approval']).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+// ─── Tool Hub Type Inference Helpers ──────────────────────
+
+export type CreateToolInput = z.infer<typeof createToolSchema>;
+export type UpdateToolInput = z.infer<typeof updateToolSchema>;
+export type UpdateToolPolicyInput = z.infer<typeof updateToolPolicySchema>;
+export type ExecuteToolInput = z.infer<typeof executeToolSchema>;
+export type ExecutionQueryInput = z.infer<typeof executionQuerySchema>;
