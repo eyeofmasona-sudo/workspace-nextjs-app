@@ -131,3 +131,105 @@ export type OrchestratorPlanInput = z.infer<typeof orchestratorPlanSchema>;
 export type ApprovePlanInput = z.infer<typeof approvePlanSchema>;
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
+
+// ─── Agent System Schemas (Stage 3) ─────────────────────
+
+export const updateProfileSchema = z.object({
+  displayName: z.string().min(1).max(100).optional(),
+  avatarKey: z.string().max(50).optional(),
+  bio: z.string().max(2000).optional(),
+  seniority: z.enum(['junior', 'mid', 'senior', 'lead', 'principal']).optional(),
+  workingStyle: z.record(z.string(), z.unknown()).optional(),
+  strengths: z.array(z.string()).optional(),
+  limitations: z.array(z.string()).optional(),
+  responsibilities: z.array(z.string()).optional(),
+});
+
+export const updateCapabilitySchema = z.array(z.object({
+  capabilityKey: z.string().min(1),
+  level: z.enum(['basic', 'intermediate', 'advanced', 'expert']).optional(),
+  enabled: z.boolean().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+}));
+
+export const updatePermissionSchema = z.array(z.object({
+  permissionKey: z.string().min(1),
+  permissionLevel: z.enum(['none', 'read', 'write', 'admin']).optional(),
+  constraints: z.record(z.string(), z.unknown()).optional(),
+  enabled: z.boolean().optional(),
+}));
+
+export const updateModelConfigSchema = z.array(z.object({
+  provider: z.string().min(1),
+  model: z.string().min(1),
+  preferenceType: z.enum(['preferred', 'fallback']).default('preferred'),
+  maxCostPerTask: z.number().positive().optional(),
+  maxTokens: z.number().int().positive().optional(),
+  enabled: z.boolean().optional(),
+}));
+
+export const updateRuntimeSchema = z.object({
+  status: z.enum(['idle', 'thinking', 'working', 'waiting_api', 'reviewing', 'waiting_approval', 'done', 'error', 'offline']).optional(),
+  locationZone: z.enum(['command_area', 'situation_room', 'development_area', 'design_area', 'research_area', 'server_room', 'meeting_room', 'lounge_area']).optional(),
+  activeTaskId: z.string().nullable().optional(),
+  currentActivity: z.string().max(500).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const proposeTemporaryAgentSchema = z.object({
+  workspaceId: z.string().min(1),
+  purpose: z.string().min(1).max(500),
+});
+
+export const createTemporaryAgentSchema = z.object({
+  workspaceId: z.string().min(1),
+  approvedConfig: z.object({
+    name: z.string().min(1).max(100),
+    role: z.string().min(1).max(100),
+    professionalStyle: z.object({
+      communicationStyle: z.string(),
+      decisionMaking: z.string(),
+      attentionToDetail: z.string(),
+      collaborationStyle: z.string(),
+    }),
+    capabilities: z.array(z.object({
+      capabilityKey: z.string(),
+      level: z.string(),
+    })),
+    permissions: z.array(z.object({
+      permissionKey: z.string(),
+      permissionLevel: z.string(),
+    })),
+    preferredModel: z.object({
+      provider: z.string(),
+      model: z.string(),
+    }),
+    fallbackModel: z.object({
+      provider: z.string(),
+      model: z.string(),
+    }).optional(),
+    risks: z.array(z.string()),
+    estimatedUseCases: z.array(z.string()),
+    systemPrompt: z.string().max(10000).optional(),
+    locationZone: z.enum(['command_area', 'situation_room', 'development_area', 'design_area', 'research_area', 'server_room', 'meeting_room', 'lounge_area']).optional(),
+    visualProfile: z.object({
+      color: z.string(),
+      icon: z.string(),
+      avatarEmoji: z.string(),
+    }).optional(),
+  }),
+});
+
+export const deactivateAgentSchema = z.object({
+  reason: z.string().max(500).optional(),
+});
+
+// ─── Agent System Type Inference Helpers ──────────────────
+
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+export type UpdateCapabilityInput = z.infer<typeof updateCapabilitySchema>;
+export type UpdatePermissionInput = z.infer<typeof updatePermissionSchema>;
+export type UpdateModelConfigInput = z.infer<typeof updateModelConfigSchema>;
+export type UpdateRuntimeInput = z.infer<typeof updateRuntimeSchema>;
+export type ProposeTemporaryAgentInput = z.infer<typeof proposeTemporaryAgentSchema>;
+export type CreateTemporaryAgentInput = z.infer<typeof createTemporaryAgentSchema>;

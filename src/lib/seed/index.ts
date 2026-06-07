@@ -1,8 +1,14 @@
 // ─── Agent OS — Seed / Initialization ───────────────────────
 // Creates the default user, workspace, and agents on first run.
+// Stage 3: Also seeds agent profiles, capabilities, permissions, models, runtime states.
 
 import { db } from '../db';
 import { agentRegistry } from '../agent-registry';
+import { agentProfileService } from '../agent-system/AgentProfileService';
+import { agentCapabilityService } from '../agent-system/AgentCapabilityService';
+import { agentPermissionService } from '../agent-system/AgentPermissionService';
+import { agentModelConfigService } from '../agent-system/AgentModelConfigService';
+import { agentRuntimeService } from '../agent-system/AgentRuntimeService';
 
 const DEFAULT_USER_EMAIL = 'admin@agent-os.local';
 const DEFAULT_USER_NAME = 'Admin';
@@ -11,6 +17,7 @@ const DEFAULT_WORKSPACE_NAME = 'My Workspace';
 /**
  * Initialize the system with default data.
  * Safe to call multiple times — checks for existing data.
+ * Idempotent: re-running does not create duplicates.
  */
 export async function initializeSystem() {
   // 1. Ensure default user exists
@@ -48,12 +55,47 @@ export async function initializeSystem() {
   }
 
   // 3. Seed default agents
-  const result = await agentRegistry.seedDefaultAgents(workspace.id);
-  if (result.created > 0) {
-    console.log(`[Seed] Created ${result.created} default agents (skipped ${result.skipped})`);
+  const agentResult = await agentRegistry.seedDefaultAgents(workspace.id);
+  if (agentResult.created > 0) {
+    console.log(`[Seed] Created ${agentResult.created} default agents (skipped ${agentResult.skipped})`);
   }
 
-  return { user, workspace, agentsSeeded: result };
+  // 4. Seed agent system sub-entities (Stage 3)
+  const profileResult = await agentProfileService.ensureDefaultProfiles(workspace.id);
+  if (profileResult.created > 0) {
+    console.log(`[Seed] Created ${profileResult.created} agent profiles (skipped ${profileResult.skipped})`);
+  }
+
+  const capabilityResult = await agentCapabilityService.ensureDefaultCapabilities(workspace.id);
+  if (capabilityResult.created > 0) {
+    console.log(`[Seed] Created ${capabilityResult.created} agent capabilities (skipped ${capabilityResult.skipped})`);
+  }
+
+  const permissionResult = await agentPermissionService.ensureDefaultPermissions(workspace.id);
+  if (permissionResult.created > 0) {
+    console.log(`[Seed] Created ${permissionResult.created} agent permissions (skipped ${permissionResult.skipped})`);
+  }
+
+  const modelResult = await agentModelConfigService.ensureDefaultModels(workspace.id);
+  if (modelResult.created > 0) {
+    console.log(`[Seed] Created ${modelResult.created} agent model configs (skipped ${modelResult.skipped})`);
+  }
+
+  const runtimeResult = await agentRuntimeService.ensureRuntimeStates(workspace.id);
+  if (runtimeResult.created > 0) {
+    console.log(`[Seed] Created ${runtimeResult.created} agent runtime states (skipped ${runtimeResult.skipped})`);
+  }
+
+  return {
+    user,
+    workspace,
+    agentsSeeded: agentResult,
+    profilesSeeded: profileResult,
+    capabilitiesSeeded: capabilityResult,
+    permissionsSeeded: permissionResult,
+    modelsSeeded: modelResult,
+    runtimeStatesSeeded: runtimeResult,
+  };
 }
 
 /**
@@ -71,6 +113,12 @@ export async function getSystemStatus() {
     approvalCount,
     eventCount,
     costLogCount,
+    agentProfileCount,
+    agentCapabilityCount,
+    agentModelConfigCount,
+    agentPermissionCount,
+    agentRuntimeStateCount,
+    agentMemoryLinkCount,
   ] = await Promise.all([
     db.user.count(),
     db.workspace.count(),
@@ -82,6 +130,12 @@ export async function getSystemStatus() {
     db.approvalRequest.count(),
     db.eventLog.count(),
     db.costLog.count(),
+    db.agentProfile.count(),
+    db.agentCapability.count(),
+    db.agentModelConfig.count(),
+    db.agentPermission.count(),
+    db.agentRuntimeState.count(),
+    db.agentMemoryLink.count(),
   ]);
 
   return {
@@ -95,5 +149,11 @@ export async function getSystemStatus() {
     approvals: approvalCount,
     events: eventCount,
     costLogs: costLogCount,
+    agentProfiles: agentProfileCount,
+    agentCapabilities: agentCapabilityCount,
+    agentModelConfigs: agentModelConfigCount,
+    agentPermissions: agentPermissionCount,
+    agentRuntimeStates: agentRuntimeStateCount,
+    agentMemoryLinks: agentMemoryLinkCount,
   };
 }

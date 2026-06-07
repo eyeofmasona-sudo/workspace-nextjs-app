@@ -50,6 +50,19 @@ export const EventTypes = {
   ORCHESTRATOR_PLAN_CREATED: 'orchestrator.plan_created',
   ORCHESTRATOR_PLAN_APPROVED: 'orchestrator.plan_approved',
   ORCHESTRATOR_COST_ESTIMATED: 'orchestrator.cost_estimated',
+
+  // Agent system events (Stage 3)
+  AGENT_PROFILE_UPDATED: 'agent.profile_updated',
+  AGENT_CAPABILITY_UPDATED: 'agent.capability_updated',
+  AGENT_PERMISSION_UPDATED: 'agent.permission_updated',
+  AGENT_MODEL_CONFIG_UPDATED: 'agent.model_config_updated',
+  AGENT_TASK_ASSIGNED: 'agent.task_assigned',
+  AGENT_TASK_CLEARED: 'agent.task_cleared',
+  AGENT_TEMPORARY_PROPOSED: 'agent.temporary_proposed',
+  AGENT_TEMPORARY_CREATED: 'agent.temporary_created',
+  AGENT_DEACTIVATED: 'agent.deactivated',
+  AGENT_MEMORY_LINKED: 'agent.memory_linked',
+  AGENT_MEMORY_UNLINKED: 'agent.memory_unlinked',
 } as const;
 
 export type EventType = (typeof EventTypes)[keyof typeof EventTypes];
@@ -189,6 +202,75 @@ export interface OrchestratorCostEstimatedPayload extends BaseEventPayload {
   estimatedUsd?: number;
 }
 
+// ─── Agent System Event Payloads (Stage 3) ──────────────────
+
+export interface AgentProfileUpdatedPayload extends BaseEventPayload {
+  agentId: string;
+  updatedFields: string[];
+}
+
+export interface AgentCapabilityUpdatedPayload extends BaseEventPayload {
+  agentId: string;
+  capabilityKey: string;
+  level: number;
+  enabled: boolean;
+}
+
+export interface AgentPermissionUpdatedPayload extends BaseEventPayload {
+  agentId: string;
+  permissionKey: string;
+  permissionLevel: string;
+  enabled: boolean;
+}
+
+export interface AgentModelConfigUpdatedPayload extends BaseEventPayload {
+  agentId: string;
+  configId: string;
+  provider: string;
+  model: string;
+  preferenceType: string;
+  enabled: boolean;
+}
+
+export interface AgentTaskAssignedPayload extends BaseEventPayload {
+  agentId: string;
+  taskId: string;
+}
+
+export interface AgentTaskClearedPayload extends BaseEventPayload {
+  agentId: string;
+  taskId: string;
+}
+
+export interface AgentTemporaryProposedPayload extends BaseEventPayload {
+  workspaceId: string;
+  proposedName: string;
+  proposedRole: string;
+}
+
+export interface AgentTemporaryCreatedPayload extends BaseEventPayload {
+  agentId: string;
+  workspaceId: string;
+  name: string;
+  role: string;
+}
+
+export interface AgentDeactivatedPayload extends BaseEventPayload {
+  agentId: string;
+  reason?: string;
+}
+
+export interface AgentMemoryLinkedPayload extends BaseEventPayload {
+  agentId: string;
+  memoryItemId: string;
+  relevance: number;
+}
+
+export interface AgentMemoryUnlinkedPayload extends BaseEventPayload {
+  agentId: string;
+  memoryItemId: string;
+}
+
 // ─── Event Map (for type-safe subscriptions) ─────────────────
 
 export interface EventMap {
@@ -215,6 +297,17 @@ export interface EventMap {
   [EventTypes.ORCHESTRATOR_PLAN_CREATED]: OrchestratorPlanCreatedPayload;
   [EventTypes.ORCHESTRATOR_PLAN_APPROVED]: OrchestratorPlanApprovedPayload;
   [EventTypes.ORCHESTRATOR_COST_ESTIMATED]: OrchestratorCostEstimatedPayload;
+  [EventTypes.AGENT_PROFILE_UPDATED]: AgentProfileUpdatedPayload;
+  [EventTypes.AGENT_CAPABILITY_UPDATED]: AgentCapabilityUpdatedPayload;
+  [EventTypes.AGENT_PERMISSION_UPDATED]: AgentPermissionUpdatedPayload;
+  [EventTypes.AGENT_MODEL_CONFIG_UPDATED]: AgentModelConfigUpdatedPayload;
+  [EventTypes.AGENT_TASK_ASSIGNED]: AgentTaskAssignedPayload;
+  [EventTypes.AGENT_TASK_CLEARED]: AgentTaskClearedPayload;
+  [EventTypes.AGENT_TEMPORARY_PROPOSED]: AgentTemporaryProposedPayload;
+  [EventTypes.AGENT_TEMPORARY_CREATED]: AgentTemporaryCreatedPayload;
+  [EventTypes.AGENT_DEACTIVATED]: AgentDeactivatedPayload;
+  [EventTypes.AGENT_MEMORY_LINKED]: AgentMemoryLinkedPayload;
+  [EventTypes.AGENT_MEMORY_UNLINKED]: AgentMemoryUnlinkedPayload;
 }
 
 // ─── Event Handler Types ─────────────────────────────────────

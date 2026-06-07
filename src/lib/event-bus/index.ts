@@ -105,6 +105,17 @@ class EventBus {
       ORCHESTRATOR_PLAN_CREATED: 'orchestrator.plan_created',
       ORCHESTRATOR_PLAN_APPROVED: 'orchestrator.plan_approved',
       ORCHESTRATOR_COST_ESTIMATED: 'orchestrator.cost_estimated',
+      AGENT_PROFILE_UPDATED: 'agent.profile_updated',
+      AGENT_CAPABILITY_UPDATED: 'agent.capability_updated',
+      AGENT_PERMISSION_UPDATED: 'agent.permission_updated',
+      AGENT_MODEL_CONFIG_UPDATED: 'agent.model_config_updated',
+      AGENT_TASK_ASSIGNED: 'agent.task_assigned',
+      AGENT_TASK_CLEARED: 'agent.task_cleared',
+      AGENT_TEMPORARY_PROPOSED: 'agent.temporary_proposed',
+      AGENT_TEMPORARY_CREATED: 'agent.temporary_created',
+      AGENT_DEACTIVATED: 'agent.deactivated',
+      AGENT_MEMORY_LINKED: 'agent.memory_linked',
+      AGENT_MEMORY_UNLINKED: 'agent.memory_unlinked',
     } satisfies Record<string, EventType>) as EventType[];
 
     for (const eventType of allEventTypes) {

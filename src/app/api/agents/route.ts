@@ -1,8 +1,9 @@
-// GET /api/agents — List all agents
+// GET /api/agents — List all agents (with optional filters)
 // POST /api/agents — Register a new agent (or seed defaults)
 
 import { NextRequest, NextResponse } from 'next/server';
 import { agentRegistry } from '@/lib/agent-registry';
+import { agentCapabilityService } from '@/lib/agent-system';
 import { db } from '@/lib/db';
 
 export async function GET(request: NextRequest) {
@@ -12,6 +13,13 @@ export async function GET(request: NextRequest) {
     const role = searchParams.get('role');
     const status = searchParams.get('status');
     const zone = searchParams.get('zone');
+    const capability = searchParams.get('capability');
+
+    // Find agents by capability
+    if (capability && workspaceId) {
+      const agents = await agentCapabilityService.findAgentsByCapability(workspaceId, capability);
+      return NextResponse.json({ agents });
+    }
 
     if (role) {
       const agents = await agentRegistry.getAgentsByRole(role, workspaceId ?? undefined);
