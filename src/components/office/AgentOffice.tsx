@@ -9,7 +9,7 @@ import { useState, useCallback } from 'react';
 import { useOfficeData } from '@/hooks/useOfficeData';
 import { useEventStream } from '@/hooks/useEventStream';
 import { useOfficeAnimations } from '@/hooks/useOfficeAnimations';
-import { OfficeSceneV2 } from './OfficeSceneV2';
+import { PixelOfficeCanvas } from './PixelOfficeCanvas';
 import { TaskBoard } from './TaskBoard';
 import { SituationRoom } from './SituationRoom';
 import { OrchestratorPanel } from './OrchestratorPanel';
@@ -170,13 +170,11 @@ export function AgentOffice({ workspaceId, onSeed }: AgentOfficeProps) {
 
       {/* ─── Main Content: Office Scene fills everything ─── */}
       <div className="flex-1 min-h-0 relative">
-        {/* Office Scene V2 — the hero, fills the entire area */}
-        <OfficeSceneV2
+        {/* Pixel Office Canvas — the hero, fills the entire area */}
+        <PixelOfficeCanvas
           agents={agents}
           tasks={tasks}
           onAgentClick={handleAgentClick}
-          agentAnimations={agentAnimations}
-          zoneAnimations={zoneAnimations}
         />
 
         {/* ─── Floating Management Toolbar (overlays office) ─── */}
