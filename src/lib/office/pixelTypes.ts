@@ -1,47 +1,39 @@
-// ─── Agent OS — Pixel Office Type Definitions ──────────────────
-// Types for the canvas-based pixel-art office renderer.
-// Adapted from pixel-agents architecture for Agent OS.
-
-// ── Tile types ──────────────────────────────────────────────────
+// TILE TYPES - matching pixel-agents
 export const TileType = {
   WALL: 0,
-  FLOOR_1: 1,  // Command area - warm beige
-  FLOOR_2: 2,  // Meeting room - light wood
-  FLOOR_3: 3,  // Situation room - cool blue
-  FLOOR_4: 4,  // Dev floor - tech green
-  FLOOR_5: 5,  // Design area - warm pink
-  FLOOR_6: 6,  // Server room - dark teal
-  FLOOR_7: 7,  // Research area - purple
-  FLOOR_8: 8,  // Lounge area - warm stone
-  FLOOR_9: 9,  // Corridor - neutral gray
+  FLOOR_1: 1, FLOOR_2: 2, FLOOR_3: 3, FLOOR_4: 4, FLOOR_5: 5,
+  FLOOR_6: 6, FLOOR_7: 7, FLOOR_8: 8, FLOOR_9: 9,
   VOID: 255,
 } as const;
 export type TileType = (typeof TileType)[keyof typeof TileType];
 
-// ── Character states ────────────────────────────────────────────
-export const CharState = {
-  IDLE: 'idle',
-  TYPING: 'typing',
-  READING: 'reading',
-  WALKING: 'walking',
-} as const;
-export type CharState = (typeof CharState)[keyof typeof CharState];
+// CHARACTER STATE - 3 states matching pixel-agents FSM
+export const CharacterState = { IDLE: 'idle', WALK: 'walk', TYPE: 'type' } as const;
+export type CharacterState = (typeof CharacterState)[keyof typeof CharacterState];
 
-// ── Directions ──────────────────────────────────────────────────
-export const Direction = {
-  DOWN: 0,
-  LEFT: 1,
-  RIGHT: 2,
-  UP: 3,
-} as const;
+// DIRECTIONS
+export const Direction = { DOWN: 0, LEFT: 1, RIGHT: 2, UP: 3 } as const;
 export type Direction = (typeof Direction)[keyof typeof Direction];
 
-// ── Core constants ──────────────────────────────────────────────
+// CORE CONSTANTS
 export const TILE_SIZE = 16;
-export const CHAR_W = 16;
-export const CHAR_H = 24;
+export const CHARACTER_Z_SORT_OFFSET = 0.5;
+export const OUTLINE_Z_SORT_OFFSET = 0.1;
 
-// ── Character color palette ─────────────────────────────────────
+// SpriteData - THE fundamental data structure from pixel-agents
+// 2D array of hex colors: '' = transparent, '#RRGGBB' = opaque, '#RRGGBBAA' = semi-transparent
+export type SpriteData = string[][];
+
+// Color value for colorization (matching pixel-agents)
+export interface ColorValue {
+  h: number;  // hue (0-360 for colorize, -180 to +180 for adjust)
+  s: number;  // saturation
+  b: number;  // brightness
+  c: number;  // contrast
+  colorize?: boolean;
+}
+
+// Character color palette
 export interface CharPalette {
   skin: string;
   hair: string;
@@ -52,92 +44,113 @@ export interface CharPalette {
   outline: string;
 }
 
-// ── Character instance ──────────────────────────────────────────
+// Character instance - full state matching pixel-agents Character
 export interface PixelCharacter {
   id: string;
   name: string;
   role: string;
-  state: CharState;
+
+  // FSM state
+  state: CharacterState;
   dir: Direction;
-  /** Pixel position (center-bottom anchor) */
+  isActive: boolean;
+
+  // Position - pixel coordinates, bottom-center anchor
   x: number;
   y: number;
-  /** Current tile column */
   tileCol: number;
   tileRow: number;
-  /** Path for walking */
+
+  // Pathfinding
   path: Array<{ col: number; row: number }>;
   moveProgress: number;
-  /** Animation frame index */
+
+  // Animation
   frame: number;
   frameTimer: number;
-  /** Color palette */
+  seatTimer: number;        // Timer for TYPE→IDLE rest transition
+  wanderTimer: number;       // Timer for IDLE→WALK wander
+  wanderLimit: number;       // Max wander moves before returning to seat
+  wanderCount: number;       // Current wander move count
+
+  // Visual
   palette: CharPalette;
-  /** Assigned seat uid */
+  paletteIndex: number;
+  hueShift: number;
   seatId: string | null;
-  /** Whether agent is active (working) */
-  isActive: boolean;
-  /** Agent status from runtime */
   agentStatus: string;
-  /** Current tool for typing vs reading */
   currentTool: string | null;
-  /** Bubble type */
-  bubbleType: 'permission' | 'waiting' | 'thinking' | null;
-  bubbleTimer: number;
-  /** Room/zone key */
-  zoneKey: string;
-  /** Role label (profession) */
   roleLabel: string;
+  zoneKey: string;
+
+  // Bubbles
+  bubbleType: 'permission' | 'waiting' | null;
+  bubbleTimer: number;
+  bubbleFade: number;        // 0-1 for fade animation
+
+  // Matrix spawn/despawn effect
+  matrixEffect: 'spawn' | 'despawn' | null;
+  matrixTimer: number;
+  matrixEffectSeeds: number[];
+
+  // Hover/select
+  hovered: boolean;
+  selected: boolean;
 }
 
-// ── Furniture types ─────────────────────────────────────────────
-export const FurnitureType = {
-  DESK_FRONT: 'desk_front',
-  DESK_SIDE: 'desk_side',
-  CHAIR_FRONT: 'chair_front',
-  CHAIR_BACK: 'chair_back',
-  CHAIR_SIDE: 'chair_side',
-  PC_FRONT_ON: 'pc_front_on',
-  PC_FRONT_OFF: 'pc_front_off',
-  PC_SIDE: 'pc_side',
-  MEETING_TABLE: 'meeting_table',
-  SERVER_RACK: 'server_rack',
-  BOOKSHELF: 'bookshelf',
-  WHITEBOARD: 'whiteboard',
-  SOFA_FRONT: 'sofa_front',
-  SOFA_SIDE: 'sofa_side',
-  SOFA_BACK: 'sofa_back',
-  COFFEE_MACHINE: 'coffee_machine',
-  PLANT: 'plant',
-  CACTUS: 'cactus',
-  CLOCK: 'clock',
-  PAINTING: 'painting',
-  COMMAND_SCREEN: 'command_screen',
+// Furniture types matching pixel-agents catalog
+export const FurnitureCategory = {
+  DESKS: 'desks',
+  CHAIRS: 'chairs',
+  ELECTRONICS: 'electronics',
+  DECOR: 'decor',
+  WALL: 'wall',
+  MISC: 'misc',
+  STORAGE: 'storage',
 } as const;
-export type FurnitureType = (typeof FurnitureType)[keyof typeof FurnitureType];
+export type FurnitureCategory = (typeof FurnitureCategory)[keyof typeof FurnitureCategory];
 
-// ── Placed furniture item ───────────────────────────────────────
+export interface FurnitureCatalogEntry {
+  type: string;
+  label: string;
+  footprintW: number;
+  footprintH: number;
+  sprite: SpriteData;
+  isDesk: boolean;
+  category?: string;
+  orientation?: string;
+  canPlaceOnSurfaces?: boolean;
+  backgroundTiles?: number;
+  canPlaceOnWalls?: boolean;
+  mirrorSide?: boolean;
+  groupId?: string;
+  state?: 'on' | 'off';
+  animationGroup?: string;
+  animationFrame?: number;
+}
+
 export interface PlacedFurniture {
   uid: string;
-  type: FurnitureType;
+  type: string;
   col: number;
   row: number;
+  color?: ColorValue;
   mirrored?: boolean;
 }
 
-// ── Furniture render instance (after layout processing) ─────────
 export interface FurnitureInstance {
-  type: FurnitureType;
-  x: number;   // pixel x
-  y: number;   // pixel y
-  zY: number;  // depth sort value
+  type: string;
+  sprite: SpriteData;
+  x: number;
+  y: number;
+  zY: number;
   w: number;
   h: number;
   mirrored?: boolean;
   isActive?: boolean;
+  offsetY?: number;
 }
 
-// ── Seat definition ─────────────────────────────────────────────
 export interface Seat {
   uid: string;
   seatCol: number;
@@ -147,15 +160,15 @@ export interface Seat {
   assignedAgentId: string | null;
 }
 
-// ── Office layout ───────────────────────────────────────────────
 export interface OfficeLayout {
+  version: 1;
   cols: number;
   rows: number;
   tiles: TileType[];
   furniture: PlacedFurniture[];
+  tileColors?: Array<ColorValue | null>;
 }
 
-// ── Zone definition ─────────────────────────────────────────────
 export interface ZoneDef {
   key: string;
   label: string;
@@ -163,22 +176,47 @@ export interface ZoneDef {
   wallColor: string;
   floorColor: string;
   floorType: TileType;
+  tileColor: ColorValue;
 }
 
-// ── Sprite data type (2D array of hex colors) ──────────────────
-export type SpriteData = string[][];
-
-// ── Agent status to character state mapping ─────────────────────
-export function agentStatusToCharState(status: string): CharState {
+// Agent status → character state mapping
+export function agentStatusToCharState(status: string): CharacterState {
   switch (status) {
-    case 'working': return CharState.TYPING;
-    case 'thinking': return CharState.READING;
-    case 'reviewing': return CharState.READING;
-    case 'waiting_api': return CharState.IDLE;
-    case 'waiting_approval': return CharState.IDLE;
-    case 'done': return CharState.IDLE;
-    case 'error': return CharState.IDLE;
-    case 'offline': return CharState.IDLE;
-    default: return CharState.IDLE;
+    case 'working': return CharacterState.TYPE;
+    case 'thinking': return CharacterState.TYPE;
+    case 'reviewing': return CharacterState.TYPE;
+    case 'waiting_api': return CharacterState.IDLE;
+    case 'waiting_approval': return CharacterState.IDLE;
+    case 'done': return CharacterState.IDLE;
+    case 'error': return CharacterState.IDLE;
+    case 'offline': return CharacterState.IDLE;
+    default: return CharacterState.IDLE;
+  }
+}
+
+// Check if tool shows reading animation
+export function isReadingTool(tool: string | null): boolean {
+  if (!tool) return false;
+  const readingTools = ['Read', 'Grep', 'Search', 'WebSearch', 'WebFetch', 'VLM', 'ASR'];
+  return readingTools.some(t => tool.toLowerCase().includes(t.toLowerCase()));
+}
+
+// Direction helpers
+export function oppositeDir(d: Direction): Direction {
+  switch (d) {
+    case Direction.DOWN: return Direction.UP;
+    case Direction.UP: return Direction.DOWN;
+    case Direction.LEFT: return Direction.RIGHT;
+    case Direction.RIGHT: return Direction.LEFT;
+  }
+}
+
+export function orientationToFacing(orientation: string): Direction {
+  switch (orientation) {
+    case 'front': return Direction.DOWN;
+    case 'back': return Direction.UP;
+    case 'left': return Direction.LEFT;
+    case 'right': return Direction.RIGHT;
+    default: return Direction.DOWN;
   }
 }

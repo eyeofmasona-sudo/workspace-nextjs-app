@@ -1,620 +1,902 @@
-// ─── Agent OS — Pixel Sprite Generation & Caching ──────────────
-// Procedural pixel-art sprite generation for characters, furniture, and effects.
-// All sprites are generated as offscreen canvases and cached by parameters.
+// ─── Agent OS — Pixel Sprite System (1:1 pixel-agents architecture) ──
+// SpriteData-based sprite generation, caching, colorization, and outline.
+// All visuals are pure data (string[][]) — enables runtime colorization,
+// outline generation, and per-pixel matrix effects.
 
-import type { CharPalette, SpriteData } from './pixelTypes';
-import { CharState, Direction, CHAR_H, CHAR_W, TILE_SIZE, TileType } from './pixelTypes';
+import type { CharPalette, SpriteData, ColorValue, Direction } from './pixelTypes';
+import { TILE_SIZE } from './pixelTypes';
 
-// ── Sprite cache ────────────────────────────────────────────────
-const spriteCanvasCache = new Map<string, HTMLCanvasElement>();
+// ════════════════════════════════════════════════════════════════
+// COLOR UTILITIES
+// ════════════════════════════════════════════════════════════════
 
-function getCachedCanvas(key: string, w: number, h: number, draw: (ctx: CanvasRenderingContext2D) => void): HTMLCanvasElement {
-  const cached = spriteCanvasCache.get(key);
+function hexToRgb(hex: string): [number, number, number] | null {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!m) return null;
+  return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)];
+}
+
+function rgbToHex(r: number, g: number, b: number, a?: number): string {
+  const rh = Math.round(Math.max(0, Math.min(255, r))).toString(16).padStart(2, '0');
+  const gh = Math.round(Math.max(0, Math.min(255, g))).toString(16).padStart(2, '0');
+  const bh = Math.round(Math.max(0, Math.min(255, b))).toString(16).padStart(2, '0');
+  if (a !== undefined && a < 1) {
+    const ah = Math.round(a * 255).toString(16).padStart(2, '0');
+    return `#${rh}${gh}${bh}${ah}`;
+  }
+  return `#${rh}${gh}${bh}`;
+}
+
+function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return [0, 0, l];
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h = 0;
+  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+  else if (max === g) h = ((b - r) / d + 2) / 6;
+  else h = ((r - g) / d + 4) / 6;
+  return [h * 360, s, l];
+}
+
+function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+  h = ((h % 360) + 360) % 360;
+  s = Math.max(0, Math.min(1, s));
+  l = Math.max(0, Math.min(1, l));
+  if (s === 0) { const v = Math.round(l * 255); return [v, v, v]; }
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = l - c / 2;
+  let r1 = 0, g1 = 0, b1 = 0;
+  if (h < 60) { r1 = c; g1 = x; }
+  else if (h < 120) { r1 = x; g1 = c; }
+  else if (h < 180) { g1 = c; b1 = x; }
+  else if (h < 240) { g1 = x; b1 = c; }
+  else if (h < 300) { r1 = x; b1 = c; }
+  else { r1 = c; b1 = x; }
+  return [Math.round((r1 + m) * 255), Math.round((g1 + m) * 255), Math.round((b1 + m) * 255)];
+}
+
+function parsePixelColor(px: string): { r: number; g: number; b: number; a: number } | null {
+  if (!px || px === '') return null;
+  const rgb = hexToRgb(px.slice(0, 7));
+  if (!rgb) return null;
+  const a = px.length >= 9 ? parseInt(px.slice(7, 9), 16) / 255 : 1;
+  return { r: rgb[0], g: rgb[1], b: rgb[2], a };
+}
+
+// ════════════════════════════════════════════════════════════════
+// COLORIZE SYSTEM (Photoshop-style)
+// ════════════════════════════════════════════════════════════════
+
+const colorizeCache = new Map<string, SpriteData>();
+
+export function colorizeSprite(sprite: SpriteData, color: ColorValue): SpriteData {
+  const key = `c-${color.h}-${color.s}-${color.b}-${color.c}`;
+  const cached = colorizeCache.get(key + sprite.length);
   if (cached) return cached;
 
+  const result: SpriteData = [];
+  for (let y = 0; y < sprite.length; y++) {
+    const row: string[] = [];
+    for (let x = 0; x < sprite[y].length; x++) {
+      const px = sprite[y][x];
+      if (!px) { row.push(''); continue; }
+      const parsed = parsePixelColor(px);
+      if (!parsed) { row.push(px); continue; }
+
+      const lum = (0.299 * parsed.r + 0.587 * parsed.g + 0.114 * parsed.b) / 255;
+      let lightness = lum;
+      // Contrast
+      lightness = 0.5 + (lightness - 0.5) * ((100 + color.c) / 100);
+      // Brightness
+      lightness += color.b / 200;
+      lightness = Math.max(0, Math.min(1, lightness));
+
+      const [r, g, b] = hslToRgb(color.h, color.s / 100, lightness);
+      row.push(rgbToHex(r, g, b, parsed.a));
+    }
+    result.push(row);
+  }
+  colorizeCache.set(key + sprite.length, result);
+  return result;
+}
+
+// ════════════════════════════════════════════════════════════════
+// ADJUST SYSTEM (HSL shift for hue rotation)
+// ════════════════════════════════════════════════════════════════
+
+export function adjustSprite(sprite: SpriteData, hueShift: number, satShift = 0, briShift = 0, conShift = 0): SpriteData {
+  const result: SpriteData = [];
+  for (let y = 0; y < sprite.length; y++) {
+    const row: string[] = [];
+    for (let x = 0; x < sprite[y].length; x++) {
+      const px = sprite[y][x];
+      if (!px) { row.push(''); continue; }
+      const parsed = parsePixelColor(px);
+      if (!parsed) { row.push(px); continue; }
+
+      const [h, s, l] = rgbToHsl(parsed.r, parsed.g, parsed.b);
+      const newH = (h + hueShift + 360) % 360;
+      let newS = s + satShift / 100;
+      newS = Math.max(0, Math.min(1, newS));
+      let newL = l;
+      newL = 0.5 + (newL - 0.5) * ((100 + conShift) / 100);
+      newL += briShift / 200;
+      newL = Math.max(0, Math.min(1, newL));
+
+      const [r, g, b] = hslToRgb(newH, newS, newL);
+      row.push(rgbToHex(r, g, b, parsed.a));
+    }
+    result.push(row);
+  }
+  return result;
+}
+
+// ════════════════════════════════════════════════════════════════
+// SPRITE CACHE — Two-level zoom caching with WeakMaps
+// ════════════════════════════════════════════════════════════════
+
+const zoomCaches = new Map<number, WeakMap<SpriteData, HTMLCanvasElement>>();
+const outlineSpriteCache = new WeakMap<SpriteData, SpriteData>();
+
+export function getCachedSprite(sprite: SpriteData, zoom: number): HTMLCanvasElement {
+  let levelCache = zoomCaches.get(zoom);
+  if (!levelCache) {
+    levelCache = new WeakMap();
+    zoomCaches.set(zoom, levelCache);
+  }
+  const cached = levelCache.get(sprite);
+  if (cached) return cached;
+
+  const rows = sprite.length;
+  const cols = rows > 0 ? sprite[0].length : 0;
   const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
+  canvas.width = cols * zoom;
+  canvas.height = rows * zoom;
   const ctx = canvas.getContext('2d')!;
   ctx.imageSmoothingEnabled = false;
-  draw(ctx);
-  spriteCanvasCache.set(key, canvas);
+
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const px = sprite[y][x];
+      if (!px) continue;
+      ctx.fillStyle = px;
+      ctx.fillRect(x * zoom, y * zoom, zoom, zoom);
+    }
+  }
+
+  levelCache.set(sprite, canvas);
   return canvas;
 }
 
-// ── Pixel drawing helper ────────────────────────────────────────
-function px(ctx: CanvasRenderingContext2D, x: number, y: number, color: string, scale = 1) {
-  ctx.fillStyle = color;
-  ctx.fillRect(x * scale, y * scale, scale, scale);
-}
+export function getOutlineSprite(sprite: SpriteData): SpriteData {
+  const cached = outlineSpriteCache.get(sprite);
+  if (cached) return cached;
 
-function rect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string, scale = 1) {
-  ctx.fillStyle = color;
-  ctx.fillRect(x * scale, y * scale, w * scale, h * scale);
+  const rows = sprite.length;
+  const cols = rows > 0 ? sprite[0].length : 0;
+  const expanded: SpriteData = Array.from({ length: rows + 2 }, () =>
+    Array.from({ length: cols + 2 }, () => '')
+  );
+
+  // Mark cardinal neighbors of opaque pixels as white
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      if (sprite[y][x]) {
+        const ey = y + 1, ex = x + 1;
+        if (!expanded[ey - 1][ex]) expanded[ey - 1][ex] = '#FFFFFF';
+        if (!expanded[ey + 1][ex]) expanded[ey + 1][ex] = '#FFFFFF';
+        if (!expanded[ey][ex - 1]) expanded[ey][ex - 1] = '#FFFFFF';
+        if (!expanded[ey][ex + 1]) expanded[ey][ex + 1] = '#FFFFFF';
+      }
+    }
+  }
+
+  // Clear pixels overlapping with original opaque pixels
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      if (sprite[y][x]) {
+        expanded[y + 1][x + 1] = '';
+      }
+    }
+  }
+
+  outlineSpriteCache.set(sprite, expanded);
+  return expanded;
 }
 
 // ════════════════════════════════════════════════════════════════
-// CHARACTER SPRITES — Procedural pixel-art characters
-// 16×24 pixels, drawn with palette colors
+// SPRITE FLIP UTILITY
 // ════════════════════════════════════════════════════════════════
 
-function darkenColor(hex: string, factor: number): string {
-  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!m) return hex;
-  const r = Math.round(parseInt(m[1], 16) * factor);
-  const g = Math.round(parseInt(m[2], 16) * factor);
-  const b = Math.round(parseInt(m[3], 16) * factor);
-  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+export function flipSpriteHorizontal(sprite: SpriteData): SpriteData {
+  return sprite.map(row => [...row].reverse());
 }
 
-function lightenColor(hex: string, factor: number): string {
-  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!m) return hex;
-  const r = Math.min(255, Math.round(parseInt(m[1], 16) + (255 - parseInt(m[1], 16)) * factor));
-  const g = Math.min(255, Math.round(parseInt(m[2], 16) + (255 - parseInt(m[2], 16)) * factor));
-  const b = Math.min(255, Math.round(parseInt(m[3], 16) + (255 - parseInt(m[3], 16)) * factor));
-  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+// ════════════════════════════════════════════════════════════════
+// PROCEDURAL SPRITE GENERATION
+// Character, furniture, bubble, floor, wall sprites as SpriteData
+// ════════════════════════════════════════════════════════════════
+
+// Helper: create empty SpriteData
+function emptySprite(w: number, h: number): SpriteData {
+  return Array.from({ length: h }, () => Array.from({ length: w }, () => ''));
 }
 
-/** Draw a character facing DOWN (toward viewer) in typing pose */
-function drawCharDown(ctx: CanvasRenderingContext2D, p: CharPalette, frame: number, isReading: boolean, s: number) {
-  const f = frame % 2;
-  const armOff = f === 1 ? 1 : 0;
-
-  // Head
-  rect(ctx, 5, 1, 6, 2, p.hair, s);          // hair top
-  rect(ctx, 4, 2, 8, 3, p.hair, s);           // hair
-  rect(ctx, 4, 5, 8, 4, p.skin, s);           // face
-  px(ctx, 5, 6, '#333', s);                     // left eye
-  px(ctx, 9, 6, '#333', s);                     // right eye
-  px(ctx, 6, 7, darkenColor(p.skin, 0.85), s); // nose
-  rect(ctx, 4, 8, 8, 1, p.skin, s);           // chin
-  rect(ctx, 5, 9, 6, 1, p.skin, s);           // neck
-
-  // Body
-  rect(ctx, 3, 10, 10, 1, p.shirt, s);        // shoulders
-  rect(ctx, 3, 11, 10, 3, p.shirt, s);        // shirt
-  px(ctx, 6, 12, p.shirtLight, s);             // shirt detail
-  px(ctx, 8, 12, p.shirtLight, s);
-
-  // Arms
-  if (isReading) {
-    // Arms up holding something
-    rect(ctx, 2, 10 - armOff, 2, 4, p.skin, s);   // left arm up
-    rect(ctx, 12, 10 - armOff, 2, 4, p.skin, s);  // right arm up
-    rect(ctx, 5, 9 - armOff, 6, 2, '#e8e0d0', s);  // paper/book
-  } else {
-    // Arms down/on desk
-    rect(ctx, 2, 11 + armOff, 2, 3, p.skin, s);   // left arm
-    rect(ctx, 12, 11 + armOff, 2, 3, p.skin, s);  // right arm
+// Helper: draw filled rect into SpriteData
+function fillRect(spr: SpriteData, x: number, y: number, w: number, h: number, color: string) {
+  for (let dy = 0; dy < h; dy++) {
+    for (let dx = 0; dx < w; dx++) {
+      const sy = y + dy, sx = x + dx;
+      if (sy >= 0 && sy < spr.length && sx >= 0 && sx < (spr[0]?.length ?? 0)) {
+        spr[sy][sx] = color;
+      }
+    }
   }
-
-  // Lower body
-  rect(ctx, 4, 14, 8, 3, p.pants, s);
-  rect(ctx, 4, 17, 3, 4, p.pants, s);         // left leg
-  rect(ctx, 9, 17, 3, 4, p.pants, s);         // right leg
-  rect(ctx, 4, 21, 3, 2, p.shoes, s);         // left shoe
-  rect(ctx, 9, 21, 3, 2, p.shoes, s);         // right shoe
 }
 
-/** Draw a character facing UP (away from viewer) */
-function drawCharUp(ctx: CanvasRenderingContext2D, p: CharPalette, frame: number, isReading: boolean, s: number) {
-  const f = frame % 2;
-  const armOff = f === 1 ? 1 : 0;
-
-  // Head (back of head)
-  rect(ctx, 4, 2, 8, 6, p.hair, s);
-  rect(ctx, 5, 1, 6, 2, p.hair, s);
-  rect(ctx, 4, 7, 8, 2, p.skin, s);           // neck
-  rect(ctx, 5, 8, 6, 1, p.skin, s);
-
-  // Body
-  rect(ctx, 3, 9, 10, 5, p.shirt, s);
-  px(ctx, 6, 11, darkenColor(p.shirt, 0.9), s);
-  px(ctx, 8, 11, darkenColor(p.shirt, 0.9), s);
-
-  // Arms
-  if (isReading) {
-    rect(ctx, 2, 9 - armOff, 2, 4, p.skin, s);
-    rect(ctx, 12, 9 - armOff, 2, 4, p.skin, s);
-    rect(ctx, 5, 8 - armOff, 6, 2, '#e8e0d0', s);
-  } else {
-    rect(ctx, 2, 10 + armOff, 2, 3, p.skin, s);
-    rect(ctx, 12, 10 + armOff, 2, 3, p.skin, s);
+// Helper: set single pixel
+function setPixel(spr: SpriteData, x: number, y: number, color: string) {
+  if (y >= 0 && y < spr.length && x >= 0 && x < (spr[0]?.length ?? 0)) {
+    spr[y][x] = color;
   }
-
-  // Lower body
-  rect(ctx, 4, 14, 8, 3, p.pants, s);
-  rect(ctx, 4, 17, 3, 4, p.pants, s);
-  rect(ctx, 9, 17, 3, 4, p.pants, s);
-  rect(ctx, 4, 21, 3, 2, p.shoes, s);
-  rect(ctx, 9, 21, 3, 2, p.shoes, s);
 }
 
-/** Draw a character facing RIGHT */
-function drawCharRight(ctx: CanvasRenderingContext2D, p: CharPalette, frame: number, isReading: boolean, s: number) {
-  const f = frame % 2;
-  const armOff = f === 1 ? 1 : 0;
+function darkenHex(hex: string, factor: number): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return hex;
+  return rgbToHex(rgb[0] * factor, rgb[1] * factor, rgb[2] * factor);
+}
 
-  // Head (side profile)
-  rect(ctx, 4, 1, 6, 2, p.hair, s);
-  rect(ctx, 3, 2, 7, 4, p.hair, s);
-  rect(ctx, 3, 5, 7, 4, p.skin, s);
-  px(ctx, 8, 6, '#333', s);                     // eye
-  rect(ctx, 3, 8, 6, 1, p.skin, s);
-  rect(ctx, 4, 9, 4, 1, p.skin, s);           // neck
+function lightenHex(hex: string, factor: number): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return hex;
+  return rgbToHex(
+    rgb[0] + (255 - rgb[0]) * factor,
+    rgb[1] + (255 - rgb[1]) * factor,
+    rgb[2] + (255 - rgb[2]) * factor
+  );
+}
 
+// ── CHARACTER SPRITES ──────────────────────────────────────────
+// 16×24 pixel characters in 4 directions × multiple states
+
+interface CharacterSpriteSet {
+  walk: Record<Direction, [SpriteData, SpriteData, SpriteData, SpriteData]>;
+  typing: Record<Direction, [SpriteData, SpriteData]>;
+  reading: Record<Direction, [SpriteData, SpriteData]>;
+}
+
+const charSpriteCache = new Map<string, CharacterSpriteSet>();
+
+function buildCharacterDown(p: CharPalette): SpriteData[] {
+  const sprites: SpriteData[] = [];
+
+  // Frame 0: Walk stand / idle
+  const s0 = emptySprite(16, 24);
+  // Hair
+  fillRect(s0, 5, 0, 6, 2, p.hair);
+  fillRect(s0, 4, 2, 8, 3, p.hair);
+  // Face
+  fillRect(s0, 4, 5, 8, 4, p.skin);
+  setPixel(s0, 6, 6, '#333333');
+  setPixel(s0, 9, 6, '#333333');
+  setPixel(s0, 7, 7, darkenHex(p.skin, 0.85));
+  fillRect(s0, 4, 8, 8, 1, p.skin);
+  fillRect(s0, 5, 9, 6, 1, p.skin);
   // Body
-  rect(ctx, 3, 10, 7, 5, p.shirt, s);
-  px(ctx, 5, 12, p.shirtLight, s);
+  fillRect(s0, 3, 10, 10, 1, p.shirt);
+  fillRect(s0, 3, 11, 10, 3, p.shirt);
+  setPixel(s0, 6, 12, p.shirtLight);
+  setPixel(s0, 8, 12, p.shirtLight);
+  // Arms down
+  fillRect(s0, 2, 11, 2, 3, p.skin);
+  fillRect(s0, 12, 11, 2, 3, p.skin);
+  // Pants
+  fillRect(s0, 4, 14, 3, 4, p.pants);
+  fillRect(s0, 9, 14, 3, 4, p.pants);
+  fillRect(s0, 4, 18, 3, 4, p.pants);
+  fillRect(s0, 9, 18, 3, 4, p.pants);
+  // Shoes
+  fillRect(s0, 4, 22, 3, 2, p.shoes);
+  fillRect(s0, 9, 22, 3, 2, p.shoes);
+  sprites.push(s0);
 
-  // Arms
-  if (isReading) {
-    rect(ctx, 9, 9 - armOff, 2, 3, p.skin, s);   // right arm forward
-    rect(ctx, 5, 9 - armOff, 5, 2, '#e8e0d0', s);
-  } else {
-    rect(ctx, 9, 10 + armOff, 2, 3, p.skin, s);
-  }
-  rect(ctx, 2, 11, 2, 3, p.skin, s);           // left arm (behind)
+  // Frame 1: Walk step right leg forward
+  const s1 = emptySprite(16, 24);
+  fillRect(s1, 5, 0, 6, 2, p.hair);
+  fillRect(s1, 4, 2, 8, 3, p.hair);
+  fillRect(s1, 4, 5, 8, 4, p.skin);
+  setPixel(s1, 6, 6, '#333333');
+  setPixel(s1, 9, 6, '#333333');
+  fillRect(s1, 4, 8, 8, 1, p.skin);
+  fillRect(s1, 5, 9, 6, 1, p.skin);
+  fillRect(s1, 3, 10, 10, 1, p.shirt);
+  fillRect(s1, 3, 11, 10, 3, p.shirt);
+  fillRect(s1, 2, 11, 2, 3, p.skin);
+  fillRect(s1, 12, 11, 2, 3, p.skin);
+  fillRect(s1, 4, 14, 3, 4, p.pants);
+  fillRect(s1, 9, 14, 3, 4, p.pants);
+  // Legs spread
+  fillRect(s1, 3, 18, 3, 4, p.pants);
+  fillRect(s1, 10, 18, 3, 4, p.pants);
+  fillRect(s1, 3, 22, 3, 2, p.shoes);
+  fillRect(s1, 10, 22, 3, 2, p.shoes);
+  sprites.push(s1);
 
-  // Lower body
-  rect(ctx, 4, 15, 5, 3, p.pants, s);
-  rect(ctx, 6, 18, 3, 4, p.pants, s);
-  rect(ctx, 4, 18, 3, 4, p.pants, s);
-  rect(ctx, 6, 22, 3, 1, p.shoes, s);
-  rect(ctx, 4, 22, 3, 1, p.shoes, s);
-}
+  // Frame 2: Walk step left leg forward
+  const s2 = emptySprite(16, 24);
+  fillRect(s2, 5, 0, 6, 2, p.hair);
+  fillRect(s2, 4, 2, 8, 3, p.hair);
+  fillRect(s2, 4, 5, 8, 4, p.skin);
+  setPixel(s2, 6, 6, '#333333');
+  setPixel(s2, 9, 6, '#333333');
+  fillRect(s2, 4, 8, 8, 1, p.skin);
+  fillRect(s2, 5, 9, 6, 1, p.skin);
+  fillRect(s2, 3, 10, 10, 1, p.shirt);
+  fillRect(s2, 3, 11, 10, 3, p.shirt);
+  fillRect(s2, 2, 11, 2, 3, p.skin);
+  fillRect(s2, 12, 11, 2, 3, p.skin);
+  fillRect(s2, 4, 14, 3, 4, p.pants);
+  fillRect(s2, 9, 14, 3, 4, p.pants);
+  fillRect(s2, 5, 18, 3, 4, p.pants);
+  fillRect(s2, 8, 18, 3, 4, p.pants);
+  fillRect(s2, 5, 22, 3, 2, p.shoes);
+  fillRect(s2, 8, 22, 3, 2, p.shoes);
+  sprites.push(s2);
 
-/** Draw a character facing LEFT (mirror of right) */
-function drawCharLeft(ctx: CanvasRenderingContext2D, p: CharPalette, frame: number, isReading: boolean, s: number) {
-  const f = frame % 2;
-  const armOff = f === 1 ? 1 : 0;
-
-  // Head (side profile, mirrored)
-  rect(ctx, 6, 1, 6, 2, p.hair, s);
-  rect(ctx, 6, 2, 7, 4, p.hair, s);
-  rect(ctx, 6, 5, 7, 4, p.skin, s);
-  px(ctx, 7, 6, '#333', s);                     // eye
-  rect(ctx, 7, 8, 6, 1, p.skin, s);
-  rect(ctx, 8, 9, 4, 1, p.skin, s);           // neck
-
-  // Body
-  rect(ctx, 6, 10, 7, 5, p.shirt, s);
-  px(ctx, 9, 12, p.shirtLight, s);
-
-  // Arms
-  if (isReading) {
-    rect(ctx, 5, 9 - armOff, 2, 3, p.skin, s);   // left arm forward
-    rect(ctx, 6, 9 - armOff, 5, 2, '#e8e0d0', s);
-  } else {
-    rect(ctx, 5, 10 + armOff, 2, 3, p.skin, s);
-  }
-  rect(ctx, 12, 11, 2, 3, p.skin, s);          // right arm (behind)
-
-  // Lower body
-  rect(ctx, 7, 15, 5, 3, p.pants, s);
-  rect(ctx, 7, 18, 3, 4, p.pants, s);
-  rect(ctx, 10, 18, 3, 4, p.pants, s);
-  rect(ctx, 7, 22, 3, 1, p.shoes, s);
-  rect(ctx, 10, 22, 3, 1, p.shoes, s);
-}
-
-/** Walking frames — same as above but with leg movement */
-function drawCharWalkDown(ctx: CanvasRenderingContext2D, p: CharPalette, frame: number, s: number) {
-  const f = frame % 4;
-  drawCharDown(ctx, p, 0, false, s);
-  // Override legs with walk animation
-  ctx.fillStyle = 'rgba(0,0,0,0)'; ctx.fillRect(4 * s, 17 * s, 8 * s, 7 * s);
-  const legOff = [0, 1, 0, -1][f];
-  rect(ctx, 4, 17 + legOff, 3, 4, p.pants, s);
-  rect(ctx, 9, 17 - legOff, 3, 4, p.pants, s);
-  rect(ctx, 4, 21 + legOff, 3, 2, p.shoes, s);
-  rect(ctx, 9, 21 - legOff, 3, 2, p.shoes, s);
-}
-
-function drawCharWalkUp(ctx: CanvasRenderingContext2D, p: CharPalette, frame: number, s: number) {
-  const f = frame % 4;
-  drawCharUp(ctx, p, 0, false, s);
-  ctx.fillStyle = 'rgba(0,0,0,0)'; ctx.fillRect(4 * s, 17 * s, 8 * s, 7 * s);
-  const legOff = [0, 1, 0, -1][f];
-  rect(ctx, 4, 17 + legOff, 3, 4, p.pants, s);
-  rect(ctx, 9, 17 - legOff, 3, 4, p.pants, s);
-  rect(ctx, 4, 21 + legOff, 3, 2, p.shoes, s);
-  rect(ctx, 9, 21 - legOff, 3, 2, p.shoes, s);
-}
-
-function drawCharWalkRight(ctx: CanvasRenderingContext2D, p: CharPalette, frame: number, s: number) {
-  const f = frame % 4;
-  drawCharRight(ctx, p, 0, false, s);
-  ctx.fillStyle = 'rgba(0,0,0,0)'; ctx.fillRect(4 * s, 18 * s, 7 * s, 5 * s);
-  const legOff = [0, 1, 0, -1][f];
-  rect(ctx, 4, 18 + legOff, 3, 4, p.pants, s);
-  rect(ctx, 6, 18 - legOff, 3, 4, p.pants, s);
-  rect(ctx, 4, 22 + legOff, 3, 1, p.shoes, s);
-  rect(ctx, 6, 22 - legOff, 3, 1, p.shoes, s);
-}
-
-function drawCharWalkLeft(ctx: CanvasRenderingContext2D, p: CharPalette, frame: number, s: number) {
-  const f = frame % 4;
-  drawCharLeft(ctx, p, 0, false, s);
-  ctx.fillStyle = 'rgba(0,0,0,0)'; ctx.fillRect(7 * s, 18 * s, 7 * s, 5 * s);
-  const legOff = [0, 1, 0, -1][f];
-  rect(ctx, 7, 18 - legOff, 3, 4, p.pants, s);
-  rect(ctx, 10, 18 + legOff, 3, 4, p.pants, s);
-  rect(ctx, 7, 22 - legOff, 3, 1, p.shoes, s);
-  rect(ctx, 10, 22 + legOff, 3, 1, p.shoes, s);
-}
-
-/** Sitting character — shorter, no legs visible, facing monitor */
-function drawCharSittingDown(ctx: CanvasRenderingContext2D, p: CharPalette, frame: number, isReading: boolean, s: number) {
-  const f = frame % 2;
-  const armOff = f === 1 ? 1 : 0;
-
-  // Head
-  rect(ctx, 5, 0, 6, 2, p.hair, s);
-  rect(ctx, 4, 1, 8, 3, p.hair, s);
-  rect(ctx, 4, 4, 8, 4, p.skin, s);
-  px(ctx, 5, 5, '#333', s);
-  px(ctx, 9, 5, '#333', s);
-  px(ctx, 6, 6, darkenColor(p.skin, 0.85), s);
-  rect(ctx, 4, 7, 8, 1, p.skin, s);
-  rect(ctx, 5, 8, 6, 1, p.skin, s);
-
-  // Body (wider, sitting)
-  rect(ctx, 2, 9, 12, 5, p.shirt, s);
-  px(ctx, 6, 11, p.shirtLight, s);
-  px(ctx, 8, 11, p.shirtLight, s);
-
+  // Frame 3: Typing/working — arms forward
+  const s3 = emptySprite(16, 24);
+  fillRect(s3, 5, 0, 6, 2, p.hair);
+  fillRect(s3, 4, 2, 8, 3, p.hair);
+  fillRect(s3, 4, 5, 8, 4, p.skin);
+  setPixel(s3, 6, 6, '#333333');
+  setPixel(s3, 9, 6, '#333333');
+  fillRect(s3, 4, 8, 8, 1, p.skin);
+  fillRect(s3, 5, 9, 6, 1, p.skin);
+  fillRect(s3, 3, 10, 10, 5, p.shirt);
+  setPixel(s3, 6, 12, p.shirtLight);
+  setPixel(s3, 8, 12, p.shirtLight);
   // Arms on desk
-  if (isReading) {
-    rect(ctx, 1, 8, 2, 3, p.skin, s);
-    rect(ctx, 13, 8, 2, 3, p.skin, s);
-    rect(ctx, 5, 7 - armOff, 6, 2, '#e8e0d0', s);
-  } else {
-    // Typing — arms slightly forward
-    rect(ctx, 1, 9 + armOff, 2, 3, p.skin, s);
-    rect(ctx, 13, 9 + armOff, 2, 3, p.skin, s);
-  }
+  fillRect(s3, 1, 9, 2, 3, p.skin);
+  fillRect(s3, 13, 9, 2, 3, p.skin);
+  // Chair
+  fillRect(s3, 3, 15, 10, 2, '#64748b');
+  fillRect(s3, 3, 14, 10, 1, '#94a3b8');
+  // Legs hidden by chair
+  fillRect(s3, 4, 17, 3, 3, p.pants);
+  fillRect(s3, 9, 17, 3, 3, p.pants);
+  fillRect(s3, 4, 20, 3, 2, p.shoes);
+  fillRect(s3, 9, 20, 3, 2, p.shoes);
+  sprites.push(s3);
 
-  // Chair hint
-  rect(ctx, 3, 14, 10, 2, '#64748b', s);
-  rect(ctx, 3, 13, 10, 1, '#94a3b8', s);
+  // Frame 4: Typing alternate — arms slightly moved
+  const s4 = emptySprite(16, 24);
+  fillRect(s4, 5, 0, 6, 2, p.hair);
+  fillRect(s4, 4, 2, 8, 3, p.hair);
+  fillRect(s4, 4, 5, 8, 4, p.skin);
+  setPixel(s4, 6, 6, '#333333');
+  setPixel(s4, 9, 6, '#333333');
+  fillRect(s4, 4, 8, 8, 1, p.skin);
+  fillRect(s4, 5, 9, 6, 1, p.skin);
+  fillRect(s4, 3, 10, 10, 5, p.shirt);
+  setPixel(s4, 6, 12, p.shirtLight);
+  setPixel(s4, 8, 12, p.shirtLight);
+  fillRect(s4, 1, 10, 2, 3, p.skin);
+  fillRect(s4, 13, 10, 2, 3, p.skin);
+  fillRect(s4, 3, 15, 10, 2, '#64748b');
+  fillRect(s4, 3, 14, 10, 1, '#94a3b8');
+  fillRect(s4, 4, 17, 3, 3, p.pants);
+  fillRect(s4, 9, 17, 3, 3, p.pants);
+  fillRect(s4, 4, 20, 3, 2, p.shoes);
+  fillRect(s4, 9, 20, 3, 2, p.shoes);
+  sprites.push(s4);
+
+  // Frame 5: Reading — holding paper
+  const s5 = emptySprite(16, 24);
+  fillRect(s5, 5, 0, 6, 2, p.hair);
+  fillRect(s5, 4, 2, 8, 3, p.hair);
+  fillRect(s5, 4, 5, 8, 4, p.skin);
+  setPixel(s5, 6, 6, '#333333');
+  setPixel(s5, 9, 6, '#333333');
+  fillRect(s5, 4, 8, 8, 1, p.skin);
+  fillRect(s5, 5, 9, 6, 1, p.skin);
+  fillRect(s5, 3, 10, 10, 5, p.shirt);
+  // Arms up with paper
+  fillRect(s5, 1, 8, 2, 3, p.skin);
+  fillRect(s5, 13, 8, 2, 3, p.skin);
+  fillRect(s5, 5, 7, 6, 2, '#e8e0d0');
+  fillRect(s5, 3, 15, 10, 2, '#64748b');
+  fillRect(s5, 3, 14, 10, 1, '#94a3b8');
+  fillRect(s5, 4, 17, 3, 3, p.pants);
+  fillRect(s5, 9, 17, 3, 3, p.pants);
+  fillRect(s5, 4, 20, 3, 2, p.shoes);
+  fillRect(s5, 9, 20, 3, 2, p.shoes);
+  sprites.push(s5);
+
+  // Frame 6: Reading alternate
+  const s6 = emptySprite(16, 24);
+  fillRect(s6, 5, 0, 6, 2, p.hair);
+  fillRect(s6, 4, 2, 8, 3, p.hair);
+  fillRect(s6, 4, 5, 8, 4, p.skin);
+  setPixel(s6, 6, 6, '#333333');
+  setPixel(s6, 9, 6, '#333333');
+  fillRect(s6, 4, 8, 8, 1, p.skin);
+  fillRect(s6, 5, 9, 6, 1, p.skin);
+  fillRect(s6, 3, 10, 10, 5, p.shirt);
+  fillRect(s6, 1, 9, 2, 3, p.skin);
+  fillRect(s6, 13, 9, 2, 3, p.skin);
+  fillRect(s6, 5, 8, 6, 2, '#e8e0d0');
+  fillRect(s6, 3, 15, 10, 2, '#64748b');
+  fillRect(s6, 3, 14, 10, 1, '#94a3b8');
+  fillRect(s6, 4, 17, 3, 3, p.pants);
+  fillRect(s6, 9, 17, 3, 3, p.pants);
+  fillRect(s6, 4, 20, 3, 2, p.shoes);
+  fillRect(s6, 9, 20, 3, 2, p.shoes);
+  sprites.push(s6);
+
+  return sprites;
 }
 
-/** Get character sprite canvas */
+function buildCharacterUp(p: CharPalette): SpriteData[] {
+  const sprites: SpriteData[] = [];
+
+  for (let i = 0; i < 7; i++) {
+    const s = emptySprite(16, 24);
+    // Back of head
+    fillRect(s, 4, 0, 8, 6, p.hair);
+    fillRect(s, 5, 0, 6, 2, p.hair);
+    fillRect(s, 4, 6, 8, 3, p.skin);
+    fillRect(s, 5, 8, 6, 1, p.skin);
+
+    if (i < 3) {
+      // Walk frames
+      fillRect(s, 3, 9, 10, 5, p.shirt);
+      setPixel(s, 6, 11, darkenHex(p.shirt, 0.9));
+      setPixel(s, 8, 11, darkenHex(p.shirt, 0.9));
+      fillRect(s, 2, 10, 2, 3, p.skin);
+      fillRect(s, 12, 10, 2, 3, p.skin);
+      fillRect(s, 4, 14, 3, 4, p.pants);
+      fillRect(s, 9, 14, 3, 4, p.pants);
+      if (i === 1) {
+        fillRect(s, 3, 18, 3, 4, p.pants);
+        fillRect(s, 10, 18, 3, 4, p.pants);
+        fillRect(s, 3, 22, 3, 2, p.shoes);
+        fillRect(s, 10, 22, 3, 2, p.shoes);
+      } else if (i === 2) {
+        fillRect(s, 5, 18, 3, 4, p.pants);
+        fillRect(s, 8, 18, 3, 4, p.pants);
+        fillRect(s, 5, 22, 3, 2, p.shoes);
+        fillRect(s, 8, 22, 3, 2, p.shoes);
+      } else {
+        fillRect(s, 4, 18, 3, 4, p.pants);
+        fillRect(s, 9, 18, 3, 4, p.pants);
+        fillRect(s, 4, 22, 3, 2, p.shoes);
+        fillRect(s, 9, 22, 3, 2, p.shoes);
+      }
+    } else if (i < 5) {
+      // Typing
+      fillRect(s, 3, 9, 10, 5, p.shirt);
+      fillRect(s, 1, 9 + (i % 2), 2, 3, p.skin);
+      fillRect(s, 13, 9 + (i % 2), 2, 3, p.skin);
+      fillRect(s, 3, 14, 10, 2, '#64748b');
+      fillRect(s, 4, 16, 3, 3, p.pants);
+      fillRect(s, 9, 16, 3, 3, p.pants);
+      fillRect(s, 4, 19, 3, 2, p.shoes);
+      fillRect(s, 9, 19, 3, 2, p.shoes);
+    } else {
+      // Reading
+      fillRect(s, 3, 9, 10, 5, p.shirt);
+      fillRect(s, 1, 8, 2, 3, p.skin);
+      fillRect(s, 13, 8, 2, 3, p.skin);
+      fillRect(s, 5, 7 + (i % 2), 6, 2, '#e8e0d0');
+      fillRect(s, 3, 14, 10, 2, '#64748b');
+      fillRect(s, 4, 16, 3, 3, p.pants);
+      fillRect(s, 9, 16, 3, 3, p.pants);
+      fillRect(s, 4, 19, 3, 2, p.shoes);
+      fillRect(s, 9, 19, 3, 2, p.shoes);
+    }
+    sprites.push(s);
+  }
+  return sprites;
+}
+
+function buildCharacterRight(p: CharPalette): SpriteData[] {
+  const sprites: SpriteData[] = [];
+
+  for (let i = 0; i < 7; i++) {
+    const s = emptySprite(16, 24);
+    // Head side
+    fillRect(s, 4, 0, 6, 2, p.hair);
+    fillRect(s, 3, 2, 7, 4, p.hair);
+    fillRect(s, 3, 5, 7, 4, p.skin);
+    setPixel(s, 8, 6, '#333333');
+    fillRect(s, 3, 8, 6, 1, p.skin);
+    fillRect(s, 4, 9, 4, 1, p.skin);
+
+    if (i < 3) {
+      fillRect(s, 3, 10, 7, 5, p.shirt);
+      setPixel(s, 5, 12, p.shirtLight);
+      fillRect(s, 9, 10, 2, 3, p.skin);
+      fillRect(s, 2, 11, 2, 3, p.skin);
+      fillRect(s, 4, 15, 5, 3, p.pants);
+      if (i === 1) {
+        fillRect(s, 6, 18, 3, 4, p.pants);
+        fillRect(s, 4, 18, 3, 4, p.pants);
+        fillRect(s, 6, 22, 3, 2, p.shoes);
+        fillRect(s, 4, 22, 3, 2, p.shoes);
+      } else if (i === 2) {
+        fillRect(s, 7, 18, 3, 4, p.pants);
+        fillRect(s, 3, 18, 3, 4, p.pants);
+        fillRect(s, 7, 22, 3, 2, p.shoes);
+        fillRect(s, 3, 22, 3, 2, p.shoes);
+      } else {
+        fillRect(s, 5, 18, 3, 4, p.pants);
+        fillRect(s, 5, 22, 3, 2, p.shoes);
+      }
+    } else if (i < 5) {
+      fillRect(s, 3, 10, 7, 5, p.shirt);
+      setPixel(s, 5, 12, p.shirtLight);
+      fillRect(s, 9, 9 + (i % 2), 2, 3, p.skin);
+      fillRect(s, 2, 11, 2, 3, p.skin);
+      fillRect(s, 4, 15, 5, 2, '#64748b');
+      fillRect(s, 5, 17, 3, 3, p.pants);
+      fillRect(s, 5, 20, 3, 2, p.shoes);
+    } else {
+      fillRect(s, 3, 10, 7, 5, p.shirt);
+      fillRect(s, 9, 8 + (i % 2), 2, 3, p.skin);
+      fillRect(s, 5, 7 + (i % 2), 5, 2, '#e8e0d0');
+      fillRect(s, 2, 11, 2, 3, p.skin);
+      fillRect(s, 4, 15, 5, 2, '#64748b');
+      fillRect(s, 5, 17, 3, 3, p.pants);
+      fillRect(s, 5, 20, 3, 2, p.shoes);
+    }
+    sprites.push(s);
+  }
+  return sprites;
+}
+
+export function getCharacterSprites(palette: CharPalette, hueShift = 0): CharacterSpriteSet {
+  const cacheKey = `${palette.skin}-${palette.shirt}:${hueShift}`;
+  const cached = charSpriteCache.get(cacheKey);
+  if (cached) return cached;
+
+  const downFrames = buildCharacterDown(palette);
+  const upFrames = buildCharacterUp(palette);
+  const rightFrames = buildCharacterRight(palette);
+  const leftFrames = rightFrames.map(s => flipSpriteHorizontal(s));
+
+  // Apply hue shift if needed
+  const allDown = hueShift !== 0 ? downFrames.map(s => adjustSprite(s, hueShift)) : downFrames;
+  const allUp = hueShift !== 0 ? upFrames.map(s => adjustSprite(s, hueShift)) : upFrames;
+  const allRight = hueShift !== 0 ? rightFrames.map(s => adjustSprite(s, hueShift)) : rightFrames;
+  const allLeft = hueShift !== 0 ? leftFrames.map(s => adjustSprite(s, hueShift)) : leftFrames;
+
+  const buildDir = (frames: SpriteData[]): [SpriteData, SpriteData, SpriteData, SpriteData] =>
+    [frames[0], frames[1], frames[2], frames[1]]; // Walk: [stand, step1, step2, step1]
+  const buildTyping = (frames: SpriteData[]): [SpriteData, SpriteData] =>
+    [frames[3], frames[4]]; // Typing frames
+  const buildReading = (frames: SpriteData[]): [SpriteData, SpriteData] =>
+    [frames[5], frames[6]]; // Reading frames
+
+  const result: CharacterSpriteSet = {
+    walk: {
+      0: buildDir(allDown),   // DOWN
+      1: buildDir(allLeft),   // LEFT
+      2: buildDir(allRight),  // RIGHT
+      3: buildDir(allUp),     // UP
+    } as Record<Direction, [SpriteData, SpriteData, SpriteData, SpriteData]>,
+    typing: {
+      0: buildTyping(allDown),
+      1: buildTyping(allLeft),
+      2: buildTyping(allRight),
+      3: buildTyping(allUp),
+    } as Record<Direction, [SpriteData, SpriteData]>,
+    reading: {
+      0: buildReading(allDown),
+      1: buildReading(allLeft),
+      2: buildReading(allRight),
+      3: buildReading(allUp),
+    } as Record<Direction, [SpriteData, SpriteData]>,
+  };
+
+  charSpriteCache.set(cacheKey, result);
+  return result;
+}
+
+/** Get the correct sprite for a character's current state */
 export function getCharacterSprite(
-  palette: CharPalette,
-  state: CharState,
+  sprites: CharacterSpriteSet,
+  state: string,
   dir: Direction,
   frame: number,
   isReading: boolean,
-): HTMLCanvasElement {
-  const pStr = `${palette.skin}-${palette.shirt}`;
-  const key = `char-${pStr}-${state}-${dir}-${frame}-${isReading}`;
-  const w = CHAR_W;
-  const h = state === 'idle' || state === 'typing' || state === 'reading' ? CHAR_H : CHAR_H;
-
-  return getCachedCanvas(key, w, h, (ctx) => {
-    switch (state) {
-      case CharState.TYPING:
-        if (dir === Direction.DOWN) drawCharSittingDown(ctx, palette, frame, isReading, 1);
-        else if (dir === Direction.UP) drawCharUp(ctx, palette, frame, isReading, 1);
-        else if (dir === Direction.RIGHT) drawCharRight(ctx, palette, frame, isReading, 1);
-        else drawCharLeft(ctx, palette, frame, isReading, 1);
-        break;
-      case CharState.READING:
-        if (dir === Direction.DOWN) drawCharSittingDown(ctx, palette, frame, true, 1);
-        else if (dir === Direction.UP) drawCharUp(ctx, palette, frame, true, 1);
-        else if (dir === Direction.RIGHT) drawCharRight(ctx, palette, frame, true, 1);
-        else drawCharLeft(ctx, palette, frame, true, 1);
-        break;
-      case CharState.WALKING:
-        if (dir === Direction.DOWN) drawCharWalkDown(ctx, palette, frame, 1);
-        else if (dir === Direction.UP) drawCharWalkUp(ctx, palette, frame, 1);
-        else if (dir === Direction.RIGHT) drawCharWalkRight(ctx, palette, frame, 1);
-        else drawCharWalkLeft(ctx, palette, frame, 1);
-        break;
-      case CharState.IDLE:
-      default:
-        if (dir === Direction.DOWN) drawCharDown(ctx, palette, 0, false, 1);
-        else if (dir === Direction.UP) drawCharUp(ctx, palette, 0, false, 1);
-        else if (dir === Direction.RIGHT) drawCharRight(ctx, palette, 0, false, 1);
-        else drawCharLeft(ctx, palette, 0, false, 1);
-        break;
-    }
-  });
+): SpriteData {
+  switch (state) {
+    case 'type':
+      if (isReading) return sprites.reading[dir][frame % 2];
+      return sprites.typing[dir][frame % 2];
+    case 'walk':
+      return sprites.walk[dir][frame % 4];
+    case 'idle':
+    default:
+      return sprites.walk[dir][1]; // Standing pose
+  }
 }
 
 // ════════════════════════════════════════════════════════════════
-// FURNITURE SPRITES
+// BUBBLE SPRITES (matching pixel-agents exactly)
 // ════════════════════════════════════════════════════════════════
 
-/** Draw desk (front view) - 3 tiles wide, 2 tiles tall */
-export function getDeskFrontSprite(color: string): HTMLCanvasElement {
-  const key = `desk-front-${color}`;
-  return getCachedCanvas(key, 48, 24, (ctx) => {
-    // Desk surface
-    rect(ctx, 0, 0, 48, 14, color, 1);
-    rect(ctx, 0, 0, 48, 2, lightenColor(color, 0.25), 1);
-    rect(ctx, 0, 14, 48, 3, darkenColor(color, 0.8), 1);
+let _permissionBubble: SpriteData | null = null;
+let _waitingBubble: SpriteData | null = null;
+
+export function getPermissionBubbleSprite(): SpriteData {
+  if (_permissionBubble) return _permissionBubble;
+  const s = emptySprite(11, 13);
+  // Border
+  fillRect(s, 0, 0, 11, 10, '#555566');
+  // Fill
+  fillRect(s, 1, 1, 9, 8, '#EEEEFF');
+  // ... dots
+  setPixel(s, 3, 4, '#CCA700');
+  setPixel(s, 5, 4, '#CCA700');
+  setPixel(s, 7, 4, '#CCA700');
+  // Tail
+  fillRect(s, 4, 10, 3, 1, '#555566');
+  setPixel(s, 5, 11, '#555566');
+  _permissionBubble = s;
+  return s;
+}
+
+export function getWaitingBubbleSprite(): SpriteData {
+  if (_waitingBubble) return _waitingBubble;
+  const s = emptySprite(11, 13);
+  // Border
+  fillRect(s, 1, 0, 9, 10, '#555566');
+  setPixel(s, 0, 1, '#555566');
+  setPixel(s, 10, 1, '#555566');
+  // Fill
+  fillRect(s, 2, 1, 7, 8, '#EEEEFF');
+  // Checkmark
+  setPixel(s, 8, 2, '#44BB66');
+  setPixel(s, 7, 3, '#44BB66');
+  setPixel(s, 6, 4, '#44BB66');
+  setPixel(s, 5, 5, '#44BB66');
+  setPixel(s, 4, 5, '#44BB66');
+  setPixel(s, 3, 4, '#44BB66');
+  // Tail
+  fillRect(s, 4, 10, 3, 1, '#555566');
+  setPixel(s, 5, 11, '#555566');
+  _waitingBubble = s;
+  return s;
+}
+
+// ════════════════════════════════════════════════════════════════
+// FURNITURE SPRITES as SpriteData
+// ════════════════════════════════════════════════════════════════
+
+const furnitureSpriteCache = new Map<string, SpriteData>();
+
+function getFurnitureSpriteCache(key: string, w: number, h: number, build: (s: SpriteData) => void): SpriteData {
+  const cached = furnitureSpriteCache.get(key);
+  if (cached) return cached;
+  const s = emptySprite(w, h);
+  build(s);
+  furnitureSpriteCache.set(key, s);
+  return s;
+}
+
+export function getDeskFrontSprite(): SpriteData {
+  return getFurnitureSpriteCache('desk-front', 48, 24, (s) => {
+    const wood = '#8B6C5C';
+    fillRect(s, 0, 0, 48, 14, wood);
+    fillRect(s, 0, 0, 48, 2, lightenHex(wood, 0.25));
+    fillRect(s, 0, 14, 48, 3, darkenHex(wood, 0.8));
+    fillRect(s, 2, 17, 3, 7, darkenHex(wood, 0.6));
+    fillRect(s, 43, 17, 3, 7, darkenHex(wood, 0.6));
+    fillRect(s, 0, 0, 48, 1, lightenHex(wood, 0.4));
+  });
+}
+
+export function getChairFrontSprite(): SpriteData {
+  return getFurnitureSpriteCache('chair-front', 16, 32, (s) => {
+    const c = '#94a3b8';
+    const cDark = '#64748b';
+    // Back rest (top — background tile, characters can walk through)
+    fillRect(s, 3, 0, 10, 5, cDark);
+    // Seat (bottom — blocks walking)
+    fillRect(s, 2, 16, 12, 5, c);
+    fillRect(s, 2, 16, 12, 1, lightenHex(c, 0.2));
     // Legs
-    rect(ctx, 2, 17, 3, 7, darkenColor(color, 0.6), 1);
-    rect(ctx, 43, 17, 3, 7, darkenColor(color, 0.6), 1);
-    // Edge highlight
-    rect(ctx, 0, 0, 48, 1, lightenColor(color, 0.4), 1);
+    fillRect(s, 3, 21, 2, 6, cDark);
+    fillRect(s, 11, 21, 2, 6, cDark);
   });
 }
 
-/** Draw desk (side view) */
-export function getDeskSideSprite(color: string): HTMLCanvasElement {
-  const key = `desk-side-${color}`;
-  return getCachedCanvas(key, 16, 24, (ctx) => {
-    rect(ctx, 0, 0, 16, 14, color, 1);
-    rect(ctx, 0, 0, 16, 2, lightenColor(color, 0.25), 1);
-    rect(ctx, 0, 14, 16, 3, darkenColor(color, 0.8), 1);
-    rect(ctx, 2, 17, 3, 7, darkenColor(color, 0.6), 1);
-    rect(ctx, 11, 17, 3, 7, darkenColor(color, 0.6), 1);
-    rect(ctx, 0, 0, 16, 1, lightenColor(color, 0.4), 1);
+export function getChairBackSprite(): SpriteData {
+  return getFurnitureSpriteCache('chair-back', 16, 32, (s) => {
+    const c = '#94a3b8';
+    const cDark = '#64748b';
+    fillRect(s, 3, 0, 10, 5, cDark);
+    fillRect(s, 2, 16, 12, 5, c);
+    fillRect(s, 2, 16, 12, 1, lightenHex(c, 0.2));
+    fillRect(s, 3, 21, 2, 6, cDark);
+    fillRect(s, 11, 21, 2, 6, cDark);
   });
 }
 
-/** Draw chair (front view) - 1 tile */
-export function getChairFrontSprite(occupied: boolean): HTMLCanvasElement {
-  const key = `chair-front-${occupied}`;
-  return getCachedCanvas(key, 16, 16, (ctx) => {
-    const c = occupied ? '#475569' : '#94a3b8';
-    const cDark = occupied ? '#334155' : '#64748b';
-    // Back rest
-    rect(ctx, 3, 0, 10, 5, cDark, 1);
-    // Seat
-    rect(ctx, 2, 5, 12, 5, c, 1);
-    rect(ctx, 2, 5, 12, 1, lightenColor(c, 0.2), 1);
-    // Legs
-    rect(ctx, 3, 10, 2, 6, cDark, 1);
-    rect(ctx, 11, 10, 2, 6, cDark, 1);
+export function getChairSideSprite(): SpriteData {
+  return getFurnitureSpriteCache('chair-side', 16, 32, (s) => {
+    const c = '#94a3b8';
+    const cDark = '#64748b';
+    fillRect(s, 4, 0, 8, 5, cDark);
+    fillRect(s, 3, 16, 10, 5, c);
+    fillRect(s, 3, 16, 10, 1, lightenHex(c, 0.2));
+    fillRect(s, 4, 21, 2, 6, cDark);
+    fillRect(s, 10, 21, 2, 6, cDark);
   });
 }
 
-/** Draw PC monitor (front, ON) */
-export function getPCFrontOnSprite(): HTMLCanvasElement {
-  return getCachedCanvas('pc-front-on', 16, 16, (ctx) => {
-    // Screen
-    rect(ctx, 1, 0, 14, 10, '#1e293b', 1);
-    rect(ctx, 2, 1, 12, 8, '#0f172a', 1);
-    // Screen content
-    rect(ctx, 3, 2, 5, 1, '#3b82f6', 1);
-    rect(ctx, 3, 3, 3, 1, '#60a5fa', 1);
-    rect(ctx, 3, 4, 6, 1, '#2563eb', 1);
-    rect(ctx, 3, 5, 4, 1, '#3b82f6', 1);
-    // Glow
-    rect(ctx, 2, 1, 12, 8, 'rgba(59,130,246,0.15)', 1);
-    // Stand
-    rect(ctx, 6, 10, 4, 3, '#64748b', 1);
-    rect(ctx, 5, 13, 6, 2, '#475569', 1);
+export function getPCFrontOnSprite(frame: number): SpriteData {
+  return getFurnitureSpriteCache(`pc-front-on-${frame}`, 16, 16, (s) => {
+    fillRect(s, 1, 0, 14, 10, '#1e293b');
+    fillRect(s, 2, 1, 12, 8, '#0f172a');
+    // Screen content varies by frame
+    const colors = ['#3b82f6', '#60a5fa', '#2563eb'];
+    fillRect(s, 3, 2, 5, 1, colors[frame % 3]);
+    fillRect(s, 3, 3, 3, 1, '#60a5fa');
+    fillRect(s, 3, 4, 6, 1, '#2563eb');
+    fillRect(s, 3, 5, 4, 1, colors[(frame + 1) % 3]);
+    fillRect(s, 2, 1, 12, 8, 'rgba(59,130,246,0.15)');
+    fillRect(s, 6, 10, 4, 3, '#64748b');
+    fillRect(s, 5, 13, 6, 2, '#475569');
   });
 }
 
-/** Draw PC monitor (front, OFF) */
-export function getPCFrontOffSprite(): HTMLCanvasElement {
-  return getCachedCanvas('pc-front-off', 16, 16, (ctx) => {
-    rect(ctx, 1, 0, 14, 10, '#1e293b', 1);
-    rect(ctx, 2, 1, 12, 8, '#0f172a', 1);
-    rect(ctx, 3, 4, 2, 1, '#1e293b', 1);
-    rect(ctx, 6, 10, 4, 3, '#64748b', 1);
-    rect(ctx, 5, 13, 6, 2, '#475569', 1);
+export function getPCFrontOffSprite(): SpriteData {
+  return getFurnitureSpriteCache('pc-front-off', 16, 16, (s) => {
+    fillRect(s, 1, 0, 14, 10, '#1e293b');
+    fillRect(s, 2, 1, 12, 8, '#0f172a');
+    setPixel(s, 3, 4, '#1e293b');
+    fillRect(s, 6, 10, 4, 3, '#64748b');
+    fillRect(s, 5, 13, 6, 2, '#475569');
   });
 }
 
-/** Draw PC monitor (side view) */
-export function getPCSideSprite(): HTMLCanvasElement {
-  return getCachedCanvas('pc-side', 16, 16, (ctx) => {
-    rect(ctx, 0, 1, 10, 9, '#1e293b', 1);
-    rect(ctx, 1, 2, 8, 7, '#0f172a', 1);
-    rect(ctx, 2, 4, 3, 1, '#3b82f6', 1);
-    rect(ctx, 2, 5, 2, 1, '#60a5fa', 1);
-    rect(ctx, 5, 10, 3, 3, '#64748b', 1);
-    rect(ctx, 4, 13, 5, 2, '#475569', 1);
+export function getPCSideSprite(): SpriteData {
+  return getFurnitureSpriteCache('pc-side', 16, 16, (s) => {
+    fillRect(s, 0, 1, 10, 9, '#1e293b');
+    fillRect(s, 1, 2, 8, 7, '#0f172a');
+    fillRect(s, 2, 4, 3, 1, '#3b82f6');
+    fillRect(s, 2, 5, 2, 1, '#60a5fa');
+    fillRect(s, 5, 10, 3, 3, '#64748b');
+    fillRect(s, 4, 13, 5, 2, '#475569');
   });
 }
 
-/** Draw meeting table - 4 tiles wide, 2 tiles tall */
-export function getMeetingTableSprite(): HTMLCanvasElement {
-  return getCachedCanvas('meeting-table', 64, 32, (ctx) => {
+export function getMeetingTableSprite(): SpriteData {
+  return getFurnitureSpriteCache('meeting-table', 64, 32, (s) => {
     const wood = '#92400e';
     const woodLight = '#b45309';
     const woodDark = '#78350f';
-    // Top
-    rect(ctx, 0, 0, 64, 20, woodLight, 1);
-    rect(ctx, 0, 0, 64, 2, lightenColor(woodLight, 0.3), 1);
-    // Front
-    rect(ctx, 0, 20, 64, 5, wood, 1);
-    rect(ctx, 0, 25, 64, 2, woodDark, 1);
-    // Legs
-    rect(ctx, 4, 27, 3, 5, woodDark, 1);
-    rect(ctx, 57, 27, 3, 5, woodDark, 1);
+    fillRect(s, 0, 0, 64, 20, woodLight);
+    fillRect(s, 0, 0, 64, 2, lightenHex(woodLight, 0.3));
+    fillRect(s, 0, 20, 64, 5, wood);
+    fillRect(s, 0, 25, 64, 2, woodDark);
+    fillRect(s, 4, 27, 3, 5, woodDark);
+    fillRect(s, 57, 27, 3, 5, woodDark);
   });
 }
 
-/** Draw server rack */
-export function getServerRackSprite(active: boolean): HTMLCanvasElement {
-  const key = `server-rack-${active}`;
-  return getCachedCanvas(key, 32, 48, (ctx) => {
-    rect(ctx, 0, 0, 32, 48, '#1e293b', 1);
-    rect(ctx, 0, 0, 32, 2, '#334155', 1);
+export function getServerRackSprite(active: boolean): SpriteData {
+  return getFurnitureSpriteCache(`server-rack-${active}`, 32, 48, (s) => {
+    fillRect(s, 0, 0, 32, 48, '#1e293b');
+    fillRect(s, 0, 0, 32, 2, '#334155');
     for (let i = 0; i < 5; i++) {
       const y = 4 + i * 9;
-      rect(ctx, 2, y, 28, 7, '#0f172a', 1);
-      px(ctx, 4, y + 2, active ? '#4ade80' : '#475569', 1);
-      px(ctx, 4, y + 4, active ? '#4ade80' : '#475569', 1);
-      rect(ctx, 8, y + 2, 10, 2, '#334155', 1);
-      rect(ctx, 8, y + 4, 6, 2, '#292524', 1);
+      fillRect(s, 2, y, 28, 7, '#0f172a');
+      setPixel(s, 4, y + 2, active ? '#4ade80' : '#475569');
+      setPixel(s, 4, y + 4, active ? '#4ade80' : '#475569');
+      fillRect(s, 8, y + 2, 10, 2, '#334155');
+      fillRect(s, 8, y + 4, 6, 2, '#292524');
     }
-    rect(ctx, 0, 47, 32, 1, '#0f172a', 1);
+    fillRect(s, 0, 47, 32, 1, '#0f172a');
   });
 }
 
-/** Draw bookshelf */
-export function getBookshelfSprite(): HTMLCanvasElement {
-  return getCachedCanvas('bookshelf', 32, 40, (ctx) => {
+export function getBookshelfSprite(): SpriteData {
+  return getFurnitureSpriteCache('bookshelf', 32, 40, (s) => {
     const wood = '#78350f';
     const woodLight = '#92400e';
-    rect(ctx, 0, 0, 32, 40, wood, 1);
-    rect(ctx, 0, 0, 32, 2, woodLight, 1);
-    // Shelves
-    rect(ctx, 1, 12, 30, 2, woodLight, 1);
-    rect(ctx, 1, 24, 30, 2, woodLight, 1);
-    rect(ctx, 1, 36, 30, 2, woodLight, 1);
-    // Books
+    fillRect(s, 0, 0, 32, 40, wood);
+    fillRect(s, 0, 0, 32, 2, woodLight);
+    fillRect(s, 1, 12, 30, 2, woodLight);
+    fillRect(s, 1, 24, 30, 2, woodLight);
+    fillRect(s, 1, 36, 30, 2, woodLight);
     const bookColors = ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6'];
     for (let shelf = 0; shelf < 3; shelf++) {
       const baseY = 3 + shelf * 12;
       for (let b = 0; b < 5; b++) {
         const bw = 4 + (b % 2);
         const bh = 7 + (b * 2) % 4;
-        rect(ctx, 2 + b * 6, baseY + 8 - bh, bw, bh, bookColors[b], 1);
+        fillRect(s, 2 + b * 6, baseY + 8 - bh, bw, bh, bookColors[b]);
       }
     }
   });
 }
 
-/** Draw whiteboard */
-export function getWhiteboardSprite(): HTMLCanvasElement {
-  return getCachedCanvas('whiteboard', 48, 32, (ctx) => {
-    rect(ctx, 0, 0, 48, 32, '#f8fafc', 1);
-    rect(ctx, 0, 0, 48, 2, '#94a3b8', 1);
-    rect(ctx, 0, 30, 48, 2, '#94a3b8', 1);
-    rect(ctx, 0, 0, 2, 32, '#94a3b8', 1);
-    rect(ctx, 46, 0, 2, 32, '#94a3b8', 1);
-    // Lines
-    rect(ctx, 4, 6, 24, 1, '#cbd5e1', 1);
-    rect(ctx, 4, 10, 30, 1, '#cbd5e1', 1);
-    rect(ctx, 4, 14, 18, 1, '#cbd5e1', 1);
-    rect(ctx, 4, 18, 28, 1, '#cbd5e1', 1);
-    rect(ctx, 4, 22, 22, 1, '#cbd5e1', 1);
+export function getWhiteboardSprite(): SpriteData {
+  return getFurnitureSpriteCache('whiteboard', 48, 32, (s) => {
+    fillRect(s, 0, 0, 48, 32, '#f8fafc');
+    fillRect(s, 0, 0, 48, 2, '#94a3b8');
+    fillRect(s, 0, 30, 48, 2, '#94a3b8');
+    fillRect(s, 0, 0, 2, 32, '#94a3b8');
+    fillRect(s, 46, 0, 2, 32, '#94a3b8');
+    fillRect(s, 4, 6, 24, 1, '#cbd5e1');
+    fillRect(s, 4, 10, 30, 1, '#cbd5e1');
+    fillRect(s, 4, 14, 18, 1, '#cbd5e1');
+    fillRect(s, 4, 18, 28, 1, '#cbd5e1');
+    fillRect(s, 4, 22, 22, 1, '#cbd5e1');
   });
 }
 
-/** Draw sofa (front) */
-export function getSofaFrontSprite(): HTMLCanvasElement {
-  return getCachedCanvas('sofa-front', 64, 24, (ctx) => {
-    rect(ctx, 0, 0, 64, 16, '#d6d3d1', 1);
-    rect(ctx, 0, 0, 64, 4, '#e7e5e4', 1);
-    rect(ctx, 4, 6, 16, 8, '#f5f5f4', 1);
-    rect(ctx, 24, 6, 16, 8, '#f5f5f4', 1);
-    rect(ctx, 44, 6, 16, 8, '#f5f5f4', 1);
-    rect(ctx, 0, 16, 64, 4, '#a8a29e', 1);
-    rect(ctx, 0, 20, 4, 4, '#78716c', 1);
-    rect(ctx, 60, 20, 4, 4, '#78716c', 1);
+export function getSofaFrontSprite(): SpriteData {
+  return getFurnitureSpriteCache('sofa-front', 32, 16, (s) => {
+    fillRect(s, 0, 0, 32, 10, '#d6d3d1');
+    fillRect(s, 0, 0, 32, 4, '#e7e5e4');
+    fillRect(s, 2, 3, 8, 6, '#f5f5f4');
+    fillRect(s, 12, 3, 8, 6, '#f5f5f4');
+    fillRect(s, 22, 3, 8, 6, '#f5f5f4');
+    fillRect(s, 0, 10, 32, 4, '#a8a29e');
+    fillRect(s, 0, 14, 4, 2, '#78716c');
+    fillRect(s, 28, 14, 4, 2, '#78716c');
   });
 }
 
-/** Draw coffee machine */
-export function getCoffeeMachineSprite(): HTMLCanvasElement {
-  return getCachedCanvas('coffee-machine', 16, 24, (ctx) => {
-    rect(ctx, 1, 0, 14, 4, '#4b5563', 1);
-    rect(ctx, 2, 4, 12, 16, '#374151', 1);
-    rect(ctx, 4, 14, 8, 3, '#1f2937', 1);
-    px(ctx, 11, 7, '#22c55e', 1);
-    rect(ctx, 5, 20, 6, 4, '#78350f', 1);
+export function getCoffeeMachineSprite(): SpriteData {
+  return getFurnitureSpriteCache('coffee-machine', 16, 24, (s) => {
+    fillRect(s, 1, 0, 14, 4, '#4b5563');
+    fillRect(s, 2, 4, 12, 16, '#374151');
+    fillRect(s, 4, 14, 8, 3, '#1f2937');
+    setPixel(s, 11, 7, '#22c55e');
+    fillRect(s, 5, 20, 6, 4, '#78350f');
   });
 }
 
-/** Draw plant */
-export function getPlantSprite(): HTMLCanvasElement {
-  return getCachedCanvas('plant', 16, 20, (ctx) => {
-    // Pot
-    rect(ctx, 4, 12, 8, 2, '#d97706', 1);
-    rect(ctx, 3, 14, 10, 6, '#b45309', 1);
-    // Leaves
-    rect(ctx, 5, 2, 6, 10, '#16a34a', 1);
-    rect(ctx, 2, 4, 5, 8, '#22c55e', 1);
-    rect(ctx, 9, 4, 5, 8, '#22c55e', 1);
-    rect(ctx, 6, 0, 4, 4, '#16a34a', 1);
+export function getPlantSprite(): SpriteData {
+  return getFurnitureSpriteCache('plant', 16, 32, (s) => {
+    // Top is leaves (background tile)
+    fillRect(s, 5, 2, 6, 10, '#16a34a');
+    fillRect(s, 2, 4, 5, 8, '#22c55e');
+    fillRect(s, 9, 4, 5, 8, '#22c55e');
+    fillRect(s, 6, 0, 4, 4, '#16a34a');
+    // Bottom is pot (blocks walking)
+    fillRect(s, 4, 16, 8, 2, '#d97706');
+    fillRect(s, 3, 18, 10, 6, '#b45309');
   });
 }
 
-/** Draw command screen (large) */
-export function getCommandScreenSprite(active: boolean): HTMLCanvasElement {
-  const key = `command-screen-${active}`;
-  return getCachedCanvas(key, 96, 48, (ctx) => {
-    // Frame
-    rect(ctx, 0, 0, 96, 48, '#0f172a', 1);
-    rect(ctx, 1, 1, 94, 46, '#1e293b', 1);
-    // 6 screens
+export function getCommandScreenSprite(active: boolean): SpriteData {
+  return getFurnitureSpriteCache(`command-screen-${active}`, 96, 48, (s) => {
+    fillRect(s, 0, 0, 96, 48, '#0f172a');
+    fillRect(s, 1, 1, 94, 46, '#1e293b');
     for (let i = 0; i < 6; i++) {
       const sx = 3 + (i % 3) * 31;
       const sy = 3 + Math.floor(i / 3) * 21;
-      rect(ctx, sx, sy, 28, 18, active ? '#1e3a5f' : '#1e293b', 1);
+      fillRect(s, sx, sy, 28, 18, active ? '#1e3a5f' : '#1e293b');
       if (active) {
-        rect(ctx, sx + 3, sy + 3, 8, 1, '#8B5CF6', 1);
-        rect(ctx, sx + 3, sy + 5, 5, 1, '#60a5fa', 1);
-        rect(ctx, sx + 3, sy + 7, 10, 1, '#3b82f6', 1);
+        fillRect(s, sx + 3, sy + 3, 8, 1, '#8B5CF6');
+        fillRect(s, sx + 3, sy + 5, 5, 1, '#60a5fa');
+        fillRect(s, sx + 3, sy + 7, 10, 1, '#3b82f6');
       }
     }
-    // Crown icon
     if (active) {
-      rect(ctx, 44, 0, 8, 2, '#8B5CF6', 1);
+      fillRect(s, 44, 0, 8, 2, '#8B5CF6');
     }
-  });
-}
-
-// ════════════════════════════════════════════════════════════════
-// SPEECH BUBBLE SPRITES
-// ════════════════════════════════════════════════════════════════
-
-export function getPermissionBubbleSprite(): HTMLCanvasElement {
-  return getCachedCanvas('bubble-permission', 11, 13, (ctx) => {
-    // Border
-    rect(ctx, 0, 0, 11, 10, '#555566', 1);
-    // Fill
-    rect(ctx, 1, 1, 9, 8, '#EEEEFF', 1);
-    // ... dots
-    px(ctx, 3, 4, '#CCA700', 1);
-    px(ctx, 5, 4, '#CCA700', 1);
-    px(ctx, 7, 4, '#CCA700', 1);
-    // Tail
-    rect(ctx, 4, 10, 3, 1, '#555566', 1);
-    px(ctx, 5, 11, '#555566', 1);
-  });
-}
-
-export function getWaitingBubbleSprite(): HTMLCanvasElement {
-  return getCachedCanvas('bubble-waiting', 11, 13, (ctx) => {
-    // Border
-    rect(ctx, 1, 0, 9, 10, '#555566', 1);
-    // Fill
-    rect(ctx, 1, 1, 9, 8, '#EEEEFF', 1);
-    // Checkmark
-    px(ctx, 8, 2, '#44BB66', 1);
-    px(ctx, 7, 3, '#44BB66', 1);
-    px(ctx, 6, 4, '#44BB66', 1);
-    px(ctx, 3, 5, '#44BB66', 1);
-    px(ctx, 4, 5, '#44BB66', 1);
-    px(ctx, 5, 4, '#44BB66', 1);
-    // Tail
-    rect(ctx, 4, 10, 3, 1, '#555566', 1);
-    px(ctx, 5, 11, '#555566', 1);
-  });
-}
-
-export function getThinkingBubbleSprite(): HTMLCanvasElement {
-  return getCachedCanvas('bubble-thinking', 11, 13, (ctx) => {
-    // Border
-    rect(ctx, 0, 0, 11, 10, '#555566', 1);
-    // Fill
-    rect(ctx, 1, 1, 9, 8, '#EEEEFF', 1);
-    // ? mark
-    px(ctx, 4, 2, '#3b82f6', 1);
-    px(ctx, 5, 2, '#3b82f6', 1);
-    px(ctx, 6, 2, '#3b82f6', 1);
-    px(ctx, 6, 3, '#3b82f6', 1);
-    px(ctx, 5, 4, '#3b82f6', 1);
-    px(ctx, 4, 5, '#3b82f6', 1);
-    px(ctx, 5, 6, '#3b82f6', 1);
-    px(ctx, 5, 8, '#3b82f6', 1);
-    // Tail
-    rect(ctx, 4, 10, 3, 1, '#555566', 1);
-    px(ctx, 5, 11, '#555566', 1);
   });
 }
 
@@ -623,25 +905,106 @@ export function getThinkingBubbleSprite(): HTMLCanvasElement {
 // ════════════════════════════════════════════════════════════════
 
 export const FLOOR_COLORS: Record<number, string> = {
-  [TileType.WALL]: '#3A3A5C',
-  [TileType.FLOOR_1]: '#e8e0d4',  // Command - warm beige
-  [TileType.FLOOR_2]: '#dcc8a8',  // Meeting - light wood
-  [TileType.FLOOR_3]: '#d0d8e4',  // Situation - cool blue
-  [TileType.FLOOR_4]: '#d0e4d8',  // Dev - tech green
-  [TileType.FLOOR_5]: '#e4d0d8',  // Design - warm pink
-  [TileType.FLOOR_6]: '#c8d8d4',  // Server - dark teal
-  [TileType.FLOOR_7]: '#d8d0e4',  // Research - purple
-  [TileType.FLOOR_8]: '#ddd8d0',  // Lounge - warm stone
-  [TileType.FLOOR_9]: '#d4d4d0',  // Corridor - neutral
-  [TileType.VOID]: '#1a1a2e',
+  0: '#3A3A5C',     // WALL
+  1: '#e8e0d4',     // Command - warm beige
+  2: '#dcc8a8',     // Meeting - light wood
+  3: '#d0d8e4',     // Situation - cool blue
+  4: '#d0e4d8',     // Dev - tech green
+  5: '#e4d0d8',     // Design - warm pink
+  6: '#c8d8d4',     // Server - dark teal
+  7: '#d8d0e4',     // Research - purple
+  8: '#ddd8d0',     // Lounge - warm stone
+  9: '#d4d4d0',     // Corridor - neutral
+  255: '#1a1a2e',   // VOID
 };
 
 export const WALL_COLOR = '#3A3A5C';
 export const WALL_TOP_COLOR = '#4A4A6C';
 export const WALL_SIDE_COLOR = '#2A2A4C';
 
+// Default floor sprite (16×16 solid gray)
+const DEFAULT_FLOOR_SPRITE: SpriteData = Array.from({ length: TILE_SIZE }, () =>
+  Array.from({ length: TILE_SIZE }, () => '#b0b0b0')
+);
+
+// Cached colorized floor sprites
+const floorSpriteCache = new Map<string, SpriteData>();
+
+export function getColorizedFloorSprite(patternIndex: number, color: ColorValue): SpriteData {
+  const key = `floor-${patternIndex}-${color.h}-${color.s}-${color.b}-${color.c}`;
+  const cached = floorSpriteCache.get(key);
+  if (cached) return cached;
+
+  const base = DEFAULT_FLOOR_SPRITE;
+  const result = colorize ? colorizeSprite(base, { ...color, colorize: true }) : base;
+  floorSpriteCache.set(key, result);
+  return result;
+}
+
+// Wall auto-tiling sprite cache
+const wallSpriteCache = new Map<string, { sprite: SpriteData; offsetY: number }>();
+
+export function getColorizedWallSprite(mask: number, color: ColorValue): { sprite: SpriteData; offsetY: number } {
+  const key = `wall-0-${mask}-${color.h}-${color.s}-${color.b}-${color.c}`;
+  const cached = wallSpriteCache.get(key);
+  if (cached) return cached;
+
+  // Generate a wall sprite for this bitmask
+  // Simple approach: 16×32 wall tile, top part extends above
+  const spr = emptySprite(16, 32);
+  const wallBase = hexToRgb(WALL_COLOR);
+  if (wallBase) {
+    const [, , lum] = rgbToHsl(wallBase[0], wallBase[1], wallBase[2]);
+    let newL = lum;
+    newL = 0.5 + (newL - 0.5) * ((100 + color.c) / 100);
+    newL += color.b / 200;
+    newL = Math.max(0, Math.min(1, newL));
+    const [r, g, b] = hslToRgb(color.h, color.s / 100, newL);
+    const wallHex = rgbToHex(r, g, b);
+    const wallLight = lightenHex(wallHex, 0.15);
+    const wallDark = darkenHex(wallHex, 0.85);
+
+    // Top face
+    fillRect(spr, 0, 0, 16, 8, wallLight);
+    // Front face
+    fillRect(spr, 0, 8, 16, 20, wallHex);
+    // Brick pattern
+    for (let br = 0; br < 4; br++) {
+      const by = 8 + br * 5;
+      const off = br % 2 === 0 ? 0 : 8;
+      for (let bc = -1; bc < 3; bc++) {
+        fillRect(spr, off + bc * 8 + 1, by + 1, 6, 3, wallDark);
+      }
+    }
+    // Top edge highlight
+    fillRect(spr, 0, 8, 16, 1, wallLight);
+
+    // Auto-tiling: cut away sides based on mask
+    if (mask & 1) fillRect(spr, 0, 0, 2, 32, ''); // North neighbor: clear top
+    if (mask & 2) fillRect(spr, 14, 8, 2, 20, ''); // East neighbor
+    if (mask & 4) fillRect(spr, 0, 20, 16, 12, ''); // South neighbor
+    if (mask & 8) fillRect(spr, 0, 8, 2, 20, ''); // West neighbor
+  }
+
+  const result = { sprite: spr, offsetY: TILE_SIZE }; // Wall extends 1 tile above
+  wallSpriteCache.set(key, result);
+  return result;
+}
+
+export function wallColorToHex(color: ColorValue): string {
+  const base = hexToRgb(WALL_COLOR);
+  if (!base) return WALL_COLOR;
+  const [, , lum] = rgbToHsl(base[0], base[1], base[2]);
+  let newL = lum;
+  newL = 0.5 + (newL - 0.5) * ((100 + color.c) / 100);
+  newL += color.b / 200;
+  newL = Math.max(0, Math.min(1, newL));
+  const [r, g, b] = hslToRgb(color.h, color.s / 100, newL);
+  return rgbToHex(r, g, b);
+}
+
 // ════════════════════════════════════════════════════════════════
-// CHARACTER PALETTES — 10 distinct palettes for 10 agent roles
+// CHARACTER PALETTES — 10 distinct palettes for agent roles
 // ════════════════════════════════════════════════════════════════
 
 export const ROLE_PALETTES: Record<string, CharPalette> = {
@@ -691,7 +1054,25 @@ export function getRolePalette(role: string): CharPalette {
   return ROLE_PALETTES[role] ?? ROLE_PALETTES.orchestrator;
 }
 
-// Clear sprite cache (for testing or when needed)
+// ── Palette diversity ──────────────────────────────────────────
+const PALETTE_ORDER = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+const shuffled = [...PALETTE_ORDER].sort(() => Math.random() - 0.5);
+let nextPaletteIdx = 0;
+
+export function pickDiversePalette(): { paletteIndex: number; hueShift: number } {
+  const paletteIndex = shuffled[nextPaletteIdx % shuffled.length];
+  nextPaletteIdx++;
+  // Beyond 6 agents, add hue shift for visual distinction
+  const hueShift = nextPaletteIdx > 6 ? (45 + Math.random() * 135) : 0;
+  return { paletteIndex, hueShift };
+}
+
+// Clear all caches
 export function clearSpriteCache() {
-  spriteCanvasCache.clear();
+  charSpriteCache.clear();
+  furnitureSpriteCache.clear();
+  floorSpriteCache.clear();
+  wallSpriteCache.clear();
+  colorizeCache.clear();
+  zoomCaches.clear();
 }

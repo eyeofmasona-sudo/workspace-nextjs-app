@@ -1,6 +1,6 @@
-// ─── Agent OS — Pixel Office Canvas Component ───────────────────
+// ─── Agent OS — Pixel Office Canvas Component (1:1 pixel-agents architecture) ──
 // React component wrapping the canvas-based pixel-art office.
-// Connects to useOfficeData and manages the PixelOfficeEngine.
+// Proper DPR handling, camera follow, full mouse interaction.
 
 'use client';
 
@@ -16,9 +16,12 @@ interface PixelOfficeCanvasProps {
 
 export function PixelOfficeCanvas({ agents, tasks, onAgentClick }: PixelOfficeCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<PixelOfficeEngine | null>(null);
   const [zoom, setZoom] = useState(3);
   const lastSyncRef = useRef<string>('');
+  const isPanningRef = useRef(false);
+  const panStartRef = useRef({ mouseX: 0, mouseY: 0, panX: 0, panY: 0 });
 
   // Initialize engine
   useEffect(() => {
@@ -39,7 +42,6 @@ export function PixelOfficeCanvas({ agents, tasks, onAgentClick }: PixelOfficeCa
     const engine = engineRef.current;
     if (!engine) return;
 
-    // Only sync if data actually changed
     const syncKey = agents.map(a => `${a.id}:${a.runtimeState?.status ?? a.status}:${a.runtimeState?.locationZone ?? a.locationZone}`).join('|');
     if (syncKey === lastSyncRef.current) return;
     lastSyncRef.current = syncKey;
@@ -60,22 +62,24 @@ export function PixelOfficeCanvas({ agents, tasks, onAgentClick }: PixelOfficeCa
     })));
   }, [agents]);
 
-  // Resize canvas to fill container
+  // Resize canvas with DPR support
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
 
     const resize = () => {
-      const container = canvas.parentElement;
-      if (!container) return;
       const rect = container.getBoundingClientRect();
-      canvas.width = rect.width;
-      canvas.height = rect.height;
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.round(rect.width * dpr);
+      canvas.height = Math.round(rect.height * dpr);
+      canvas.style.width = `${rect.width}px`;
+      canvas.style.height = `${rect.height}px`;
     };
 
     resize();
     const observer = new ResizeObserver(resize);
-    observer.observe(canvas.parentElement!);
+    observer.observe(container);
     return () => observer.disconnect();
   }, []);
 
@@ -98,47 +102,55 @@ export function PixelOfficeCanvas({ agents, tasks, onAgentClick }: PixelOfficeCa
     const engine = engineRef.current;
     if (!engine || !onAgentClick) return;
 
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const x = (e.clientX - rect.left) * dpr;
+    const y = (e.clientY - rect.top) * dpr;
     const agentId = engine.getCharacterAtPixel(x, y);
     if (agentId) {
       onAgentClick(agentId);
     }
   }, [onAgentClick]);
 
-  // Pan via drag
-  const [isPanning, setIsPanning] = useState(false);
-  const lastMouseRef = useRef({ x: 0, y: 0 });
-
+  // Mouse down for panning
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
-      setIsPanning(true);
-      lastMouseRef.current = { x: e.clientX, y: e.clientY };
+      isPanningRef.current = true;
+      const engine = engineRef.current;
+      panStartRef.current = {
+        mouseX: e.clientX,
+        mouseY: e.clientY,
+        panX: engine?.panX ?? 0,
+        panY: engine?.panY ?? 0,
+      };
+      e.preventDefault();
     }
   }, []);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isPanning) return;
-    const dx = e.clientX - lastMouseRef.current.x;
-    const dy = e.clientY - lastMouseRef.current.y;
-    lastMouseRef.current = { x: e.clientX, y: e.clientY };
-
+    if (!isPanningRef.current) return;
     const engine = engineRef.current;
-    if (engine) {
-      engine.panX += dx;
-      engine.panY += dy;
-    }
-  }, [isPanning]);
+    if (!engine) return;
+
+    const dx = e.clientX - panStartRef.current.mouseX;
+    const dy = e.clientY - panStartRef.current.mouseY;
+    const dpr = window.devicePixelRatio || 1;
+    engine.panX = panStartRef.current.panX + dx * dpr;
+    engine.panY = panStartRef.current.panY + dy * dpr;
+
+    // Break camera follow on manual pan
+    engine.cameraFollowId = null;
+  }, []);
 
   const handleMouseUp = useCallback(() => {
-    setIsPanning(false);
+    isPanningRef.current = false;
   }, []);
 
   return (
-    <div className="w-full h-full relative overflow-hidden bg-slate-200">
+    <div ref={containerRef} className="w-full h-full relative overflow-hidden bg-slate-200">
       <canvas
         ref={canvasRef}
         className="w-full h-full block"
