@@ -1,0 +1,1033 @@
+/**
+ * Main renderer for the pixel-office engine.
+ *
+ * Ported 1:1 from pixel-agents/webview-ui/src/office/engine/renderer.ts
+ * with Agent OS extensions:
+ *   - Zone labels rendering
+ *   - Name/role labels rendering
+ *   - Workstation glow for active agents
+ *   - Typing sway animation
+ *   - Done bubble support
+ *   - Status glow effects
+ *
+ * Rendering pipeline: tile grid → z-sorted furniture+characters → bubbles → labels → zone labels
+ */
+
+import type { ColorValue } from '../types';
+import {
+  BUBBLE_FADE_DURATION_SEC,
+  BUBBLE_SITTING_OFFSET_PX,
+  BUBBLE_VERTICAL_OFFSET_PX,
+  BUTTON_ICON_COLOR,
+  BUTTON_ICON_SIZE_FACTOR,
+  BUTTON_LINE_WIDTH_MIN,
+  BUTTON_LINE_WIDTH_ZOOM_FACTOR,
+  BUTTON_MIN_RADIUS,
+  BUTTON_RADIUS_ZOOM_FACTOR,
+  CHARACTER_SITTING_OFFSET_PX,
+  CHARACTER_Z_SORT_OFFSET,
+  DELETE_BUTTON_BG,
+  FALLBACK_FLOOR_COLOR,
+  GHOST_BORDER_HOVER_FILL,
+  GHOST_BORDER_HOVER_STROKE,
+  GHOST_BORDER_STROKE,
+  GHOST_INVALID_TINT,
+  GHOST_PREVIEW_SPRITE_ALPHA,
+  GHOST_PREVIEW_TINT_ALPHA,
+  GHOST_VALID_TINT,
+  GRID_LINE_COLOR,
+  HOVERED_OUTLINE_ALPHA,
+  OUTLINE_Z_SORT_OFFSET,
+  ROTATE_BUTTON_BG,
+  SEAT_AVAILABLE_COLOR,
+  SEAT_BUSY_COLOR,
+  SEAT_OWN_COLOR,
+  SELECTED_OUTLINE_ALPHA,
+  SELECTION_DASH_PATTERN,
+  SELECTION_HIGHLIGHT_COLOR,
+  VOID_TILE_DASH_PATTERN,
+  VOID_TILE_OUTLINE_COLOR,
+  WALL_COLOR,
+  CHARACTER_SCALE_FACTOR,
+  ROLE_LABEL_ROLE_FONT_SCALE,
+  ROLE_LABEL_ZONE_FONT_SCALE,
+  ROLE_LABEL_MIN_ROLE_FONT,
+  ROLE_LABEL_MIN_ZONE_FONT,
+  TYPING_SWAY_AMPLITUDE_PX,
+  TYPING_SWAY_SPEED,
+  WORKSTATION_GLOW_RADIUS_PX,
+  WORKSTATION_GLOW_ALPHA,
+  ROLE_DISPLAY,
+} from '../constants';
+import type { ZoneLabel } from '../types';
+import { getColorizedFloorSprite, hasFloorSprites } from '../floorTiles';
+import { getCachedSprite, getOutlineSprite } from '../sprites/spriteCache';
+import {
+  BUBBLE_PERMISSION_SPRITE,
+  BUBBLE_WAITING_SPRITE,
+  BUBBLE_DONE_SPRITE,
+  getCharacterSprites,
+} from '../sprites/spriteData';
+import type {
+  Character,
+  FurnitureInstance,
+  Seat,
+  SpriteData,
+  TileType as TileTypeVal,
+} from '../types';
+import { CharacterState, TILE_SIZE, TileType } from '../types';
+import { getWallInstances, hasWallSprites, wallColorToHex } from '../wallTiles';
+import { getCharacterSprite } from './characters';
+import { renderMatrixEffect } from './matrixEffect';
+
+// ── Helpers ──────────────────────────────────────────────────────
+
+/** Hex color → RGB */
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return m
+    ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) }
+    : { r: 74, g: 222, b: 128 };
+}
+
+/** Global time reference for animations (set each frame) */
+let _frameTime = 0;
+
+// ── Tile grid rendering ──────────────────────────────────────────
+
+/** @internal */
+export function renderTileGrid(
+  ctx: CanvasRenderingContext2D,
+  tileMap: TileTypeVal[][],
+  offsetX: number,
+  offsetY: number,
+  zoom: number,
+  tileColors?: Array<ColorValue | null>,
+  cols?: number,
+): void {
+  const s = TILE_SIZE * zoom;
+  const useSpriteFloors = hasFloorSprites();
+  const tmRows = tileMap.length;
+  const tmCols = tmRows > 0 ? tileMap[0].length : 0;
+  const layoutCols = cols ?? tmCols;
+
+  // Floor tiles + wall base color
+  for (let r = 0; r < tmRows; r++) {
+    for (let c = 0; c < tmCols; c++) {
+      const tile = tileMap[r][c];
+
+      // Skip VOID tiles entirely (transparent)
+      if (tile === TileType.VOID) continue;
+
+      if (tile === TileType.WALL || !useSpriteFloors) {
+        // Wall tiles or fallback: solid color
+        if (tile === TileType.WALL) {
+          const colorIdx = r * layoutCols + c;
+          const wallColor = tileColors?.[colorIdx];
+          ctx.fillStyle = wallColor
+            ? wallColorToHex(wallColor)
+            : WALL_COLOR;
+        } else {
+          ctx.fillStyle = FALLBACK_FLOOR_COLOR;
+        }
+        ctx.fillRect(offsetX + c * s, offsetY + r * s, s, s);
+        continue;
+      }
+
+      // Floor tile: get colorized sprite
+      const colorIdx = r * layoutCols + c;
+      const color = tileColors?.[colorIdx] ?? {
+        h: 0,
+        s: 0,
+        b: 0,
+        c: 0,
+      };
+      const sprite = getColorizedFloorSprite(tile, color);
+      const cached = getCachedSprite(sprite, zoom);
+      ctx.drawImage(cached, offsetX + c * s, offsetY + r * s);
+    }
+  }
+}
+
+// ── Z-sorted scene rendering ─────────────────────────────────────
+
+interface ZDrawable {
+  zY: number;
+  draw: (ctx: CanvasRenderingContext2D) => void;
+}
+
+/** @internal */
+export function renderScene(
+  ctx: CanvasRenderingContext2D,
+  furniture: FurnitureInstance[],
+  characters: Character[],
+  offsetX: number,
+  offsetY: number,
+  zoom: number,
+  selectedAgentId: number | null,
+  hoveredAgentId: number | null,
+): void {
+  const drawables: ZDrawable[] = [];
+
+  // Furniture
+  for (const f of furniture) {
+    const cached = getCachedSprite(f.sprite, zoom);
+    const fx = offsetX + f.x * zoom;
+    const fy = offsetY + f.y * zoom;
+    if (f.mirrored) {
+      drawables.push({
+        zY: f.zY,
+        draw: (c) => {
+          c.save();
+          c.translate(fx + cached.width, fy);
+          c.scale(-1, 1);
+          c.drawImage(cached, 0, 0);
+          c.restore();
+        },
+      });
+    } else {
+      drawables.push({
+        zY: f.zY,
+        draw: (c) => {
+          c.drawImage(cached, fx, fy);
+        },
+      });
+    }
+  }
+
+  // Characters
+  for (const ch of characters) {
+    const sprites = getCharacterSprites(ch.palette, ch.hueShift);
+    const spriteData = getCharacterSprite(ch, sprites);
+    const cached = getCachedSprite(spriteData, zoom * CHARACTER_SCALE_FACTOR);
+    // Sitting offset: shift character down when seated so they visually sit in the chair
+    const sittingOffset =
+      ch.state === CharacterState.TYPE ? CHARACTER_SITTING_OFFSET_PX : 0;
+
+    // Typing animation: subtle sway for working agents
+    let swayOffsetX = 0;
+    let swayOffsetY = 0;
+    if (ch.state === CharacterState.TYPE && ch.isActive) {
+      swayOffsetX =
+        Math.sin(_frameTime * TYPING_SWAY_SPEED) *
+        TYPING_SWAY_AMPLITUDE_PX *
+        0.5;
+      swayOffsetY =
+        Math.sin(_frameTime * TYPING_SWAY_SPEED * 1.3) *
+        TYPING_SWAY_AMPLITUDE_PX *
+        0.3;
+    }
+
+    // Anchor at bottom-center of character — round to integer device pixels
+    const drawX = Math.round(
+      offsetX + (ch.x + swayOffsetX) * zoom - cached.width / 2,
+    );
+    const drawY = Math.round(
+      offsetY +
+        (ch.y + sittingOffset + swayOffsetY) * zoom -
+        cached.height,
+    );
+
+    // Sort characters by bottom of their tile (not center) so they render
+    // in front of same-row furniture (e.g. chairs) but behind furniture
+    // at lower rows (e.g. desks, bookshelves that occlude from below).
+    const charZY = ch.y + TILE_SIZE / 2 + CHARACTER_Z_SORT_OFFSET;
+
+    // Matrix spawn/despawn effect — skip outline, use per-pixel rendering
+    if (ch.matrixEffect) {
+      const mDrawX = drawX;
+      const mDrawY = drawY;
+      const mSpriteData = spriteData;
+      const mCh = ch;
+      drawables.push({
+        zY: charZY,
+        draw: (c) => {
+          renderMatrixEffect(c, mCh, mSpriteData, mDrawX, mDrawY, zoom);
+        },
+      });
+      continue;
+    }
+
+    // White outline: full opacity for selected, 50% for hover
+    const isSelected =
+      selectedAgentId !== null && ch.id === selectedAgentId;
+    const isHovered =
+      hoveredAgentId !== null && ch.id === hoveredAgentId;
+    if (isSelected || isHovered) {
+      const outlineAlpha = isSelected
+        ? SELECTED_OUTLINE_ALPHA
+        : HOVERED_OUTLINE_ALPHA;
+      const outlineData = getOutlineSprite(spriteData);
+      const outlineCached = getCachedSprite(
+        outlineData,
+        zoom * CHARACTER_SCALE_FACTOR,
+      );
+      const olDrawX = drawX - zoom; // 1 sprite-pixel offset, scaled
+      const olDrawY = drawY - zoom; // outline follows sitting offset via drawY
+      drawables.push({
+        zY: charZY - OUTLINE_Z_SORT_OFFSET, // sort just before character
+        draw: (c) => {
+          c.save();
+          c.globalAlpha = outlineAlpha;
+          c.drawImage(outlineCached, olDrawX, olDrawY);
+          c.restore();
+        },
+      });
+    }
+
+    // Workstation glow for working agents (Agent OS extension)
+    if (ch.isActive && ch.state === CharacterState.TYPE) {
+      const roleInfo = ROLE_DISPLAY[ch.role];
+      const glowHex = roleInfo?.color ?? '#4ade80';
+      const glowRgb = hexToRgb(glowHex);
+      const glowX = Math.round(offsetX + ch.x * zoom);
+      const glowY = Math.round(
+        offsetY +
+          (ch.y + sittingOffset) * zoom -
+          cached.height * 0.4,
+      );
+      const glowRadius = WORKSTATION_GLOW_RADIUS_PX * zoom;
+      drawables.push({
+        zY: charZY - 1,
+        draw: (c) => {
+          c.save();
+          const gradient = c.createRadialGradient(
+            glowX,
+            glowY,
+            0,
+            glowX,
+            glowY,
+            glowRadius,
+          );
+          gradient.addColorStop(
+            0,
+            `rgba(${glowRgb.r},${glowRgb.g},${glowRgb.b},0.25)`,
+          );
+          gradient.addColorStop(
+            0.4,
+            `rgba(${glowRgb.r},${glowRgb.g},${glowRgb.b},0.12)`,
+          );
+          gradient.addColorStop(
+            1,
+            `rgba(${glowRgb.r},${glowRgb.g},${glowRgb.b},0)`,
+          );
+          c.fillStyle = gradient;
+          c.fillRect(
+            glowX - glowRadius,
+            glowY - glowRadius,
+            glowRadius * 2,
+            glowRadius * 2,
+          );
+          c.restore();
+        },
+      });
+    }
+
+    drawables.push({
+      zY: charZY,
+      draw: (c) => {
+        c.drawImage(cached, drawX, drawY);
+      },
+    });
+  }
+
+  // Sort by Y (lower = in front = drawn later)
+  drawables.sort((a, b) => a.zY - b.zY);
+
+  for (const d of drawables) {
+    d.draw(ctx);
+  }
+}
+
+// ── Seat indicators ──────────────────────────────────────────────
+
+function renderSeatIndicators(
+  ctx: CanvasRenderingContext2D,
+  seats: Map<string, Seat>,
+  characters: Map<number, Character>,
+  selectedAgentId: number | null,
+  hoveredTile: { col: number; row: number } | null,
+  offsetX: number,
+  offsetY: number,
+  zoom: number,
+): void {
+  if (selectedAgentId === null || !hoveredTile) return;
+  const selectedChar = characters.get(selectedAgentId);
+  if (!selectedChar) return;
+
+  // Only show indicator for the hovered seat tile
+  for (const [uid, seat] of seats) {
+    if (
+      seat.seatCol !== hoveredTile.col ||
+      seat.seatRow !== hoveredTile.row
+    )
+      continue;
+
+    const s = TILE_SIZE * zoom;
+    const x = offsetX + seat.seatCol * s;
+    const y = offsetY + seat.seatRow * s;
+
+    if (selectedChar.seatId === uid) {
+      // Selected agent's own seat — blue
+      ctx.fillStyle = SEAT_OWN_COLOR;
+    } else if (!seat.assigned) {
+      // Available seat — green
+      ctx.fillStyle = SEAT_AVAILABLE_COLOR;
+    } else {
+      // Busy (assigned to another agent) — red
+      ctx.fillStyle = SEAT_BUSY_COLOR;
+    }
+    ctx.fillRect(x, y, s, s);
+    break;
+  }
+}
+
+// ── Edit mode overlays ───────────────────────────────────────────
+
+/** @internal */
+export function renderGridOverlay(
+  ctx: CanvasRenderingContext2D,
+  offsetX: number,
+  offsetY: number,
+  zoom: number,
+  cols: number,
+  rows: number,
+  tileMap?: TileTypeVal[][],
+): void {
+  const s = TILE_SIZE * zoom;
+  ctx.strokeStyle = GRID_LINE_COLOR;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  // Vertical lines — offset by 0.5 for crisp 1px lines
+  for (let c = 0; c <= cols; c++) {
+    const x = offsetX + c * s + 0.5;
+    ctx.moveTo(x, offsetY);
+    ctx.lineTo(x, offsetY + rows * s);
+  }
+  // Horizontal lines
+  for (let r = 0; r <= rows; r++) {
+    const y = offsetY + r * s + 0.5;
+    ctx.moveTo(offsetX, y);
+    ctx.lineTo(offsetX + cols * s, y);
+  }
+  ctx.stroke();
+
+  // Draw faint dashed outlines on VOID tiles
+  if (tileMap) {
+    ctx.save();
+    ctx.strokeStyle = VOID_TILE_OUTLINE_COLOR;
+    ctx.lineWidth = 1;
+    ctx.setLineDash(VOID_TILE_DASH_PATTERN);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (tileMap[r]?.[c] === TileType.VOID) {
+          ctx.strokeRect(
+            offsetX + c * s + 0.5,
+            offsetY + r * s + 0.5,
+            s - 1,
+            s - 1,
+          );
+        }
+      }
+    }
+    ctx.restore();
+  }
+}
+
+/** Draw faint expansion placeholders 1 tile outside grid bounds (ghost border). */
+function renderGhostBorder(
+  ctx: CanvasRenderingContext2D,
+  offsetX: number,
+  offsetY: number,
+  zoom: number,
+  cols: number,
+  rows: number,
+  ghostHoverCol: number,
+  ghostHoverRow: number,
+): void {
+  const s = TILE_SIZE * zoom;
+  ctx.save();
+
+  // Collect ghost border tiles: one ring around the grid
+  const ghostTiles: Array<{ c: number; r: number }> = [];
+  // Top and bottom rows
+  for (let c = -1; c <= cols; c++) {
+    ghostTiles.push({ c, r: -1 });
+    ghostTiles.push({ c, r: rows });
+  }
+  // Left and right columns (excluding corners already added)
+  for (let r = 0; r < rows; r++) {
+    ghostTiles.push({ c: -1, r });
+    ghostTiles.push({ c: cols, r });
+  }
+
+  for (const { c, r } of ghostTiles) {
+    const x = offsetX + c * s;
+    const y = offsetY + r * s;
+    const isHovered = c === ghostHoverCol && r === ghostHoverRow;
+    if (isHovered) {
+      ctx.fillStyle = GHOST_BORDER_HOVER_FILL;
+      ctx.fillRect(x, y, s, s);
+    }
+    ctx.strokeStyle = isHovered
+      ? GHOST_BORDER_HOVER_STROKE
+      : GHOST_BORDER_STROKE;
+    ctx.lineWidth = 1;
+    ctx.setLineDash(VOID_TILE_DASH_PATTERN);
+    ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);
+  }
+
+  ctx.restore();
+}
+
+/** @internal */
+export function renderGhostPreview(
+  ctx: CanvasRenderingContext2D,
+  sprite: SpriteData,
+  col: number,
+  row: number,
+  valid: boolean,
+  offsetX: number,
+  offsetY: number,
+  zoom: number,
+  mirrored: boolean = false,
+): void {
+  const cached = getCachedSprite(sprite, zoom);
+  const x = offsetX + col * TILE_SIZE * zoom;
+  const y = offsetY + row * TILE_SIZE * zoom;
+  ctx.save();
+  ctx.globalAlpha = GHOST_PREVIEW_SPRITE_ALPHA;
+  if (mirrored) {
+    ctx.translate(x + cached.width, y);
+    ctx.scale(-1, 1);
+    ctx.drawImage(cached, 0, 0);
+  } else {
+    ctx.drawImage(cached, x, y);
+  }
+  // Tint overlay — reset transform for correct fill position
+  ctx.restore();
+  ctx.save();
+  ctx.globalAlpha = GHOST_PREVIEW_TINT_ALPHA;
+  ctx.fillStyle = valid ? GHOST_VALID_TINT : GHOST_INVALID_TINT;
+  ctx.fillRect(x, y, cached.width, cached.height);
+  ctx.restore();
+}
+
+/** @internal */
+export function renderSelectionHighlight(
+  ctx: CanvasRenderingContext2D,
+  col: number,
+  row: number,
+  w: number,
+  h: number,
+  offsetX: number,
+  offsetY: number,
+  zoom: number,
+): void {
+  const s = TILE_SIZE * zoom;
+  const x = offsetX + col * s;
+  const y = offsetY + row * s;
+  ctx.save();
+  ctx.strokeStyle = SELECTION_HIGHLIGHT_COLOR;
+  ctx.lineWidth = 2;
+  ctx.setLineDash(SELECTION_DASH_PATTERN);
+  ctx.strokeRect(x + 1, y + 1, w * s - 2, h * s - 2);
+  ctx.restore();
+}
+
+/** @internal */
+export function renderDeleteButton(
+  ctx: CanvasRenderingContext2D,
+  col: number,
+  row: number,
+  w: number,
+  _h: number,
+  offsetX: number,
+  offsetY: number,
+  zoom: number,
+): DeleteButtonBounds {
+  const s = TILE_SIZE * zoom;
+  // Position at top-right corner of selected furniture
+  const cx = offsetX + (col + w) * s + 1;
+  const cy = offsetY + row * s - 1;
+  const radius = Math.max(
+    BUTTON_MIN_RADIUS,
+    zoom * BUTTON_RADIUS_ZOOM_FACTOR,
+  );
+
+  // Circle background
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.fillStyle = DELETE_BUTTON_BG;
+  ctx.fill();
+
+  // X mark
+  ctx.strokeStyle = BUTTON_ICON_COLOR;
+  ctx.lineWidth = Math.max(
+    BUTTON_LINE_WIDTH_MIN,
+    zoom * BUTTON_LINE_WIDTH_ZOOM_FACTOR,
+  );
+  ctx.lineCap = 'round';
+  const xSize = radius * BUTTON_ICON_SIZE_FACTOR;
+  ctx.beginPath();
+  ctx.moveTo(cx - xSize, cy - xSize);
+  ctx.lineTo(cx + xSize, cy + xSize);
+  ctx.moveTo(cx + xSize, cy - xSize);
+  ctx.lineTo(cx - xSize, cy + xSize);
+  ctx.stroke();
+  ctx.restore();
+
+  return { cx, cy, radius };
+}
+
+function renderRotateButton(
+  ctx: CanvasRenderingContext2D,
+  col: number,
+  row: number,
+  _w: number,
+  _h: number,
+  offsetX: number,
+  offsetY: number,
+  zoom: number,
+): RotateButtonBounds {
+  const s = TILE_SIZE * zoom;
+  // Position to the left of the delete button (which is at top-right corner)
+  const radius = Math.max(
+    BUTTON_MIN_RADIUS,
+    zoom * BUTTON_RADIUS_ZOOM_FACTOR,
+  );
+  const cx = offsetX + col * s - 1;
+  const cy = offsetY + row * s - 1;
+
+  // Circle background
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.fillStyle = ROTATE_BUTTON_BG;
+  ctx.fill();
+
+  // Circular arrow icon
+  ctx.strokeStyle = BUTTON_ICON_COLOR;
+  ctx.lineWidth = Math.max(
+    BUTTON_LINE_WIDTH_MIN,
+    zoom * BUTTON_LINE_WIDTH_ZOOM_FACTOR,
+  );
+  ctx.lineCap = 'round';
+  const arcR = radius * BUTTON_ICON_SIZE_FACTOR;
+  ctx.beginPath();
+  // Draw a 270-degree arc
+  ctx.arc(cx, cy, arcR, -Math.PI * 0.8, Math.PI * 0.7);
+  ctx.stroke();
+  // Draw arrowhead at the end of the arc
+  const endAngle = Math.PI * 0.7;
+  const endX = cx + arcR * Math.cos(endAngle);
+  const endY = cy + arcR * Math.sin(endAngle);
+  const arrowSize = radius * 0.35;
+  ctx.beginPath();
+  ctx.moveTo(endX + arrowSize * 0.6, endY - arrowSize * 0.3);
+  ctx.lineTo(endX, endY);
+  ctx.lineTo(endX + arrowSize * 0.7, endY + arrowSize * 0.5);
+  ctx.stroke();
+  ctx.restore();
+
+  return { cx, cy, radius };
+}
+
+// ── Speech bubbles ───────────────────────────────────────────────
+
+function renderBubbles(
+  ctx: CanvasRenderingContext2D,
+  characters: Character[],
+  offsetX: number,
+  offsetY: number,
+  zoom: number,
+): void {
+  for (const ch of characters) {
+    if (!ch.bubbleType) continue;
+
+    let sprite: SpriteData;
+    switch (ch.bubbleType) {
+      case 'permission':
+        sprite = BUBBLE_PERMISSION_SPRITE;
+        break;
+      case 'done':
+        sprite = BUBBLE_DONE_SPRITE;
+        break;
+      default:
+        sprite = BUBBLE_WAITING_SPRITE;
+    }
+
+    // Compute opacity: permission = full, waiting/done = fade in last 0.5s
+    let alpha = 1.0;
+    if (
+      ch.bubbleType === 'waiting' &&
+      ch.bubbleTimer < BUBBLE_FADE_DURATION_SEC
+    ) {
+      alpha = ch.bubbleTimer / BUBBLE_FADE_DURATION_SEC;
+    }
+    if (
+      ch.bubbleType === 'done' &&
+      ch.bubbleTimer < BUBBLE_FADE_DURATION_SEC
+    ) {
+      alpha = Math.max(0, ch.bubbleTimer / BUBBLE_FADE_DURATION_SEC);
+    }
+
+    const cached = getCachedSprite(sprite, zoom);
+    // Position: centered above the character's head
+    // Character is anchored bottom-center at (ch.x, ch.y), sprite is 16x24
+    // Place bubble above head with a small gap; follow sitting offset
+    const sittingOff =
+      ch.state === CharacterState.TYPE
+        ? BUBBLE_SITTING_OFFSET_PX
+        : 0;
+    const bubbleX = Math.round(
+      offsetX + ch.x * zoom - cached.width / 2,
+    );
+    const bubbleY = Math.round(
+      offsetY +
+        (ch.y + sittingOff - BUBBLE_VERTICAL_OFFSET_PX) * zoom -
+        cached.height -
+        1 * zoom,
+    );
+
+    ctx.save();
+    if (alpha < 1.0) ctx.globalAlpha = alpha;
+    ctx.drawImage(cached, bubbleX, bubbleY);
+    ctx.restore();
+  }
+}
+
+// ── Zone labels (Agent OS extension) ─────────────────────────────
+
+function renderZoneLabels(
+  ctx: CanvasRenderingContext2D,
+  zoneLabels: ZoneLabel[],
+  offsetX: number,
+  offsetY: number,
+  zoom: number,
+): void {
+  const fontSize = Math.max(8, zoom * 5);
+  ctx.font = `bold ${fontSize}px monospace`;
+  ctx.textAlign = 'center';
+
+  for (const label of zoneLabels) {
+    const x = Math.round(
+      offsetX + (label.col + 0.5) * TILE_SIZE * zoom,
+    );
+    const y = Math.round(
+      offsetY + (label.row + 0.5) * TILE_SIZE * zoom + fontSize / 2,
+    );
+
+    // Background pill
+    const textWidth = ctx.measureText(label.text).width;
+    const padding = 4;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.beginPath();
+    ctx.roundRect(
+      x - textWidth / 2 - padding,
+      y - fontSize - 1,
+      textWidth + padding * 2,
+      fontSize + 4,
+      3,
+    );
+    ctx.fill();
+
+    // Label text
+    ctx.fillStyle = label.color;
+    ctx.fillText(label.text, x, y);
+  }
+}
+
+// ── Name/Role labels (Agent OS extension) ────────────────────────
+
+function renderNameLabels(
+  ctx: CanvasRenderingContext2D,
+  characters: Character[],
+  offsetX: number,
+  offsetY: number,
+  zoom: number,
+  selectedAgentId: number | null,
+): void {
+  const roleFontSize = Math.max(
+    ROLE_LABEL_MIN_ROLE_FONT,
+    zoom * ROLE_LABEL_ROLE_FONT_SCALE,
+  );
+  const zoneFontSize = Math.max(
+    ROLE_LABEL_MIN_ZONE_FONT,
+    zoom * ROLE_LABEL_ZONE_FONT_SCALE,
+  );
+
+  for (const ch of characters) {
+    const roleInfo = ROLE_DISPLAY[ch.role];
+    if (!roleInfo) continue;
+
+    const sittingOffset =
+      ch.state === CharacterState.TYPE
+        ? CHARACTER_SITTING_OFFSET_PX
+        : 0;
+    const labelX = Math.round(offsetX + ch.x * zoom);
+    const labelY = Math.round(
+      offsetY + (ch.y + sittingOffset + 2) * zoom,
+    );
+
+    const isSelected = selectedAgentId === ch.id;
+    const roleColor = roleInfo.color;
+
+    // ── Line 1: Role/Profession name (LARGE, BOLD, CONTRAST) ──
+    ctx.font = `bold ${roleFontSize}px monospace`;
+    ctx.textAlign = 'center';
+    const roleText = roleInfo.title;
+    const roleTextWidth = ctx.measureText(roleText).width;
+    const rolePadding = 4;
+    const roleLineH = roleFontSize + 4;
+
+    // ── Line 2: Zone/Location (smaller, secondary) ──
+    ctx.font = `${zoneFontSize}px monospace`;
+    const zoneText = roleInfo.zone;
+    const zoneTextWidth = ctx.measureText(zoneText).width;
+    const zonePadding = 3;
+    const zoneLineH = zoneFontSize + 2;
+
+    // Calculate combined box dimensions
+    const boxWidth =
+      Math.max(
+        roleTextWidth + rolePadding * 2,
+        zoneTextWidth + zonePadding * 2,
+      ) + 8;
+    const boxHeight = roleLineH + zoneLineH + 2;
+    const boxX = labelX - boxWidth / 2;
+    const boxY = labelY - boxHeight;
+
+    // Background box with role color accent
+    ctx.fillStyle = isSelected
+      ? 'rgba(139, 92, 246, 0.85)'
+      : 'rgba(15, 23, 42, 0.82)';
+    ctx.beginPath();
+    ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 3);
+    ctx.fill();
+
+    // Role color accent bar on left side
+    ctx.fillStyle = roleColor;
+    ctx.fillRect(boxX, boxY, 3, boxHeight);
+
+    // Small role color dot
+    ctx.fillStyle = roleColor;
+    ctx.beginPath();
+    ctx.arc(
+      boxX + 10,
+      boxY + roleLineH / 2 + 1,
+      Math.max(2, zoom * 1),
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+
+    // Role text (LARGE, BOLD, WHITE)
+    ctx.font = `bold ${roleFontSize}px monospace`;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText(roleText, boxX + 16, boxY + roleLineH - 2);
+
+    // Zone text (smaller, secondary, muted)
+    ctx.font = `${zoneFontSize}px monospace`;
+    ctx.fillStyle = 'rgba(203, 213, 225, 0.75)'; // slate-300 at 75%
+    ctx.fillText(
+      zoneText,
+      boxX + 6,
+      boxY + roleLineH + zoneLineH - 1,
+    );
+
+    // Status indicator for active agents
+    if (
+      ch.agentStatus &&
+      ch.agentStatus !== 'idle' &&
+      ch.agentStatus !== 'offline'
+    ) {
+      const statusColors: Record<string, string> = {
+        working: '#4ade80',
+        thinking: '#60a5fa',
+        waiting_api: '#60a5fa',
+        reviewing: '#a855f7',
+        waiting_approval: '#f97316',
+        done: '#22c55e',
+        error: '#ef4444',
+      };
+      const statusColor = statusColors[ch.agentStatus] ?? '#64748b';
+      const dotRadius = Math.max(2, zoom * 0.8);
+      ctx.fillStyle = statusColor;
+      ctx.beginPath();
+      ctx.arc(
+        boxX + boxWidth - 8,
+        boxY + 6,
+        dotRadius,
+        0,
+        Math.PI * 2,
+      );
+      ctx.fill();
+
+      // Pulse effect for active statuses
+      if (
+        ch.agentStatus === 'working' ||
+        ch.agentStatus === 'thinking'
+      ) {
+        const pulse =
+          0.3 + Math.sin(_frameTime * 4) * 0.3;
+        ctx.fillStyle =
+          statusColor.slice(0, 7) +
+          Math.round(pulse * 255)
+            .toString(16)
+            .padStart(2, '0');
+        ctx.beginPath();
+        ctx.arc(
+          boxX + boxWidth - 8,
+          boxY + 6,
+          dotRadius + 2,
+          0,
+          Math.PI * 2,
+        );
+        ctx.fill();
+      }
+    }
+  }
+}
+
+// ── Button bounds types ──────────────────────────────────────────
+
+export interface ButtonBounds {
+  /** Center X in device pixels */
+  cx: number;
+  /** Center Y in device pixels */
+  cy: number;
+  /** Radius in device pixels */
+  radius: number;
+}
+
+export type DeleteButtonBounds = ButtonBounds;
+export type RotateButtonBounds = ButtonBounds;
+
+// ── Editor render state interfaces ───────────────────────────────
+
+export interface EditorRenderState {
+  showGrid: boolean;
+  ghostSprite: SpriteData | null;
+  ghostMirrored: boolean;
+  ghostCol: number;
+  ghostRow: number;
+  ghostValid: boolean;
+  selectedCol: number;
+  selectedRow: number;
+  selectedW: number;
+  selectedH: number;
+  hasSelection: boolean;
+  isRotatable: boolean;
+  /** Updated each frame by renderDeleteButton */
+  deleteButtonBounds: DeleteButtonBounds | null;
+  /** Updated each frame by renderRotateButton */
+  rotateButtonBounds: RotateButtonBounds | null;
+  /** Whether to show ghost border (expansion tiles outside grid) */
+  showGhostBorder: boolean;
+  /** Hovered ghost border tile col (-1 to cols) */
+  ghostBorderHoverCol: number;
+  /** Hovered ghost border tile row (-1 to rows) */
+  ghostBorderHoverRow: number;
+}
+
+export interface SelectionRenderState {
+  selectedAgentId: number | null;
+  hoveredAgentId: number | null;
+  hoveredTile: { col: number; row: number } | null;
+  seats: Map<string, Seat>;
+  characters: Map<number, Character>;
+}
+
+// ── Main render entry point ──────────────────────────────────────
+
+export function renderFrame(
+  ctx: CanvasRenderingContext2D,
+  canvasWidth: number,
+  canvasHeight: number,
+  tileMap: TileTypeVal[][],
+  furniture: FurnitureInstance[],
+  characters: Character[],
+  zoom: number,
+  panX: number,
+  panY: number,
+  selectedAgentId: number | null,
+  hoveredAgentId: number | null,
+  tileColors?: Array<ColorValue | null>,
+  layoutCols?: number,
+  layoutRows?: number,
+  zoneLabels?: ZoneLabel[],
+): { offsetX: number; offsetY: number } {
+  // Update frame time for animations
+  _frameTime = performance.now() / 1000;
+
+  // Clear
+  ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+  // Use layout dimensions (fallback to tileMap size)
+  const cols =
+    layoutCols ?? (tileMap.length > 0 ? tileMap[0].length : 0);
+  const rows = layoutRows ?? tileMap.length;
+
+  // Center map in viewport + pan offset (integer device pixels)
+  const mapW = cols * TILE_SIZE * zoom;
+  const mapH = rows * TILE_SIZE * zoom;
+  const offsetX =
+    Math.floor((canvasWidth - mapW) / 2) + Math.round(panX);
+  const offsetY =
+    Math.floor((canvasHeight - mapH) / 2) + Math.round(panY);
+
+  // Draw tiles (floor + wall base color)
+  renderTileGrid(
+    ctx,
+    tileMap,
+    offsetX,
+    offsetY,
+    zoom,
+    tileColors,
+    layoutCols,
+  );
+
+  // Build wall instances for z-sorting with furniture and characters
+  const wallInstances = hasWallSprites()
+    ? getWallInstances(tileMap, tileColors, layoutCols)
+    : [];
+  const allFurniture =
+    wallInstances.length > 0
+      ? [...wallInstances, ...furniture]
+      : furniture;
+
+  // Draw walls + furniture + characters (z-sorted)
+  renderScene(
+    ctx,
+    allFurniture,
+    characters,
+    offsetX,
+    offsetY,
+    zoom,
+    selectedAgentId,
+    hoveredAgentId,
+  );
+
+  // Speech bubbles (always on top of characters)
+  renderBubbles(ctx, characters, offsetX, offsetY, zoom);
+
+  // Name/role labels (Agent OS extension)
+  renderNameLabels(
+    ctx,
+    characters,
+    offsetX,
+    offsetY,
+    zoom,
+    selectedAgentId,
+  );
+
+  // Zone labels (Agent OS extension)
+  if (zoneLabels && zoneLabels.length > 0) {
+    renderZoneLabels(ctx, zoneLabels, offsetX, offsetY, zoom);
+  }
+
+  return { offsetX, offsetY };
+}
