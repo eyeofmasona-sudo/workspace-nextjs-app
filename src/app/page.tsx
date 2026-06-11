@@ -1,14 +1,12 @@
 // ─── Agent OS — Agent Office MVP ─────────────────────────────
-// Main page showing the 2.5D Agent Office visualization.
-// Replaces the old flat dashboard with a live office view.
+// Main page showing the pixel-art Agent Office visualization.
+// Dark theme matching pixel-agents style.
 
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
 import { AgentOffice } from '@/components/office/AgentOffice';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Loader2, Zap, CheckCircle2, Cpu } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 
 export default function Home() {
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
@@ -58,16 +56,20 @@ export default function Home() {
     }
   };
 
-  // Full-screen Agent Office
+  // Full-screen Agent Office with dark background
   return (
-    <div className="h-screen flex flex-col bg-background overflow-hidden">
+    <div className="h-screen flex flex-col bg-[#1a1a2e] overflow-hidden">
       {/* Agent Office fills the entire viewport */}
       <div className="flex-1 min-h-0">
         {loading ? (
           <div className="h-full flex items-center justify-center">
             <div className="text-center space-y-3">
-              <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
-              <p className="text-sm text-muted-foreground">Loading Agent Office...</p>
+              <div className="flex items-center justify-center gap-2">
+                <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+                <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse [animation-delay:0.2s]" />
+                <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse [animation-delay:0.4s]" />
+              </div>
+              <p className="text-xs text-slate-400 font-mono">Loading Agent Office...</p>
             </div>
           </div>
         ) : (
