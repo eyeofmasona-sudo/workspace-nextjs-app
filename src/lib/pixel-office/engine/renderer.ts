@@ -779,14 +779,14 @@ function renderNameLabels(
     ctx.textAlign = 'center';
     const roleText = roleInfo.title;
     const roleTextWidth = ctx.measureText(roleText).width;
-    const rolePadding = 2;
-    const roleLineH = roleFontSize + 2;
+    const rolePadding = 1;
+    const roleLineH = roleFontSize + 1;
 
     // ── Line 2: Zone/Location (smaller, secondary) ──
     ctx.font = `${zoneFontSize}px monospace`;
     const zoneText = roleInfo.zone;
     const zoneTextWidth = ctx.measureText(zoneText).width;
-    const zonePadding = 2;
+    const zonePadding = 1;
     const zoneLineH = zoneFontSize + 1;
 
     // Calculate combined box dimensions
@@ -794,8 +794,8 @@ function renderNameLabels(
       Math.max(
         roleTextWidth + rolePadding * 2,
         zoneTextWidth + zonePadding * 2,
-      ) + 6;
-    const boxHeight = roleLineH + zoneLineH + 1;
+      ) + 4;
+    const boxHeight = roleLineH + zoneLineH;
     const boxX = labelX - boxWidth / 2;
     const boxY = labelY - boxHeight;
 
@@ -815,9 +815,9 @@ function renderNameLabels(
     ctx.fillStyle = roleColor;
     ctx.beginPath();
     ctx.arc(
-      boxX + 7,
+      boxX + 6,
       boxY + roleLineH / 2 + 0.5,
-      Math.max(1.5, zoom * 0.7),
+      Math.max(1, zoom * 0.5),
       0,
       Math.PI * 2,
     );
@@ -827,14 +827,14 @@ function renderNameLabels(
     ctx.font = `bold ${roleFontSize}px monospace`;
     ctx.textAlign = 'left';
     ctx.fillStyle = '#FFFFFF';
-    ctx.fillText(roleText, boxX + 12, boxY + roleLineH - 1);
+    ctx.fillText(roleText, boxX + 10, boxY + roleLineH - 1);
 
     // Zone text (smaller, secondary, muted)
     ctx.font = `${zoneFontSize}px monospace`;
     ctx.fillStyle = 'rgba(203, 213, 225, 0.75)'; // slate-300 at 75%
     ctx.fillText(
       zoneText,
-      boxX + 4,
+      boxX + 3,
       boxY + roleLineH + zoneLineH - 0.5,
     );
 
