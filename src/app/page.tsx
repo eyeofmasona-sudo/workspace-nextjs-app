@@ -1,7 +1,8 @@
-// ─── Agent OS — Orchestrator-First Interface ──────────────────────
-// User talks ONLY to the orchestrator. The orchestrator delegates to agents.
-// Delegation flow is visualized inline in the chat.
-// All 11 agents displayed with status, role, skills, tools.
+// ─── Agent OS — Pixel Agents Office + Orchestrator Chat ──────────
+// The pixel office is the PRIMARY view. The orchestrator chat is a
+// floating panel on the left. All 11 agents displayed as pixel
+// characters in a multi-room office with real-time behavior.
+// Management panels (tasks, approvals, events) are overlays.
 
 'use client';
 
@@ -9,15 +10,16 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Cpu, Send, RefreshCw, Zap, Clock, Hash,
   AlertTriangle, CheckCircle2, XCircle, Loader2, Sparkles,
-  Crown, Wrench,
-  ChevronDown, ChevronUp, UserPlus, Trash2,
+  Crown, Wrench, ChevronDown, ChevronUp, UserPlus, Trash2,
+  ListChecks, BarChart3, Radio, Building2, MessageSquare,
+  PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import {
   Sheet,
   SheetContent,
@@ -36,6 +38,18 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { motion, AnimatePresence } from 'framer-motion';
+
+// ─── Pixel Office components ──────────────────────────────────
+import { PixelOfficeCanvas } from '@/components/pixel-office/PixelOfficeCanvas';
+import { OfficeState, ROLE_SEAT_MAP } from '@/lib/pixel-office/engine/officeState';
+import { BehaviorState } from '@/lib/pixel-office/types';
+import { loadAllAssets } from '@/lib/pixel-office/assetLoader';
+import type { ZoneDestination, ZoneLabel, TileType as TileTypeVal } from '@/lib/pixel-office/types';
+
+// ─── Office data hooks ────────────────────────────────────────
+import { useOfficeData } from '@/hooks/useOfficeData';
+import { useEventStream } from '@/hooks/useEventStream';
+import type { OfficeAgent } from '@/hooks/useOfficeData';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -239,6 +253,342 @@ const CAPABILITY_OPTIONS = [
   'code_review', 'deployment', 'monitoring', 'documentation',
 ];
 
+// ─── Pixel Office Layout (40×36) ─────────────────────────────
+const COLS = 40;
+const ROWS = 36;
+
+function buildTiles(): TileTypeVal[] {
+  const W = 0 as TileTypeVal;
+  const F1 = 1 as TileTypeVal;
+  const F2 = 2 as TileTypeVal;
+  const F3 = 3 as TileTypeVal;
+  const F4 = 4 as TileTypeVal;
+  const F5 = 5 as TileTypeVal;
+  const F6 = 6 as TileTypeVal;
+  const F7 = 7 as TileTypeVal;
+  const F8 = 8 as TileTypeVal;
+  const F9 = 9 as TileTypeVal;
+  const F10 = 10 as TileTypeVal;
+
+  const tiles: TileTypeVal[] = [];
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (r === 0 || r === ROWS - 1 || c === 0 || c === COLS - 1) { tiles.push(W); continue; }
+      if (r === 10) { tiles.push((c >= 5 && c <= 6) || (c >= 18 && c <= 19) || (c >= 31 && c <= 32) ? F8 : W); continue; }
+      if (r === 20) { tiles.push((c >= 5 && c <= 6) || (c >= 18 && c <= 19) || (c >= 31 && c <= 32) ? F8 : W); continue; }
+      if (r === 30) { tiles.push((c >= 8 && c <= 9) || (c >= 28 && c <= 29) ? F8 : W); continue; }
+      if (r >= 1 && r <= 9) {
+        if (c === 13) { tiles.push(r >= 4 && r <= 5 ? F8 : W); continue; }
+        if (c === 25) { tiles.push(r >= 4 && r <= 5 ? F8 : W); continue; }
+        if (c >= 1 && c <= 12) { tiles.push(F1); continue; }
+        if (c >= 14 && c <= 24) { tiles.push(F2); continue; }
+        if (c >= 26 && c <= 38) { tiles.push(F3); continue; }
+        tiles.push(W); continue;
+      }
+      if (r >= 11 && r <= 19) {
+        if (c === 13) { tiles.push(r >= 14 && r <= 15 ? F8 : W); continue; }
+        if (c === 25) { tiles.push(r >= 14 && r <= 15 ? F8 : W); continue; }
+        if (c >= 1 && c <= 12) { tiles.push(F4); continue; }
+        if (c >= 14 && c <= 24) { tiles.push(F5); continue; }
+        if (c >= 26 && c <= 38) { tiles.push(F6); continue; }
+        tiles.push(W); continue;
+      }
+      if (r >= 21 && r <= 29) {
+        if (c === 13) { tiles.push(r >= 24 && r <= 25 ? F8 : W); continue; }
+        if (c === 25) { tiles.push(r >= 24 && r <= 25 ? F8 : W); continue; }
+        if (c >= 1 && c <= 12) { tiles.push(F9); continue; }
+        if (c >= 14 && c <= 24) { tiles.push(F10); continue; }
+        if (c >= 26 && c <= 38) { tiles.push(F7); continue; }
+        tiles.push(W); continue;
+      }
+      tiles.push(F7);
+    }
+  }
+  return tiles;
+}
+
+function buildTileColors(): Array<{ h: number; s: number; b: number; c: number } | null> {
+  const wallColor = { h: 214, s: 30, b: -100, c: -55 };
+  const cmdColor = { h: 30, s: 50, b: -43, c: -88 };
+  const meetColor = { h: 210, s: 35, b: -30, c: -75 };
+  const designColor = { h: 330, s: 40, b: -35, c: -80 };
+  const devColor = { h: 150, s: 40, b: -40, c: -82 };
+  const serverColor = { h: 200, s: 45, b: -50, c: -70 };
+  const researchColor = { h: 35, s: 55, b: -38, c: -85 };
+  const loungeColor = { h: 20, s: 60, b: -35, c: -85 };
+  const doorColor = { h: 35, s: 25, b: 10, c: 0 };
+  const qaColor = { h: 345, s: 40, b: -40, c: -82 };
+  const opsColor = { h: 25, s: 50, b: -38, c: -80 };
+  const tiles = buildTiles();
+  const colors: Array<{ h: number; s: number; b: number; c: number } | null> = [];
+  for (let i = 0; i < tiles.length; i++) {
+    const tile = tiles[i];
+    if (tile === 0) { colors.push(wallColor); continue; }
+    if (tile === 8) { colors.push(doorColor); continue; }
+    if (tile === 1) { colors.push(cmdColor); continue; }
+    if (tile === 2) { colors.push(meetColor); continue; }
+    if (tile === 3) { colors.push(designColor); continue; }
+    if (tile === 4) { colors.push(devColor); continue; }
+    if (tile === 5) { colors.push(serverColor); continue; }
+    if (tile === 6) { colors.push(researchColor); continue; }
+    if (tile === 7) { colors.push(loungeColor); continue; }
+    if (tile === 9) { colors.push(qaColor); continue; }
+    if (tile === 10) { colors.push(opsColor); continue; }
+    colors.push(wallColor);
+  }
+  return colors;
+}
+
+const DEFAULT_AGENT_OS_LAYOUT = {
+  version: 1 as const,
+  cols: COLS,
+  rows: ROWS,
+  layoutRevision: 4,
+  tiles: buildTiles(),
+  tileColors: buildTileColors(),
+  furniture: [
+    // ═══ COMMAND CENTER (cols 1-12, rows 1-9) ═══
+    { uid: 'cmd-shelf1', type: 'DOUBLE_BOOKSHELF', col: 1, row: 0 },
+    { uid: 'cmd-clock', type: 'CLOCK', col: 5, row: 0 },
+    { uid: 'cmd-wb', type: 'WHITEBOARD', col: 7, row: 0 },
+    { uid: 'cmd-paint1', type: 'SMALL_PAINTING', col: 10, row: 0 },
+    { uid: 'cmd-paint2', type: 'SMALL_PAINTING_2', col: 11, row: 0 },
+    { uid: 'desk-orc', type: 'DESK_FRONT', col: 2, row: 2 },
+    { uid: 'pc-orc', type: 'PC_FRONT_OFF', col: 3, row: 2 },
+    { uid: 'chair-orc', type: 'WOODEN_CHAIR_BACK', col: 3, row: 4 },
+    { uid: 'desk-arch', type: 'DESK_FRONT', col: 7, row: 2 },
+    { uid: 'pc-arch', type: 'PC_FRONT_OFF', col: 8, row: 2 },
+    { uid: 'chair-arch', type: 'WOODEN_CHAIR_BACK', col: 8, row: 4 },
+    { uid: 'desk-anl', type: 'DESK_FRONT', col: 2, row: 6 },
+    { uid: 'pc-anl', type: 'PC_FRONT_OFF', col: 3, row: 6 },
+    { uid: 'chair-anl', type: 'WOODEN_CHAIR_BACK', col: 3, row: 8 },
+    { uid: 'cmd-plant1', type: 'LARGE_PLANT', col: 1, row: 1 },
+    { uid: 'cmd-plant2', type: 'PLANT', col: 11, row: 5 },
+    { uid: 'cmd-cactus', type: 'CACTUS', col: 12, row: 1 },
+    { uid: 'cmd-bin', type: 'BIN', col: 12, row: 9 },
+    // ═══ MEETING ROOM (cols 14-24, rows 1-9) ═══
+    { uid: 'meet-clock', type: 'CLOCK', col: 15, row: 0 },
+    { uid: 'meet-wb', type: 'WHITEBOARD', col: 18, row: 0 },
+    { uid: 'meet-paint', type: 'LARGE_PAINTING', col: 22, row: 0 },
+    { uid: 'meet-table', type: 'TABLE_FRONT', col: 18, row: 4 },
+    { uid: 'meet-bench1', type: 'CUSHIONED_BENCH', col: 17, row: 5 },
+    { uid: 'meet-bench2', type: 'CUSHIONED_BENCH', col: 21, row: 5 },
+    { uid: 'meet-chair1', type: 'CUSHIONED_CHAIR_FRONT', col: 18, row: 3 },
+    { uid: 'meet-chair2', type: 'CUSHIONED_CHAIR_BACK', col: 18, row: 6 },
+    { uid: 'meet-chair3', type: 'CUSHIONED_CHAIR_FRONT', col: 20, row: 3 },
+    { uid: 'meet-chair4', type: 'CUSHIONED_CHAIR_BACK', col: 20, row: 6 },
+    { uid: 'meet-plant1', type: 'PLANT_2', col: 14, row: 1 },
+    { uid: 'meet-plant2', type: 'LARGE_PLANT', col: 23, row: 8 },
+    { uid: 'meet-shelf', type: 'BOOKSHELF', col: 14, row: 0 },
+    // ═══ DESIGN AREA (cols 26-38, rows 1-9) ═══
+    { uid: 'des-shelf', type: 'DOUBLE_BOOKSHELF', col: 26, row: 0 },
+    { uid: 'des-hplant', type: 'HANGING_PLANT', col: 30, row: 0 },
+    { uid: 'des-paint1', type: 'SMALL_PAINTING', col: 34, row: 0 },
+    { uid: 'des-paint2', type: 'SMALL_PAINTING_2', col: 37, row: 0 },
+    { uid: 'desk-des', type: 'DESK_FRONT', col: 29, row: 2 },
+    { uid: 'pc-des', type: 'PC_FRONT_OFF', col: 30, row: 2 },
+    { uid: 'chair-des', type: 'WOODEN_CHAIR_BACK', col: 30, row: 4 },
+    { uid: 'des-table', type: 'COFFEE_TABLE', col: 29, row: 7 },
+    { uid: 'des-bench', type: 'CUSHIONED_BENCH', col: 28, row: 8 },
+    { uid: 'des-bench2', type: 'CUSHIONED_BENCH', col: 31, row: 8 },
+    { uid: 'des-plant1', type: 'PLANT', col: 37, row: 1 },
+    { uid: 'des-cactus', type: 'CACTUS', col: 26, row: 6 },
+    { uid: 'des-bin', type: 'BIN', col: 37, row: 9 },
+    // ═══ DEVELOPMENT AREA (cols 1-12, rows 11-19) ═══
+    { uid: 'dev-shelf', type: 'BOOKSHELF', col: 1, row: 10 },
+    { uid: 'dev-wb', type: 'WHITEBOARD', col: 7, row: 10 },
+    { uid: 'dev-clock', type: 'CLOCK', col: 11, row: 10 },
+    { uid: 'desk-fe', type: 'DESK_FRONT', col: 2, row: 12 },
+    { uid: 'pc-fe', type: 'PC_FRONT_OFF', col: 3, row: 12 },
+    { uid: 'chair-fe', type: 'WOODEN_CHAIR_BACK', col: 3, row: 14 },
+    { uid: 'desk-be', type: 'DESK_FRONT', col: 7, row: 12 },
+    { uid: 'pc-be', type: 'PC_FRONT_OFF', col: 8, row: 12 },
+    { uid: 'chair-be', type: 'WOODEN_CHAIR_BACK', col: 8, row: 14 },
+    { uid: 'dev-plant1', type: 'LARGE_PLANT', col: 1, row: 11 },
+    { uid: 'dev-plant2', type: 'PLANT', col: 11, row: 13 },
+    { uid: 'dev-cactus', type: 'CACTUS', col: 12, row: 17 },
+    { uid: 'dev-bin', type: 'BIN', col: 12, row: 19 },
+    // ═══ SERVER ROOM (cols 14-24, rows 11-19) ═══
+    { uid: 'srv-shelf', type: 'DOUBLE_BOOKSHELF', col: 14, row: 10 },
+    { uid: 'srv-clock', type: 'CLOCK', col: 17, row: 10 },
+    { uid: 'srv-paint', type: 'LARGE_PAINTING', col: 23, row: 10 },
+    { uid: 'desk-data', type: 'DESK_FRONT', col: 16, row: 12 },
+    { uid: 'pc-data', type: 'PC_FRONT_OFF', col: 17, row: 12 },
+    { uid: 'chair-data', type: 'WOODEN_CHAIR_BACK', col: 17, row: 14 },
+    { uid: 'srv-rack1', type: 'DESK_SIDE', col: 21, row: 12 },
+    { uid: 'srv-rack2', type: 'DESK_SIDE', col: 21, row: 16 },
+    { uid: 'srv-pc1', type: 'PC_FRONT_OFF', col: 23, row: 11 },
+    { uid: 'srv-pc2', type: 'PC_FRONT_OFF', col: 24, row: 11 },
+    { uid: 'srv-plant1', type: 'PLANT_2', col: 14, row: 17 },
+    { uid: 'srv-bin', type: 'BIN', col: 23, row: 19 },
+    { uid: 'srv-pot', type: 'POT', col: 15, row: 18 },
+    // ═══ RESEARCH AREA (cols 26-38, rows 11-19) ═══
+    { uid: 'res-wb', type: 'WHITEBOARD', col: 30, row: 10 },
+    { uid: 'res-shelf1', type: 'DOUBLE_BOOKSHELF', col: 26, row: 10 },
+    { uid: 'res-shelf2', type: 'BOOKSHELF', col: 36, row: 10 },
+    { uid: 'desk-res', type: 'DESK_FRONT', col: 29, row: 12 },
+    { uid: 'pc-res', type: 'PC_FRONT_OFF', col: 30, row: 12 },
+    { uid: 'chair-res', type: 'WOODEN_CHAIR_BACK', col: 30, row: 14 },
+    { uid: 'res-htable', type: 'SMALL_TABLE', col: 33, row: 15 },
+    { uid: 'res-hchair1', type: 'WOODEN_CHAIR_FRONT', col: 32, row: 16 },
+    { uid: 'res-hchair2', type: 'WOODEN_CHAIR_FRONT', col: 35, row: 16 },
+    { uid: 'res-plant1', type: 'LARGE_PLANT', col: 26, row: 11 },
+    { uid: 'res-cactus', type: 'CACTUS', col: 37, row: 17 },
+    { uid: 'res-plant2', type: 'PLANT', col: 37, row: 11 },
+    { uid: 'res-bin', type: 'BIN', col: 37, row: 19 },
+    // ═══ QA LAB (cols 1-12, rows 21-29) ═══
+    { uid: 'qa-shelf', type: 'DOUBLE_BOOKSHELF', col: 1, row: 20 },
+    { uid: 'qa-wb', type: 'WHITEBOARD', col: 5, row: 20 },
+    { uid: 'qa-clock', type: 'CLOCK', col: 9, row: 20 },
+    { uid: 'desk-qa2', type: 'DESK_FRONT', col: 2, row: 23 },
+    { uid: 'pc-qa2', type: 'PC_FRONT_OFF', col: 3, row: 23 },
+    { uid: 'chair-qa2', type: 'WOODEN_CHAIR_BACK', col: 3, row: 25 },
+    { uid: 'desk-qa3', type: 'DESK_FRONT', col: 7, row: 23 },
+    { uid: 'pc-qa3', type: 'PC_FRONT_OFF', col: 8, row: 23 },
+    { uid: 'chair-qa3', type: 'WOODEN_CHAIR_BACK', col: 8, row: 25 },
+    { uid: 'qa-pc1', type: 'PC_FRONT_OFF', col: 10, row: 21 },
+    { uid: 'qa-pc2', type: 'PC_FRONT_OFF', col: 11, row: 21 },
+    { uid: 'qa-plant1', type: 'LARGE_PLANT', col: 1, row: 21 },
+    { uid: 'qa-cactus', type: 'CACTUS', col: 12, row: 27 },
+    { uid: 'qa-bin', type: 'BIN', col: 12, row: 29 },
+    // ═══ OPERATIONS CENTER (cols 14-24, rows 21-29) ═══
+    { uid: 'ops-shelf', type: 'DOUBLE_BOOKSHELF', col: 14, row: 20 },
+    { uid: 'ops-wb', type: 'WHITEBOARD', col: 18, row: 20 },
+    { uid: 'ops-paint', type: 'LARGE_PAINTING', col: 22, row: 20 },
+    { uid: 'desk-ops', type: 'DESK_FRONT', col: 16, row: 23 },
+    { uid: 'pc-ops', type: 'PC_FRONT_OFF', col: 17, row: 23 },
+    { uid: 'chair-ops', type: 'WOODEN_CHAIR_BACK', col: 17, row: 25 },
+    { uid: 'desk-ops2', type: 'DESK_FRONT', col: 21, row: 23 },
+    { uid: 'pc-ops2', type: 'PC_FRONT_OFF', col: 22, row: 23 },
+    { uid: 'chair-ops2', type: 'WOODEN_CHAIR_BACK', col: 22, row: 25 },
+    { uid: 'ops-pc1', type: 'PC_FRONT_OFF', col: 14, row: 21 },
+    { uid: 'ops-pc2', type: 'PC_FRONT_OFF', col: 15, row: 21 },
+    { uid: 'ops-pc3', type: 'PC_FRONT_OFF', col: 23, row: 21 },
+    { uid: 'ops-plant1', type: 'PLANT_2', col: 24, row: 27 },
+    { uid: 'ops-pot', type: 'POT', col: 15, row: 28 },
+    { uid: 'ops-bin', type: 'BIN', col: 23, row: 29 },
+    // ═══ WORKSHOP (cols 26-38, rows 21-29) ═══
+    { uid: 'ws-shelf', type: 'BOOKSHELF', col: 26, row: 20 },
+    { uid: 'ws-hplant', type: 'HANGING_PLANT', col: 32, row: 20 },
+    { uid: 'ws-paint', type: 'SMALL_PAINTING', col: 36, row: 20 },
+    { uid: 'ws-table', type: 'TABLE_FRONT', col: 30, row: 24 },
+    { uid: 'ws-bench1', type: 'CUSHIONED_BENCH', col: 29, row: 25 },
+    { uid: 'ws-bench2', type: 'CUSHIONED_BENCH', col: 32, row: 25 },
+    { uid: 'ws-wb', type: 'WHITEBOARD', col: 35, row: 20 },
+    { uid: 'ws-plant1', type: 'LARGE_PLANT', col: 26, row: 21 },
+    { uid: 'ws-cactus', type: 'CACTUS', col: 37, row: 27 },
+    { uid: 'ws-bin', type: 'BIN', col: 37, row: 29 },
+    // ═══ LOUNGE (cols 1-38, rows 31-34) ═══
+    { uid: 'lng-paint1', type: 'LARGE_PAINTING', col: 12, row: 30 },
+    { uid: 'lng-paint2', type: 'SMALL_PAINTING', col: 28, row: 30 },
+    { uid: 'lng-clock', type: 'CLOCK', col: 20, row: 30 },
+    { uid: 'lng-hplant1', type: 'HANGING_PLANT', col: 6, row: 30 },
+    { uid: 'lng-hplant2', type: 'HANGING_PLANT', col: 35, row: 30 },
+    { uid: 'lng-sofa1', type: 'SOFA_FRONT', col: 2, row: 32 },
+    { uid: 'lng-sofa2', type: 'SOFA_FRONT', col: 5, row: 32 },
+    { uid: 'lng-ctable', type: 'COFFEE_TABLE', col: 3, row: 31 },
+    { uid: 'lng-coffee', type: 'COFFEE', col: 9, row: 31 },
+    { uid: 'lng-pot', type: 'POT', col: 10, row: 31 },
+    { uid: 'lng-table', type: 'TABLE_FRONT', col: 16, row: 32 },
+    { uid: 'lng-bench1', type: 'CUSHIONED_BENCH', col: 15, row: 33 },
+    { uid: 'lng-bench2', type: 'CUSHIONED_BENCH', col: 18, row: 33 },
+    { uid: 'lng-rtable', type: 'SMALL_TABLE', col: 24, row: 32 },
+    { uid: 'lng-rchair1', type: 'CUSHIONED_CHAIR_FRONT', col: 23, row: 33 },
+    { uid: 'lng-rchair2', type: 'CUSHIONED_CHAIR_FRONT', col: 26, row: 33 },
+    { uid: 'lng-rchair3', type: 'WOODEN_CHAIR_FRONT', col: 24, row: 31 },
+    { uid: 'lng-tv', type: 'PC_FRONT_OFF', col: 32, row: 30 },
+    { uid: 'lng-sofa3', type: 'SOFA_BACK', col: 31, row: 33 },
+    { uid: 'lng-sofa4', type: 'SOFA_BACK', col: 34, row: 33 },
+    { uid: 'lng-plant1', type: 'LARGE_PLANT', col: 1, row: 31 },
+    { uid: 'lng-plant2', type: 'PLANT', col: 14, row: 31 },
+    { uid: 'lng-plant3', type: 'PLANT_2', col: 29, row: 31 },
+    { uid: 'lng-plant4', type: 'CACTUS', col: 37, row: 32 },
+    { uid: 'lng-bin1', type: 'BIN', col: 12, row: 34 },
+    { uid: 'lng-bin2', type: 'BIN', col: 37, row: 34 },
+    { uid: 'lng-shelf', type: 'BOOKSHELF', col: 1, row: 30 },
+  ],
+};
+
+const ZONE_DESTINATIONS: Record<string, ZoneDestination[]> = {
+  [BehaviorState.MEETING]: [
+    { col: 17, row: 5 }, { col: 18, row: 5 }, { col: 19, row: 5 }, { col: 20, row: 5 },
+    { col: 18, row: 7 }, { col: 19, row: 7 },
+  ],
+  [BehaviorState.BREAK]: [
+    { col: 3, row: 33 }, { col: 6, row: 33 }, { col: 4, row: 31 },
+    { col: 15, row: 32 }, { col: 19, row: 32 },
+    { col: 25, row: 32 }, { col: 32, row: 32 }, { col: 35, row: 32 },
+  ],
+  [BehaviorState.RESEARCH]: [
+    { col: 29, row: 11 }, { col: 30, row: 11 }, { col: 31, row: 11 },
+    { col: 34, row: 14 }, { col: 27, row: 14 },
+    { col: 30, row: 26 }, { col: 31, row: 26 },
+  ],
+};
+
+const ZONE_LABELS: ZoneLabel[] = [
+  { text: '⚙ COMMAND CENTER', col: 6, row: 1, color: '#C4B5FD' },
+  { text: '🤝 MEETING ROOM', col: 19, row: 1, color: '#93C5FD' },
+  { text: '🎨 DESIGN', col: 32, row: 1, color: '#F9A8D4' },
+  { text: '💻 DEVELOPMENT', col: 6, row: 11, color: '#6EE7B7' },
+  { text: '🖥 SERVER ROOM', col: 19, row: 11, color: '#67E8F9' },
+  { text: '📚 RESEARCH', col: 32, row: 11, color: '#FCD34D' },
+  { text: '🛡️ QA LAB', col: 6, row: 21, color: '#FDA4AF' },
+  { text: '🚀 OPS CENTER', col: 19, row: 21, color: '#FDBA74' },
+  { text: '🔧 WORKSHOP', col: 32, row: 21, color: '#D8B4FE' },
+  { text: '☕ LOUNGE', col: 19, row: 31, color: '#FED7AA' },
+];
+
+// ─── Pixel Office Status Mapping ──────────────────────────────
+
+function mapAgentStatusToActive(status: string): boolean {
+  const s = status?.toLowerCase() ?? 'idle';
+  return !['offline', 'idle', 'done'].includes(s);
+}
+
+function mapAgentStatusToTool(status: string): string | null {
+  const s = status?.toLowerCase() ?? '';
+  if (s.includes('thinking') || s.includes('working')) return 'Write';
+  if (s.includes('review') || s.includes('reading') || s.includes('waiting_api')) return 'Read';
+  return null;
+}
+
+function mapAgentStatusToBubble(status: string): 'permission' | 'waiting' | null {
+  const s = status?.toLowerCase() ?? '';
+  if (s.includes('waiting_approval')) return 'permission';
+  if (s.includes('waiting_api')) return 'waiting';
+  return null;
+}
+
+function mapAgentStatusToBehavior(status: string): BehaviorState {
+  const s = status?.toLowerCase() ?? 'idle';
+  if (s.includes('working') || s.includes('thinking')) return BehaviorState.WORKING;
+  if (s.includes('reviewing')) return BehaviorState.MEETING;
+  if (s.includes('waiting_approval')) return BehaviorState.MEETING;
+  if (s.includes('waiting_api')) return BehaviorState.RESEARCH;
+  if (s.includes('done')) return BehaviorState.IDLE;
+  return BehaviorState.IDLE;
+}
+
+// ─── Agent ID Hashing (for pixel office engine) ───────────────
+
+const idToNumeric = new Map<string, number>();
+const numericToId = new Map<number, string>();
+let nextNumericId = 1;
+
+function hashAgentId(id: string): number {
+  const existing = idToNumeric.get(id);
+  if (existing !== undefined) return existing;
+  const num = nextNumericId++;
+  idToNumeric.set(id, num);
+  numericToId.set(num, id);
+  return num;
+}
+
+function unhashAgentId(num: number): string | undefined {
+  return numericToId.get(num);
+}
+
 // ─── Sub-components ───────────────────────────────────────────
 
 function StatusDot({ status }: { status: string }) {
@@ -265,7 +615,6 @@ function DelegationReport({
 
   return (
     <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-3 space-y-2">
-      {/* Header */}
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
@@ -278,14 +627,10 @@ function DelegationReport({
           </span>
           <span className="flex items-center gap-1">
             {completedCount > 0 && (
-              <Badge className="bg-emerald-500/20 text-emerald-300 text-[9px] h-4 px-1.5">
-                ✓ {completedCount}
-              </Badge>
+              <Badge className="bg-emerald-500/20 text-emerald-300 text-[9px] h-4 px-1.5">✓ {completedCount}</Badge>
             )}
             {failedCount > 0 && (
-              <Badge className="bg-red-500/20 text-red-300 text-[9px] h-4 px-1.5">
-                ✗ {failedCount}
-              </Badge>
+              <Badge className="bg-red-500/20 text-red-300 text-[9px] h-4 px-1.5">✗ {failedCount}</Badge>
             )}
           </span>
         </div>
@@ -293,15 +638,9 @@ function DelegationReport({
           <span className="text-[10px] text-slate-500">
             {totalDurationMs > 0 ? `${(totalDurationMs / 1000).toFixed(1)}s` : ''}
           </span>
-          {expanded ? (
-            <ChevronUp className="w-3.5 h-3.5 text-slate-500" />
-          ) : (
-            <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
-          )}
+          {expanded ? <ChevronUp className="w-3.5 h-3.5 text-slate-500" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-500" />}
         </div>
       </button>
-
-      {/* Agent Task List */}
       <AnimatePresence>
         {expanded && (
           <motion.div
@@ -312,40 +651,33 @@ function DelegationReport({
             className="overflow-hidden"
           >
             <div className="space-y-1.5 pt-1">
-              {tasks.map((task, i) => {
-                const colors = ROLE_COLORS[task.agentId] || DEFAULT_ROLE_COLORS;
-                return (
-                  <motion.div
-                    key={`${task.agentId}-${i}`}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.05 }}
-                    className="flex items-start gap-2 p-2 rounded-lg bg-slate-800/40 border border-slate-700/30"
-                  >
-                    <span className="mt-0.5">
-                      {task.status === 'completed' ? (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                      ) : task.status === 'failed' ? (
-                        <XCircle className="w-3.5 h-3.5 text-red-400" />
-                      ) : (
-                        <Loader2 className="w-3.5 h-3.5 text-yellow-400 animate-spin" />
-                      )}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-medium text-slate-300">{task.agentName}</span>
-                        {task.durationMs !== undefined && (
-                          <span className="text-[10px] text-slate-500">{(task.durationMs / 1000).toFixed(1)}s</span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-slate-400 mt-0.5">{task.task}</p>
-                      {task.result && expanded && (
-                        <p className="text-[10px] text-slate-500 mt-1 line-clamp-3">{task.result}</p>
+              {tasks.map((task, i) => (
+                <motion.div
+                  key={`${task.agentId}-${i}`}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  className="flex items-start gap-2 p-2 rounded-lg bg-slate-800/40 border border-slate-700/30"
+                >
+                  <span className="mt-0.5">
+                    {task.status === 'completed' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      : task.status === 'failed' ? <XCircle className="w-3.5 h-3.5 text-red-400" />
+                      : <Loader2 className="w-3.5 h-3.5 text-yellow-400 animate-spin" />}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-medium text-slate-300">{task.agentName}</span>
+                      {task.durationMs !== undefined && (
+                        <span className="text-[10px] text-slate-500">{(task.durationMs / 1000).toFixed(1)}s</span>
                       )}
                     </div>
-                  </motion.div>
-                );
-              })}
+                    <p className="text-[11px] text-slate-400 mt-0.5">{task.task}</p>
+                    {task.result && expanded && (
+                      <p className="text-[10px] text-slate-500 mt-1 line-clamp-3">{task.result}</p>
+                    )}
+                  </div>
+                </motion.div>
+              ))}
             </div>
           </motion.div>
         )}
@@ -354,7 +686,7 @@ function DelegationReport({
   );
 }
 
-// ─── Orchestrator Chat Panel ──────────────────────────────────
+// ─── Orchestrator Chat Panel (Floating) ───────────────────────
 
 function OrchestratorChatPanel({
   messages,
@@ -381,10 +713,6 @@ function OrchestratorChatPanel({
     }
   }, [messages, loading]);
 
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
   const handleSend = () => {
     if (!input.trim() || loading) return;
     onSend(input.trim());
@@ -399,17 +727,17 @@ function OrchestratorChatPanel({
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#12122a] border border-slate-700/50 rounded-xl overflow-hidden">
+    <div className="flex flex-col h-full bg-[#12122a]/95 backdrop-blur-md border border-slate-700/50 rounded-xl overflow-hidden">
       {/* Chat Header */}
-      <div className="px-4 py-3 border-b border-slate-700/50 shrink-0 bg-[#12122a]">
-        <div className="flex items-center gap-3">
+      <div className="px-3 py-2.5 border-b border-slate-700/50 shrink-0 bg-[#12122a]/80">
+        <div className="flex items-center gap-2.5">
           <div className="relative">
-            <span className="text-2xl leading-none">👑</span>
-            <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-[#12122a]" />
+            <span className="text-xl leading-none">👑</span>
+            <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 border-2 border-[#12122a]" />
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-semibold text-slate-200">Orchestrator</h2>
-            <p className="text-[11px] text-slate-500 flex items-center gap-2">
+            <h2 className="text-xs font-semibold text-slate-200">Orchestrator</h2>
+            <p className="text-[10px] text-slate-500 flex items-center gap-1.5">
               <span>I coordinate all agents</span>
               {orchestrator && (
                 <>
@@ -420,15 +748,10 @@ function OrchestratorChatPanel({
             </p>
           </div>
           {orchestrator && (
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1">
               {orchestrator.skills.filter((s) => s.enabled).map((s) => (
-                <Badge key={s.skillId} className={`text-[8px] h-4 px-1.5 ${SKILL_COLORS[s.skillId] || DEFAULT_SKILL_COLOR} border`}>
+                <Badge key={s.skillId} className={`text-[7px] h-3.5 px-1 ${SKILL_COLORS[s.skillId] || DEFAULT_SKILL_COLOR} border`}>
                   {s.skillId}
-                </Badge>
-              ))}
-              {orchestrator.tools.filter((t) => t.enabled).map((t) => (
-                <Badge key={t.toolId} className={`text-[8px] h-4 px-1.5 ${TOOL_COLORS[t.toolId] || DEFAULT_TOOL_COLOR} border`}>
-                  {t.toolId}
                 </Badge>
               ))}
             </div>
@@ -439,23 +762,22 @@ function OrchestratorChatPanel({
       {/* Messages Area */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0 custom-scrollbar"
-        style={{ maxHeight: 'calc(100vh - 280px)' }}
+        className="flex-1 overflow-y-auto p-3 space-y-2.5 min-h-0 custom-scrollbar"
       >
         {messages.length === 0 && (
-          <div className="text-center py-12">
-            <div className="w-20 h-20 rounded-full bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mx-auto mb-4">
-              <Crown className="w-8 h-8 text-purple-400" />
+          <div className="text-center py-8">
+            <div className="w-16 h-16 rounded-full bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mx-auto mb-3">
+              <Crown className="w-6 h-6 text-purple-400" />
             </div>
-            <h3 className="text-base font-medium text-slate-300 mb-1">Talk to the Orchestrator</h3>
-            <p className="text-sm text-slate-500 max-w-sm mx-auto">
-              Tell me what you need. I&apos;ll delegate to the right agents and synthesize their work.
+            <h3 className="text-sm font-medium text-slate-300 mb-1">Talk to the Orchestrator</h3>
+            <p className="text-xs text-slate-500 max-w-xs mx-auto">
+              Tell me what you need. I&apos;ll delegate to the right agents.
             </p>
             {!configured && (
-              <div className="mt-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 max-w-sm mx-auto">
-                <p className="text-xs text-amber-300 flex items-center gap-1.5 justify-center">
+              <div className="mt-3 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 max-w-xs mx-auto">
+                <p className="text-[10px] text-amber-300 flex items-center gap-1 justify-center">
                   <AlertTriangle className="w-3 h-3" />
-                  OPENROUTER_API_KEY not set. Configure .env to enable AI.
+                  OPENROUTER_API_KEY not set
                 </p>
               </div>
             )}
@@ -466,14 +788,14 @@ function OrchestratorChatPanel({
           {messages.map((msg) => (
             <motion.div
               key={msg.id}
-              initial={{ opacity: 0, y: 8 }}
+              initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
+              transition={{ duration: 0.12 }}
               className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               <div
-                className={`max-w-[88%] rounded-xl px-3.5 py-2.5 ${
+                className={`max-w-[90%] rounded-xl px-3 py-2 ${
                   msg.role === 'user'
                     ? 'bg-cyan-600/15 border border-cyan-500/20 text-slate-200'
                     : msg.error
@@ -482,34 +804,14 @@ function OrchestratorChatPanel({
                 }`}
               >
                 {msg.role === 'delegation' && msg.delegatedTasks && (
-                  <DelegationReport
-                    tasks={msg.delegatedTasks}
-                    totalDurationMs={msg.totalDurationMs || 0}
-                  />
+                  <DelegationReport tasks={msg.delegatedTasks} totalDurationMs={msg.totalDurationMs || 0} />
                 )}
-
-                <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">{msg.content}</p>
-
+                <p className="text-xs whitespace-pre-wrap break-words leading-relaxed">{msg.content}</p>
                 {msg.role === 'assistant' && !msg.error && (
-                  <div className="mt-2 pt-1.5 border-t border-slate-700/30 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
-                    {msg.model && (
-                      <span className="flex items-center gap-1">
-                        <Cpu className="w-2.5 h-2.5" />
-                        {msg.model.split('/').pop()}
-                      </span>
-                    )}
-                    {msg.usage && (
-                      <span className="flex items-center gap-1">
-                        <Hash className="w-2.5 h-2.5" />
-                        {msg.usage.totalTokens} tok
-                      </span>
-                    )}
-                    {msg.durationMs !== undefined && (
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-2.5 h-2.5" />
-                        {(msg.durationMs / 1000).toFixed(1)}s
-                      </span>
-                    )}
+                  <div className="mt-1.5 pt-1 border-t border-slate-700/30 flex flex-wrap items-center gap-1.5 text-[9px] text-slate-500">
+                    {msg.model && <span className="flex items-center gap-0.5"><Cpu className="w-2 h-2" />{msg.model.split('/').pop()}</span>}
+                    {msg.usage && <span className="flex items-center gap-0.5"><Hash className="w-2 h-2" />{msg.usage.totalTokens} tok</span>}
+                    {msg.durationMs !== undefined && <span className="flex items-center gap-0.5"><Clock className="w-2 h-2" />{(msg.durationMs / 1000).toFixed(1)}s</span>}
                   </div>
                 )}
               </div>
@@ -519,13 +821,13 @@ function OrchestratorChatPanel({
 
         {loading && (
           <div className="flex justify-start">
-            <div className="bg-purple-500/[0.08] border border-purple-500/20 rounded-xl px-3.5 py-3">
-              <div className="flex items-center gap-2 text-sm text-slate-400">
-                <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+            <div className="bg-purple-500/[0.08] border border-purple-500/20 rounded-xl px-3 py-2.5">
+              <div className="flex items-center gap-2 text-xs text-slate-400">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-400" />
                 <span>
                   {delegatingAgentCount > 0
                     ? `🔄 Delegating to ${delegatingAgentCount} agent${delegatingAgentCount !== 1 ? 's' : ''}...`
-                    : '👑 Orchestrator thinking...'}
+                    : '👑 Thinking...'}
                 </span>
               </div>
             </div>
@@ -534,186 +836,29 @@ function OrchestratorChatPanel({
       </div>
 
       {/* Input Area */}
-      <div className="p-3 border-t border-slate-700/50 shrink-0 bg-[#12122a]">
-        <div className="flex gap-2 items-end">
+      <div className="p-2.5 border-t border-slate-700/50 shrink-0 bg-[#12122a]/80">
+        <div className="flex gap-1.5 items-end">
           <Textarea
             ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={configured ? 'Tell the orchestrator what you need...' : 'AI not configured'}
+            placeholder={configured ? 'Message the orchestrator...' : 'AI not configured'}
             disabled={loading || !configured}
-            className="bg-slate-800/50 border-slate-700/50 text-slate-200 placeholder:text-slate-600 text-sm resize-none min-h-[40px] max-h-[120px]"
+            className="bg-slate-800/50 border-slate-700/50 text-slate-200 placeholder:text-slate-600 text-xs resize-none min-h-[36px] max-h-[100px]"
             rows={1}
           />
           <Button
             size="sm"
             onClick={handleSend}
             disabled={loading || !input.trim() || !configured}
-            className="bg-purple-600 hover:bg-purple-500 text-white shrink-0 h-10 w-10 p-0"
+            className="bg-purple-600 hover:bg-purple-500 text-white shrink-0 h-9 w-9 p-0"
           >
-            <Send className="w-4 h-4" />
+            <Send className="w-3.5 h-3.5" />
           </Button>
         </div>
       </div>
     </div>
-  );
-}
-
-// ─── Agent Card ───────────────────────────────────────────────
-
-function AgentCard({
-  agent,
-  onClick,
-}: {
-  agent: RuntimeAgent;
-  onClick: () => void;
-}) {
-  const colors = ROLE_COLORS[agent.role] || DEFAULT_ROLE_COLORS;
-  const enabledSkills = agent.skills.filter((s) => s.enabled);
-  const enabledTools = agent.tools.filter((t) => t.enabled);
-
-  return (
-    <motion.div
-      whileHover={{ scale: 1.02, y: -1 }}
-      whileTap={{ scale: 0.98 }}
-      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-    >
-      <Card
-        className={`cursor-pointer transition-all duration-200 ${colors.bg} ${colors.border} border hover:shadow-lg hover:${colors.glow}`}
-        onClick={onClick}
-      >
-        <CardContent className="p-3">
-          {/* Header */}
-          <div className="flex items-start justify-between mb-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="text-lg leading-none shrink-0">{agent.visualProfile.avatarEmoji}</span>
-              <div className="min-w-0">
-                <h3 className="text-xs font-semibold text-slate-200 truncate">{agent.name}</h3>
-                <Badge className={`${colors.badge} text-[8px] h-3.5 px-1.5 mt-0.5`}>
-                  {agent.role.replace(/_/g, ' ')}
-                </Badge>
-              </div>
-            </div>
-            <StatusDot status={agent.status} />
-          </div>
-
-          {/* Model */}
-          <div className="flex items-center gap-1.5 text-[10px] mb-2">
-            <Cpu className="w-3 h-3 text-slate-500 shrink-0" />
-            <span className="text-slate-400 font-mono truncate">{agent.model.preferred.split('/').pop()}</span>
-          </div>
-
-          {/* Skills & Tools Pills */}
-          <div className="flex flex-wrap gap-1 mb-2">
-            {enabledSkills.map((s) => (
-              <span
-                key={s.skillId}
-                className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] border ${SKILL_COLORS[s.skillId] || DEFAULT_SKILL_COLOR}`}
-              >
-                <Sparkles className="w-2 h-2" />
-                {s.skillId}
-              </span>
-            ))}
-            {enabledTools.map((t) => (
-              <span
-                key={t.toolId}
-                className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] border ${TOOL_COLORS[t.toolId] || DEFAULT_TOOL_COLOR}`}
-              >
-                <Wrench className="w-2 h-2" />
-                {t.toolId}
-              </span>
-            ))}
-          </div>
-
-          {/* Stats */}
-          <div className="flex items-center gap-2 text-[10px] text-slate-500">
-            <span className="flex items-center gap-0.5">
-              <Zap className="w-2.5 h-2.5" />
-              {agent.executionCount}
-            </span>
-            <span className="flex items-center gap-0.5">
-              <Sparkles className="w-2.5 h-2.5" />
-              {enabledSkills.length}
-            </span>
-            <span className="flex items-center gap-0.5">
-              <Wrench className="w-2.5 h-2.5" />
-              {enabledTools.length}
-            </span>
-          </div>
-        </CardContent>
-      </Card>
-    </motion.div>
-  );
-}
-
-// ─── Orchestrator Card (Prominent) ────────────────────────────
-
-function OrchestratorCard({ agent }: { agent: RuntimeAgent }) {
-  const colors = ROLE_COLORS.orchestrator;
-
-  return (
-    <motion.div
-      whileHover={{ scale: 1.01 }}
-      transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-    >
-      <Card className={`${colors.bg} ${colors.border} border shadow-lg ${colors.glow} relative overflow-hidden`}>
-        {/* Purple glow accent */}
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 via-violet-500 to-purple-500" />
-        <CardContent className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <div className="w-12 h-12 rounded-full bg-purple-500/20 border-2 border-purple-500/40 flex items-center justify-center shadow-lg shadow-purple-500/10">
-                <Crown className="w-6 h-6 text-purple-400" />
-              </div>
-              <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-400 border-2 border-[#12122a]" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
-                <h3 className="text-sm font-bold text-purple-200">Orchestrator</h3>
-                <Badge className="bg-purple-500/20 text-purple-300 text-[8px] h-4 px-1.5 border border-purple-500/30">
-                  👑 LEAD
-                </Badge>
-              </div>
-              <p className="text-[11px] text-slate-400 mb-1">{agent.description}</p>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] text-slate-500 font-mono flex items-center gap-1">
-                  <Cpu className="w-3 h-3" />
-                  {agent.model.preferred.split('/').pop()}
-                </span>
-                <span className="text-slate-700">·</span>
-                <StatusDot status={agent.status} />
-                <span className="text-slate-700">·</span>
-                <span className="flex items-center gap-0.5 text-[10px] text-slate-500">
-                  <Zap className="w-2.5 h-2.5" />
-                  {agent.executionCount} runs
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-1 mt-1.5">
-                {agent.skills.filter((s) => s.enabled).map((s) => (
-                  <span
-                    key={s.skillId}
-                    className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] border ${SKILL_COLORS[s.skillId] || DEFAULT_SKILL_COLOR}`}
-                  >
-                    <Sparkles className="w-2 h-2" />
-                    {s.skillId}
-                  </span>
-                ))}
-                {agent.tools.filter((t) => t.enabled).map((t) => (
-                  <span
-                    key={t.toolId}
-                    className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[8px] border ${TOOL_COLORS[t.toolId] || DEFAULT_TOOL_COLOR}`}
-                  >
-                    <Wrench className="w-2 h-2" />
-                    {t.toolId}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </motion.div>
   );
 }
 
@@ -751,13 +896,10 @@ function AgentDetailSheet({
         </SheetHeader>
 
         <div className="mt-6 space-y-4">
-          {/* Description */}
           <div>
             <h4 className="text-xs font-medium text-slate-400 mb-1">Description</h4>
             <p className="text-sm text-slate-300">{agent.description}</p>
           </div>
-
-          {/* Status & Model */}
           <div className="grid grid-cols-2 gap-3">
             <div className="p-3 rounded-lg bg-slate-800/30 border border-slate-700/30">
               <h4 className="text-[10px] text-slate-500 mb-1">Status</h4>
@@ -771,8 +913,6 @@ function AgentDetailSheet({
               )}
             </div>
           </div>
-
-          {/* Execution Config */}
           <div className="p-3 rounded-lg bg-slate-800/30 border border-slate-700/30">
             <h4 className="text-[10px] text-slate-500 mb-2">Execution Config</h4>
             <div className="flex items-center gap-4 text-xs text-slate-300">
@@ -780,8 +920,6 @@ function AgentDetailSheet({
               <span>Max Tokens: {agent.execution.maxTokens}</span>
             </div>
           </div>
-
-          {/* Skills */}
           <div>
             <h4 className="text-xs font-medium text-slate-400 mb-2">Bound Skills</h4>
             {agent.skills.length === 0 ? (
@@ -789,14 +927,7 @@ function AgentDetailSheet({
             ) : (
               <div className="space-y-1.5">
                 {agent.skills.map((s) => (
-                  <div
-                    key={s.skillId}
-                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded text-xs ${
-                      s.enabled
-                        ? 'bg-purple-500/10 border border-purple-500/20'
-                        : 'bg-slate-800/30 border border-slate-700/30 opacity-50'
-                    }`}
-                  >
+                  <div key={s.skillId} className={`flex items-center gap-2 px-2.5 py-1.5 rounded text-xs ${s.enabled ? 'bg-purple-500/10 border border-purple-500/20' : 'bg-slate-800/30 border border-slate-700/30 opacity-50'}`}>
                     <Sparkles className="w-3 h-3" />
                     <span className={s.enabled ? 'text-slate-300' : 'text-slate-500'}>{s.skillId}</span>
                     {!s.enabled && <span className="text-slate-600">(disabled)</span>}
@@ -806,8 +937,6 @@ function AgentDetailSheet({
               </div>
             )}
           </div>
-
-          {/* Tools */}
           <div>
             <h4 className="text-xs font-medium text-slate-400 mb-2">Bound Tools</h4>
             {agent.tools.length === 0 ? (
@@ -815,23 +944,11 @@ function AgentDetailSheet({
             ) : (
               <div className="space-y-1.5">
                 {agent.tools.map((t) => (
-                  <div
-                    key={t.toolId}
-                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded text-xs ${
-                      t.enabled
-                        ? 'bg-amber-500/10 border border-amber-500/20'
-                        : 'bg-slate-800/30 border border-slate-700/30 opacity-50'
-                    }`}
-                  >
+                  <div key={t.toolId} className={`flex items-center gap-2 px-2.5 py-1.5 rounded text-xs ${t.enabled ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-slate-800/30 border border-slate-700/30 opacity-50'}`}>
                     <Wrench className="w-3 h-3" />
                     <span className={t.enabled ? 'text-slate-300' : 'text-slate-500'}>{t.toolId}</span>
                     {!t.enabled && <span className="text-slate-600">(disabled)</span>}
-                    <Badge className={`text-[8px] h-3 px-1 ml-auto ${
-                      t.requiredPermission === 'none' ? 'bg-slate-500/20 text-slate-400' :
-                      t.requiredPermission === 'read' ? 'bg-cyan-500/20 text-cyan-300' :
-                      t.requiredPermission === 'write' ? 'bg-amber-500/20 text-amber-300' :
-                      'bg-red-500/20 text-red-300'
-                    }`}>
+                    <Badge className={`text-[8px] h-3 px-1 ml-auto ${t.requiredPermission === 'none' ? 'bg-slate-500/20 text-slate-400' : t.requiredPermission === 'read' ? 'bg-cyan-500/20 text-cyan-300' : t.requiredPermission === 'write' ? 'bg-amber-500/20 text-amber-300' : 'bg-red-500/20 text-red-300'}`}>
                       {t.requiredPermission}
                     </Badge>
                   </div>
@@ -839,39 +956,25 @@ function AgentDetailSheet({
               </div>
             )}
           </div>
-
-          {/* Hooks */}
           {agent.hooks.length > 0 && (
             <div>
               <h4 className="text-xs font-medium text-slate-400 mb-2">Hooks</h4>
               <div className="flex flex-wrap gap-1.5">
                 {agent.hooks.map((h) => (
-                  <Badge key={h} className="bg-slate-700/30 text-slate-400 text-[10px] h-5 px-2">
-                    {h}
-                  </Badge>
+                  <Badge key={h} className="bg-slate-700/30 text-slate-400 text-[10px] h-5 px-2">{h}</Badge>
                 ))}
               </div>
             </div>
           )}
-
-          {/* Stats */}
           <div className="p-3 rounded-lg bg-slate-800/30 border border-slate-700/30">
             <div className="flex items-center justify-between text-xs text-slate-400">
               <span className="flex items-center gap-1"><Zap className="w-3 h-3" /> Executions: {agent.executionCount}</span>
               <span className="flex items-center gap-1"><Cpu className="w-3 h-3" /> Type: {agent.type}</span>
             </div>
           </div>
-
-          {/* Fire button for hired agents */}
           {isHired && onFire && (
-            <Button
-              variant="destructive"
-              size="sm"
-              className="w-full"
-              onClick={onFire}
-            >
-              <Trash2 className="w-3 h-3 mr-1.5" />
-              Fire Agent
+            <Button variant="destructive" size="sm" className="w-full" onClick={onFire}>
+              <Trash2 className="w-3 h-3 mr-1.5" /> Fire Agent
             </Button>
           )}
         </div>
@@ -895,9 +998,7 @@ function HireAgentDialog({
   const [open, setOpen] = useState(false);
 
   const toggleCapability = (cap: string) => {
-    setCapabilities((prev) =>
-      prev.includes(cap) ? prev.filter((c) => c !== cap) : [...prev, cap]
-    );
+    setCapabilities((prev) => prev.includes(cap) ? prev.filter((c) => c !== cap) : [...prev, cap]);
   };
 
   const handleSubmit = () => {
@@ -912,88 +1013,40 @@ function HireAgentDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button
-          size="sm"
-          className="bg-purple-600 hover:bg-purple-500 text-white h-8 text-xs"
-        >
-          <UserPlus className="w-3.5 h-3.5 mr-1.5" />
-          Hire Agent
+        <Button size="sm" className="bg-purple-600 hover:bg-purple-500 text-white h-7 text-[10px] px-2">
+          <UserPlus className="w-3 h-3 mr-1" /> Hire
         </Button>
       </DialogTrigger>
       <DialogContent className="bg-[#0f0f1a] border-slate-700/50 sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="text-slate-200 flex items-center gap-2">
-            <UserPlus className="w-5 h-5 text-purple-400" />
-            Hire a Temporary Agent
+            <UserPlus className="w-5 h-5 text-purple-400" /> Hire a Temporary Agent
           </DialogTitle>
         </DialogHeader>
-
         <div className="space-y-4 mt-4">
           <div>
             <Label className="text-slate-400 text-xs">Role</Label>
-            <Input
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              placeholder="e.g., code_reviewer, data_analyst"
-              className="mt-1 bg-slate-800/50 border-slate-700/50 text-slate-200 text-sm"
-            />
+            <Input value={role} onChange={(e) => setRole(e.target.value)} placeholder="e.g., code_reviewer, data_analyst" className="mt-1 bg-slate-800/50 border-slate-700/50 text-slate-200 text-sm" />
           </div>
-
           <div>
             <Label className="text-slate-400 text-xs">Task Description</Label>
-            <Textarea
-              value={task}
-              onChange={(e) => setTask(e.target.value)}
-              placeholder="Describe what this agent should do..."
-              className="mt-1 bg-slate-800/50 border-slate-700/50 text-slate-200 text-sm resize-none"
-              rows={3}
-            />
+            <Textarea value={task} onChange={(e) => setTask(e.target.value)} placeholder="Describe what this agent should do..." className="mt-1 bg-slate-800/50 border-slate-700/50 text-slate-200 text-sm resize-none" rows={3} />
           </div>
-
           <div>
             <Label className="text-slate-400 text-xs">Capabilities</Label>
             <div className="flex flex-wrap gap-1.5 mt-2">
               {CAPABILITY_OPTIONS.map((cap) => (
-                <button
-                  key={cap}
-                  type="button"
-                  onClick={() => toggleCapability(cap)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] border transition-all ${
-                    capabilities.includes(cap)
-                      ? 'bg-purple-500/20 border-purple-500/40 text-purple-300'
-                      : 'bg-slate-800/30 border-slate-700/30 text-slate-500 hover:border-slate-600'
-                  }`}
-                >
+                <button key={cap} type="button" onClick={() => toggleCapability(cap)} className={`px-2 py-1 rounded-lg text-[11px] border transition-all ${capabilities.includes(cap) ? 'bg-purple-500/20 border-purple-500/40 text-purple-300' : 'bg-slate-800/30 border-slate-700/30 text-slate-500 hover:border-slate-600'}`}>
                   {cap.replace(/_/g, ' ')}
                 </button>
               ))}
             </div>
           </div>
         </div>
-
         <DialogFooter className="mt-4">
-          <DialogClose asChild>
-            <Button variant="ghost" size="sm" className="text-slate-400">
-              Cancel
-            </Button>
-          </DialogClose>
-          <Button
-            size="sm"
-            onClick={handleSubmit}
-            disabled={!role.trim() || !task.trim() || capabilities.length === 0 || hiring}
-            className="bg-purple-600 hover:bg-purple-500 text-white"
-          >
-            {hiring ? (
-              <>
-                <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
-                Hiring...
-              </>
-            ) : (
-              <>
-                <UserPlus className="w-3 h-3 mr-1.5" />
-                Hire
-              </>
-            )}
+          <DialogClose asChild><Button variant="ghost" size="sm" className="text-slate-400">Cancel</Button></DialogClose>
+          <Button size="sm" onClick={handleSubmit} disabled={!role.trim() || !task.trim() || capabilities.length === 0 || hiring} className="bg-purple-600 hover:bg-purple-500 text-white">
+            {hiring ? <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Hiring...</> : <><UserPlus className="w-3 h-3 mr-1.5" />Hire</>}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1005,6 +1058,9 @@ function HireAgentDialog({
 
 export default function Home() {
   const isMobile = useIsMobile();
+
+  // ─── Data state ───
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [agents, setAgents] = useState<RuntimeAgent[]>([]);
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus | null>(null);
   const [aiStatus, setAIStatus] = useState<AIStatus | null>(null);
@@ -1017,12 +1073,142 @@ export default function Home() {
   const [hiring, setHiring] = useState(false);
   const [detailAgent, setDetailAgent] = useState<RuntimeAgent | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [chatPanelOpen, setChatPanelOpen] = useState(true);
 
   const orchestrator = agents.find((a) => a.role === 'orchestrator') || null;
-  const nonOrchestratorAgents = agents.filter((a) => a.role !== 'orchestrator');
   const hiredAgentIds = new Set(hiredAgents.map((h) => h.id));
 
-  // ─── Fetch Data ──────────────────────────────────────────────
+  // ─── Pixel Office State ───
+  const [assetsLoaded, setAssetsLoaded] = useState(false);
+  const [zoom, setZoom] = useState(2);
+  const panRef = useRef({ x: 0, y: 0 });
+
+  const [officeState] = useState(() => {
+    const os = new OfficeState(DEFAULT_AGENT_OS_LAYOUT);
+    os.setZoneDestinations(ZONE_DESTINATIONS);
+    os.setZoneLabels(ZONE_LABELS);
+    return os;
+  });
+
+  // ─── Office data hooks ───
+  const { state: officeData, loading: officeLoading, error: officeError, refetch: refetchOffice } = useOfficeData(workspaceId, 5000);
+  const { newEvents, clearNewEvents } = useEventStream(workspaceId, 4000);
+
+  // ─── Load assets on mount ───
+  useEffect(() => {
+    let mounted = true;
+    loadAllAssets().then((success) => {
+      if (mounted && success) {
+        setAssetsLoaded(true);
+        const layout = DEFAULT_AGENT_OS_LAYOUT;
+        officeState.rebuildFromLayout(layout);
+        officeState.setZoneDestinations(ZONE_DESTINATIONS);
+        officeState.setZoneLabels(ZONE_LABELS);
+      }
+    });
+    return () => { mounted = false; };
+  }, [officeState]);
+
+  // ─── Sync office agents from office data ───
+  useEffect(() => {
+    if (!officeData?.agents) return;
+    const currentAgentIds = new Set(officeData.agents.map((a) => a.id));
+
+    for (const agent of officeData.agents) {
+      const numericId = hashAgentId(agent.id);
+      if (!officeState.characters.has(numericId)) {
+        const status = agent.runtimeState?.status ?? agent.status;
+        const preferredSeatId = ROLE_SEAT_MAP[agent.role];
+        officeState.addAgent(numericId, undefined, undefined, preferredSeatId);
+        const ch = officeState.characters.get(numericId);
+        if (ch) {
+          ch.name = agent.name || agent.role;
+          ch.role = agent.role;
+        }
+        officeState.setAgentActive(numericId, mapAgentStatusToActive(status));
+        officeState.setAgentTool(numericId, mapAgentStatusToTool(status));
+        const behavior = mapAgentStatusToBehavior(status);
+        if (behavior !== BehaviorState.WORKING) {
+          officeState.setAgentBehavior(numericId, behavior);
+        }
+        const bubble = mapAgentStatusToBubble(status);
+        if (bubble === 'permission') officeState.showPermissionBubble(numericId);
+        else if (bubble === 'waiting') officeState.showWaitingBubble(numericId);
+      } else {
+        const status = agent.runtimeState?.status ?? agent.status;
+        const ch = officeState.characters.get(numericId);
+        if (ch) {
+          const isActive = mapAgentStatusToActive(status);
+          if (ch.isActive !== isActive) officeState.setAgentActive(numericId, isActive);
+          officeState.setAgentTool(numericId, mapAgentStatusToTool(status));
+          officeState.setAgentStatus(numericId, status);
+          ch.name = agent.name || agent.role;
+          ch.role = agent.role;
+          const bubble = mapAgentStatusToBubble(status);
+          if (bubble === 'permission' && ch.bubbleType !== 'permission') officeState.showPermissionBubble(numericId);
+          else if (bubble === 'waiting' && ch.bubbleType !== 'waiting') officeState.showWaitingBubble(numericId);
+          else if (!bubble && ch.bubbleType && ch.bubbleType !== 'done') officeState.dismissBubble(numericId);
+        }
+      }
+    }
+    for (const [id] of officeState.characters) {
+      const idStr = unhashAgentId(id);
+      if (idStr && !currentAgentIds.has(idStr)) officeState.removeAgent(id);
+    }
+  }, [officeData?.agents, officeState]);
+
+  // ─── Handle event-driven visual reactions ───
+  useEffect(() => {
+    if (!newEvents.length) return;
+    for (const event of newEvents) {
+      if (event.entityType === 'agent' && event.entityId) {
+        const numericId = hashAgentId(event.entityId);
+        const ch = officeState.characters.get(numericId);
+        if (!ch) continue;
+        switch (event.eventType) {
+          case 'agent.status_changed':
+            if (event.payload?.newStatus) {
+              const newStatus = event.payload.newStatus as string;
+              officeState.setAgentActive(numericId, mapAgentStatusToActive(newStatus));
+              officeState.setAgentTool(numericId, mapAgentStatusToTool(newStatus));
+              officeState.setAgentBehavior(numericId, mapAgentStatusToBehavior(newStatus));
+            }
+            break;
+          case 'task.assigned':
+          case 'task.started':
+            officeState.setAgentBehavior(numericId, BehaviorState.WORKING);
+            break;
+          case 'task.completed':
+            officeState.showDoneBubble(numericId);
+            officeState.setAgentBehavior(numericId, BehaviorState.IDLE, 5);
+            break;
+          case 'task.failed':
+            officeState.setAgentBehavior(numericId, BehaviorState.IDLE, 5);
+            break;
+          case 'tool.execution_started':
+            officeState.setAgentBehavior(numericId, BehaviorState.WORKING);
+            officeState.setAgentTool(numericId, event.payload?.toolKey as string || 'Write');
+            break;
+          case 'tool.execution_succeeded':
+          case 'tool.execution_failed':
+            officeState.setAgentTool(numericId, null);
+            break;
+          case 'approval.requested':
+            officeState.showPermissionBubble(numericId);
+            officeState.setAgentBehavior(numericId, BehaviorState.MEETING, 15);
+            break;
+          case 'approval.approved':
+          case 'approval.rejected':
+            officeState.dismissBubble(numericId);
+            officeState.setAgentBehavior(numericId, BehaviorState.WORKING);
+            break;
+        }
+      }
+    }
+    clearNewEvents();
+  }, [newEvents, clearNewEvents, officeState]);
+
+  // ─── Fetch runtime data ───
 
   const fetchRuntimeStatus = useCallback(async () => {
     try {
@@ -1062,6 +1248,39 @@ export default function Home() {
     }
   }, []);
 
+  const fetchWorkspace = useCallback(async () => {
+    try {
+      const res = await fetch('/api/seed');
+      if (!res.ok) throw new Error('Failed');
+      const data = await res.json();
+      if (data.initialized) {
+        // Get workspace from status - we need the actual workspace ID
+        const agentsRes = await fetch('/api/agents?limit=1');
+        if (agentsRes.ok) {
+          const agentsData = await agentsRes.json();
+          if (agentsData.agents?.length > 0) {
+            setWorkspaceId(agentsData.agents[0].workspaceId);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch workspace:', err);
+    }
+  }, []);
+
+  const seedSystem = useCallback(async () => {
+    try {
+      const res = await fetch('/api/seed', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setWorkspaceId(data.workspace?.id);
+        await refreshAll();
+      }
+    } catch (err) {
+      console.error('Failed to seed system:', err);
+    }
+  }, []);
+
   const refreshAll = useCallback(async () => {
     setRefreshing(true);
     await Promise.all([fetchRuntimeStatus(), fetchAIStatus(), fetchHiredAgents()]);
@@ -1071,11 +1290,12 @@ export default function Home() {
   useEffect(() => {
     const init = async () => {
       setLoading(true);
+      await fetchWorkspace();
       await Promise.all([fetchRuntimeStatus(), fetchAIStatus(), fetchHiredAgents()]);
       setLoading(false);
     };
     init();
-  }, [fetchRuntimeStatus, fetchAIStatus, fetchHiredAgents]);
+  }, [fetchRuntimeStatus, fetchAIStatus, fetchHiredAgents, fetchWorkspace]);
 
   // Auto-refresh agent statuses every 8 seconds
   useEffect(() => {
@@ -1083,7 +1303,7 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [fetchRuntimeStatus]);
 
-  // ─── Chat Handler ────────────────────────────────────────────
+  // ─── Chat Handler ───
 
   const handleSendMessage = useCallback(
     async (message: string) => {
@@ -1093,7 +1313,6 @@ export default function Home() {
         content: message,
         timestamp: Date.now(),
       };
-
       setMessages((prev) => [...prev, userMsg]);
       setChatLoading(true);
       setDelegatingAgentCount(0);
@@ -1106,19 +1325,13 @@ export default function Home() {
         const res = await fetch('/api/orchestrator/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            message,
-            history,
-            mode: 'auto',
-          }),
+          body: JSON.stringify({ message, history, mode: 'auto' }),
         });
 
         const data: OrchestratorChatResponse = await res.json();
 
-        // If there are delegated tasks, show delegation report first
         if (data.delegatedTasks && data.delegatedTasks.length > 0) {
           setDelegatingAgentCount(data.delegatedTasks.length);
-
           const delegationMsg: ChatMessage = {
             id: `delegation-${Date.now()}`,
             role: 'delegation',
@@ -1127,7 +1340,6 @@ export default function Home() {
             totalDurationMs: data.totalDurationMs,
             timestamp: Date.now(),
           };
-
           const orchestratorMsg: ChatMessage = {
             id: `asst-${Date.now()}`,
             role: 'assistant',
@@ -1138,10 +1350,8 @@ export default function Home() {
             timestamp: Date.now(),
             error: !res.ok,
           };
-
           setMessages((prev) => [...prev, delegationMsg, orchestratorMsg]);
         } else {
-          // Simple response without delegation
           const assistantMsg: ChatMessage = {
             id: `asst-${Date.now()}`,
             role: 'assistant',
@@ -1152,7 +1362,6 @@ export default function Home() {
             timestamp: Date.now(),
             error: !res.ok,
           };
-
           setMessages((prev) => [...prev, assistantMsg]);
         }
       } catch (error) {
@@ -1163,7 +1372,6 @@ export default function Home() {
           timestamp: Date.now(),
           error: true,
         };
-
         setMessages((prev) => [...prev, errorMsg]);
       } finally {
         setChatLoading(false);
@@ -1174,7 +1382,7 @@ export default function Home() {
     [messages, fetchRuntimeStatus],
   );
 
-  // ─── Hire Handler ────────────────────────────────────────────
+  // ─── Hire Handler ───
 
   const handleHireAgent = useCallback(
     async (role: string, task: string, capabilities: string[]) => {
@@ -1185,11 +1393,8 @@ export default function Home() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ role, task, capabilities }),
         });
-
         const data = await res.json();
-
         if (res.ok && data.success) {
-          // Add a system message about the hiring
           const systemMsg: ChatMessage = {
             id: `hire-${Date.now()}`,
             role: 'assistant',
@@ -1208,7 +1413,7 @@ export default function Home() {
     [fetchRuntimeStatus, fetchHiredAgents],
   );
 
-  // ─── Fire Handler ────────────────────────────────────────────
+  // ─── Fire Handler ───
 
   const handleFireAgent = useCallback(
     async (agentId: string) => {
@@ -1233,20 +1438,27 @@ export default function Home() {
     [fetchRuntimeStatus, fetchHiredAgents],
   );
 
-  // ─── Agent Detail Click ─────────────────────────────────────
+  // ─── Agent Click from pixel office ───
 
-  const handleAgentClick = (agent: RuntimeAgent) => {
-    setDetailAgent(agent);
-    setDetailOpen(true);
-  };
+  const handlePixelAgentClick = useCallback((numericId: number) => {
+    // Find the runtime agent matching this pixel agent
+    const agentIdStr = unhashAgentId(numericId);
+    if (agentIdStr) {
+      const agent = agents.find((a) => a.id === agentIdStr);
+      if (agent) {
+        setDetailAgent(agent);
+        setDetailOpen(true);
+      }
+    }
+  }, [agents]);
 
-  // ─── Stats ───────────────────────────────────────────────────
-
+  // ─── Stats ───
   const totalSkills = runtimeStatus?.skills.totalSkills ?? 0;
   const totalTools = runtimeStatus?.tools.totalTools ?? 0;
   const totalAgents = agents.length;
+  const activeAgentCount = agents.filter(a => a.status !== 'offline').length;
 
-  // ─── Loading State ──────────────────────────────────────────
+  // ─── Loading State ───
 
   if (loading) {
     return (
@@ -1259,165 +1471,150 @@ export default function Home() {
             </div>
           </div>
           <h2 className="text-lg font-semibold text-slate-300 mb-1">Loading Agent OS</h2>
-          <p className="text-sm text-slate-500">Initializing 11 agents...</p>
+          <p className="text-sm text-slate-500">Initializing pixel office...</p>
         </div>
       </div>
     );
   }
 
-  // ─── Render ─────────────────────────────────────────────────
+  // ─── No workspace — show seed prompt ───
+  if (!workspaceId || agents.length === 0) {
+    return (
+      <div className="min-h-screen bg-[#0a0a1a] flex items-center justify-center">
+        <div className="text-center space-y-4 max-w-md">
+          <div className="text-6xl">🏢</div>
+          <h2 className="text-2xl font-bold text-white">Welcome to Agent OS</h2>
+          <p className="text-sm text-slate-400">
+            Initialize your workspace to see the Pixel Agent Office with 11 AI specialists.
+          </p>
+          <Button onClick={seedSystem} size="lg" className="bg-violet-600 hover:bg-violet-700">
+            🚀 Initialize System
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Main Render ───
 
   return (
-    <div className="min-h-screen bg-[#0a0a1a] flex flex-col">
-      {/* ─── Header Bar ───────────────────────────────────────── */}
-      <header className="sticky top-0 z-40 bg-[#0a0a1a]/95 backdrop-blur-sm border-b border-slate-700/50">
-        <div className="max-w-7xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            {/* Left: Branding */}
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-purple-500/20 border border-purple-500/30 flex items-center justify-center">
-                <Crown className="w-4 h-4 text-purple-400" />
-              </div>
-              <div>
-                <h1 className="text-base font-bold text-slate-200">Agent OS</h1>
-                <p className="text-[10px] text-slate-500 hidden sm:block">Multi-Agent Orchestrator System</p>
-              </div>
-            </div>
-
-            {/* Center: Stats */}
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              <Badge className="bg-purple-500/15 text-purple-300 border-purple-500/20 text-[10px] h-5 px-2">
-                <Crown className="w-2.5 h-2.5 mr-1" />
-                {totalAgents} agents
-              </Badge>
-              <Badge className="bg-rose-500/15 text-rose-300 border-rose-500/20 text-[10px] h-5 px-2">
-                <Sparkles className="w-2.5 h-2.5 mr-1" />
-                {totalSkills} skills
-              </Badge>
-              <Badge className="bg-amber-500/15 text-amber-300 border-amber-500/20 text-[10px] h-5 px-2">
-                <Wrench className="w-2.5 h-2.5 mr-1" />
-                {totalTools} tools
-              </Badge>
-            </div>
-
-            {/* Right: Status + Refresh */}
-            <div className="flex items-center gap-2">
-              {aiStatus && (
-                <Badge
-                  className={`text-[10px] h-5 px-2 ${
-                    aiStatus.configured
-                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/20'
-                      : 'bg-amber-500/15 text-amber-300 border-amber-500/20'
-                  }`}
-                >
-                  <span className={`w-1.5 h-1.5 rounded-full mr-1 ${aiStatus.configured ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                  {aiStatus.configured ? 'AI Ready' : 'Not Configured'}
-                </Badge>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 w-7 p-0 text-slate-400 hover:text-slate-200"
-                onClick={refreshAll}
-                disabled={refreshing}
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-              </Button>
-            </div>
-          </div>
+    <div className="h-screen flex flex-col overflow-hidden bg-[#1a1a2e]">
+      {/* ─── Minimal Top Bar ─── */}
+      <div className="flex items-center justify-between px-2 md:px-3 py-1.5 bg-black/60 backdrop-blur-md border-b border-white/10 z-30 flex-shrink-0">
+        <div className="flex items-center gap-1.5 md:gap-2">
+          <Building2 className="w-3.5 h-3.5 md:w-4 md:h-4 text-violet-400" />
+          <h1 className="text-xs md:text-sm font-bold text-white">Agent OS</h1>
+          <Badge variant="outline" className="text-[8px] md:text-[9px] h-3.5 md:h-4 px-1 md:px-1.5 border-white/20 text-slate-300">
+            Pixel Office
+          </Badge>
+          <span className="text-[8px] md:text-[9px] text-slate-400 ml-0.5 md:ml-1">
+            {activeAgentCount}/{totalAgents} active
+          </span>
         </div>
-      </header>
 
-      {/* ─── Main Content ─────────────────────────────────────── */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-4">
-        <div className={`flex gap-4 ${isMobile ? 'flex-col' : 'flex-row'} h-full`}>
-          {/* Left Column: Orchestrator Chat */}
-          <div className={`${isMobile ? 'w-full' : 'w-[60%]'} flex flex-col`}>
-            <OrchestratorChatPanel
-              messages={messages}
-              onSend={handleSendMessage}
-              loading={chatLoading}
-              configured={aiStatus?.configured ?? false}
-              orchestrator={orchestrator}
-              delegatingAgentCount={delegatingAgentCount}
-            />
-          </div>
+        <div className="flex items-center gap-1.5 md:gap-2">
+          <Badge className="bg-purple-500/15 text-purple-300 border-purple-500/20 text-[9px] h-4 px-1.5 hidden sm:inline-flex">
+            <Crown className="w-2 h-2 mr-0.5" />{totalAgents}
+          </Badge>
+          <Badge className="bg-rose-500/15 text-rose-300 border-rose-500/20 text-[9px] h-4 px-1.5 hidden sm:inline-flex">
+            <Sparkles className="w-2 h-2 mr-0.5" />{totalSkills}
+          </Badge>
+          <Badge className="bg-amber-500/15 text-amber-300 border-amber-500/20 text-[9px] h-4 px-1.5 hidden sm:inline-flex">
+            <Wrench className="w-2 h-2 mr-0.5" />{totalTools}
+          </Badge>
+          {aiStatus && (
+            <Badge className={`text-[9px] h-4 px-1.5 ${aiStatus.configured ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/20' : 'bg-amber-500/15 text-amber-300 border-amber-500/20'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full mr-0.5 ${aiStatus.configured ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+              {aiStatus.configured ? 'AI' : 'No AI'}
+            </Badge>
+          )}
+          <HireAgentDialog onHire={handleHireAgent} hiring={hiring} />
+          <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-slate-400 hover:text-white" onClick={refreshAll} disabled={refreshing}>
+            <RefreshCw className={`w-3 h-3 ${refreshing ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
+      </div>
 
-          {/* Right Column: Agent Panel */}
-          <div className={`${isMobile ? 'w-full' : 'w-[40%]'}`}>
-            <div
-              className="overflow-y-auto custom-scrollbar pr-1"
-              style={{ maxHeight: isMobile ? '500px' : 'calc(100vh - 200px)' }}
+      {/* ─── Main Content: Pixel Office + Chat Panel ─── */}
+      <div className="flex-1 min-h-0 flex relative">
+        {/* Pixel Office Canvas — Full width */}
+        <div className="flex-1 min-h-0 relative">
+          <PixelOfficeCanvas
+            officeState={officeState}
+            onAgentClick={handlePixelAgentClick}
+            zoom={zoom}
+            onZoomChange={setZoom}
+            panRef={panRef}
+          />
+
+          {/* Asset loading overlay */}
+          {!assetsLoaded && (
+            <div className="absolute inset-0 flex items-center justify-center bg-[#1a1a2e]/80 z-20 pointer-events-none">
+              <div className="text-center space-y-2">
+                <Loader2 className="w-6 h-6 animate-spin mx-auto text-violet-400" />
+                <p className="text-xs text-slate-400">Loading pixel assets...</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ─── Orchestrator Chat Panel — Floating Left ─── */}
+        <AnimatePresence>
+          {chatPanelOpen && (
+            <motion.div
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: isMobile ? '100%' : 360, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              className={`${isMobile ? 'absolute inset-0 z-50' : 'relative'} border-l border-slate-700/30 flex-shrink-0 overflow-hidden`}
             >
-              <div className="space-y-3">
-                {/* Orchestrator Card (Prominent) */}
-                {orchestrator && (
-                  <div onClick={() => handleAgentClick(orchestrator)}>
-                    <OrchestratorCard agent={orchestrator} />
-                  </div>
-                )}
+              <OrchestratorChatPanel
+                messages={messages}
+                onSend={handleSendMessage}
+                loading={chatLoading}
+                configured={aiStatus?.configured ?? false}
+                orchestrator={orchestrator}
+                delegatingAgentCount={delegatingAgentCount}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
-                {/* Section label */}
-                <div className="flex items-center gap-2 px-1">
-                  <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Agents</span>
-                  <Separator className="flex-1 bg-slate-700/30" />
-                  <span className="text-[10px] text-slate-600">{nonOrchestratorAgents.length}</span>
-                </div>
-
-                {/* Agent Grid */}
-                <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-2'} gap-2`}>
-                  {nonOrchestratorAgents.map((agent) => (
-                    <AgentCard
-                      key={agent.id}
-                      agent={agent}
-                      onClick={() => handleAgentClick(agent)}
-                    />
-                  ))}
-                </div>
-
-                {/* Hired Agents Section */}
-                {hiredAgents.length > 0 && (
-                  <>
-                    <div className="flex items-center gap-2 px-1 pt-2">
-                      <span className="text-[10px] font-medium text-purple-400 uppercase tracking-wider">Hired</span>
-                      <Separator className="flex-1 bg-slate-700/30" />
-                      <span className="text-[10px] text-slate-600">{hiredAgents.length}</span>
-                    </div>
-                    <div className={`grid ${isMobile ? 'grid-cols-1' : 'grid-cols-2'} gap-2`}>
-                      {agents
-                        .filter((a) => hiredAgentIds.has(a.id))
-                        .map((agent) => (
-                          <AgentCard
-                            key={agent.id}
-                            agent={agent}
-                            onClick={() => handleAgentClick(agent)}
-                          />
-                        ))}
-                    </div>
-                  </>
-                )}
-              </div>
+      {/* ─── Bottom Floating Bar ─── */}
+      <div className="flex-shrink-0 bg-black/60 backdrop-blur-md border-t border-white/10 z-30">
+        <div className="flex items-center justify-between px-3 py-1.5">
+          <div className="flex items-center gap-2">
+            {/* Toggle chat panel */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className={`h-7 text-[10px] gap-1 ${chatPanelOpen ? 'bg-purple-500/20 text-purple-300' : 'text-slate-400 hover:text-white'}`}
+              onClick={() => setChatPanelOpen(!chatPanelOpen)}
+            >
+              {chatPanelOpen ? <PanelLeftClose className="w-3 h-3" /> : <PanelLeftOpen className="w-3 h-3" />}
+              <span className="hidden sm:inline">{chatPanelOpen ? 'Hide Chat' : 'Show Chat'}</span>
+            </Button>
+            <Separator orientation="vertical" className="h-4 bg-slate-700/50" />
+            {/* Quick agent count */}
+            <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
+              <span className="flex items-center gap-0.5"><Crown className="w-2.5 h-2.5 text-purple-400" />{totalAgents} agents</span>
+              <span>·</span>
+              <span className="flex items-center gap-0.5"><Sparkles className="w-2.5 h-2.5 text-rose-400" />{totalSkills} skills</span>
+              <span>·</span>
+              <span className="flex items-center gap-0.5"><Wrench className="w-2.5 h-2.5 text-amber-400" />{totalTools} tools</span>
             </div>
           </div>
-        </div>
-      </main>
-
-      {/* ─── Sticky Footer ────────────────────────────────────── */}
-      <footer className="border-t border-slate-700/50 bg-[#0a0a1a] mt-auto">
-        <div className="max-w-7xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <Crown className="w-3.5 h-3.5 text-purple-400" />
-              <span>Agent OS · Multi-Agent System</span>
-              <span className="text-slate-700">·</span>
-              <span>{totalAgents} agents active</span>
-            </div>
-            <HireAgentDialog onHire={handleHireAgent} hiring={hiring} />
+          <div className="flex items-center gap-1.5">
+            <Badge className="bg-slate-700/30 text-slate-400 text-[8px] h-4 px-1.5 border border-slate-600/30">
+              <MessageSquare className="w-2 h-2 mr-0.5" />
+              {messages.length} msgs
+            </Badge>
           </div>
         </div>
-      </footer>
+      </div>
 
-      {/* ─── Agent Detail Sheet ───────────────────────────────── */}
+      {/* ─── Agent Detail Sheet ─── */}
       <AgentDetailSheet
         agent={detailAgent}
         open={detailOpen}
