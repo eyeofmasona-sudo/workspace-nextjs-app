@@ -132,6 +132,44 @@
 canvas[image-rendering="pixelated"] {
   image-rendering: pixelated;
   image-rendering: -moz-crisp-edges;
+  image-rendering: -webkit-crisp-edges;
+  -ms-interpolation-mode: nearest-neighbor;
+}
+
+/* Pixel-art safe scaling for any img/canvas with pixel content */
+.pixel-art-safe {
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: -webkit-crisp-edges;
+  -ms-interpolation-mode: nearest-neighbor;
+}
+
+/* Prevent sub-pixel rendering artifacts in pixel office */
+.pixel-office-container canvas {
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+/* Mobile touch highlight removal for canvas */
+.pixel-office-container canvas:active {
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Responsive bottom sheet for chat */
+@media (max-width: 767px) {
+  .chat-sheet-bottom {
+    border-radius: 1rem 1rem 0 0;
+    max-height: 85vh;
+  }
+}
+
+/* Tablet chat sheet side panel */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .chat-sheet-side {
+    width: 400px;
+    max-width: 100%;
+  }
 }
 
 /* Custom scrollbar for office panels (dark theme) */

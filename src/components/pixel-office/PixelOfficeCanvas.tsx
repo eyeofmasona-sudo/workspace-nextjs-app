@@ -416,6 +416,18 @@ export function PixelOfficeCanvas({
 
   const defaultZoom = useCallback((): number => {
     const dpr = window.devicePixelRatio || 1;
+    // On small screens, start with a lower zoom so the office fits
+    const container = containerRef.current;
+    if (container) {
+      const rect = container.getBoundingClientRect();
+      const layout = stateRef.current.getLayout();
+      // Calculate optimal zoom to fit the entire office in the container
+      const zoomToFitW = Math.floor(rect.width / layout.cols);
+      const zoomToFitH = Math.floor(rect.height / layout.rows);
+      const fitZoom = Math.min(zoomToFitW, zoomToFitH);
+      // Use at least ZOOM_MIN, at most 4, prefer fitting the office
+      return Math.max(ZOOM_MIN, Math.min(4, fitZoom));
+    }
     return Math.max(ZOOM_MIN, Math.round(ZOOM_DEFAULT_DPR_FACTOR * dpr));
   }, []);
 
@@ -437,7 +449,11 @@ export function PixelOfficeCanvas({
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         className="block touch-none"
-        style={{ imageRendering: 'pixelated' }}
+        style={{
+          imageRendering: 'pixelated',
+          // Pixel-art preservation: ensure crisp scaling on all browsers
+          msInterpolationMode: 'nearest-neighbor',
+        }}
       />
     </div>
   );

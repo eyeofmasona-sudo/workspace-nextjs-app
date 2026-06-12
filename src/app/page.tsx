@@ -36,7 +36,7 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import { useIsMobile } from '@/hooks/use-mobile';
+import { useResponsive } from '@/hooks/use-breakpoint';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // ─── Pixel Office components ──────────────────────────────────
@@ -1057,7 +1057,7 @@ function HireAgentDialog({
 // ─── Main Page ────────────────────────────────────────────────
 
 export default function Home() {
-  const isMobile = useIsMobile();
+  const { breakpoint, isMobile, isTablet, isDesktop, isMobileOrTablet } = useResponsive();
 
   // ─── Data state ───
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
@@ -1073,7 +1073,8 @@ export default function Home() {
   const [hiring, setHiring] = useState(false);
   const [detailAgent, setDetailAgent] = useState<RuntimeAgent | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
-  const [chatPanelOpen, setChatPanelOpen] = useState(true);
+  const [chatPanelOpen, setChatPanelOpen] = useState(false);
+  const [chatSheetOpen, setChatSheetOpen] = useState(false);
 
   const orchestrator = agents.find((a) => a.role === 'orchestrator') || null;
   const hiredAgentIds = new Set(hiredAgents.map((h) => h.id));
@@ -1537,8 +1538,8 @@ export default function Home() {
 
       {/* ─── Main Content: Pixel Office + Chat Panel ─── */}
       <div className="flex-1 min-h-0 flex relative">
-        {/* Pixel Office Canvas — Full width */}
-        <div className="flex-1 min-h-0 relative">
+        {/* Pixel Office Canvas — Full width, always visible */}
+        <div className="flex-1 min-h-0 min-w-0 relative pixel-office-container">
           <PixelOfficeCanvas
             officeState={officeState}
             onAgentClick={handlePixelAgentClick}
@@ -1556,18 +1557,88 @@ export default function Home() {
               </div>
             </div>
           )}
+
+          {/* ─── Mobile/Tablet: Floating Chat Toggle FAB ─── */}
+          {isMobileOrTablet && (
+            <button
+              onClick={() => setChatSheetOpen(true)}
+              className="absolute bottom-3 right-3 z-10 w-12 h-12 rounded-full bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white shadow-lg shadow-purple-900/40 flex items-center justify-center transition-colors touch-manipulation"
+              aria-label="Open chat"
+            >
+              <MessageSquare className="w-5 h-5" />
+              {messages.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-rose-500 text-[10px] font-bold flex items-center justify-center">
+                  {messages.length > 9 ? '9+' : messages.length}
+                </span>
+              )}
+            </button>
+          )}
+
+          {/* ─── Zoom Controls (pixel-art safe) ─── */}
+          {isMobileOrTablet && (
+            <div className="absolute bottom-3 left-3 z-10 flex flex-col gap-1">
+              <button
+                onClick={() => setZoom(Math.min(10, zoom + 1))}
+                className="w-9 h-9 rounded-lg bg-black/60 backdrop-blur-sm text-white/70 hover:text-white flex items-center justify-center text-lg font-bold border border-white/10 transition-colors touch-manipulation"
+                aria-label="Zoom in"
+              >+</button>
+              <button
+                onClick={() => setZoom(Math.max(1, zoom - 1))}
+                className="w-9 h-9 rounded-lg bg-black/60 backdrop-blur-sm text-white/70 hover:text-white flex items-center justify-center text-lg font-bold border border-white/10 transition-colors touch-manipulation"
+                aria-label="Zoom out"
+              >−</button>
+            </div>
+          )}
         </div>
 
-        {/* ─── Orchestrator Chat Panel — Floating Left ─── */}
-        <AnimatePresence>
-          {chatPanelOpen && (
-            <motion.div
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: isMobile ? '100%' : 360, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className={`${isMobile ? 'absolute inset-0 z-50' : 'relative'} border-l border-slate-700/30 flex-shrink-0 overflow-hidden`}
-            >
+        {/* ─── Desktop: Inline Chat Panel ─── */}
+        {isDesktop && (
+          <AnimatePresence>
+            {chatPanelOpen && (
+              <motion.div
+                initial={{ width: 0, opacity: 0 }}
+                animate={{ width: 380, opacity: 1 }}
+                exit={{ width: 0, opacity: 0 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                className="relative border-l border-slate-700/30 flex-shrink-0 overflow-hidden"
+              >
+                <OrchestratorChatPanel
+                  messages={messages}
+                  onSend={handleSendMessage}
+                  loading={chatLoading}
+                  configured={aiStatus?.configured ?? false}
+                  orchestrator={orchestrator}
+                  delegatingAgentCount={delegatingAgentCount}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        )}
+      </div>
+
+      {/* ─── Mobile/Tablet: Chat Sheet (slide-up drawer) ─── */}
+      {isMobileOrTablet && (
+        <Sheet open={chatSheetOpen} onOpenChange={setChatSheetOpen}>
+          <SheetContent
+            side={isMobile ? 'bottom' : 'right'}
+            className={`bg-[#12122a] border-slate-700/50 p-0 ${isMobile ? 'h-[85vh] rounded-t-xl' : 'w-[400px]'}`}
+          >
+            <SheetHeader className="px-3 py-2 border-b border-slate-700/50 shrink-0">
+              <div className="flex items-center justify-between">
+                <SheetTitle className="flex items-center gap-2 text-slate-200 text-sm">
+                  <span className="text-lg">👑</span>
+                  <span>Orchestrator Chat</span>
+                </SheetTitle>
+                <button
+                  onClick={() => setChatSheetOpen(false)}
+                  className="w-7 h-7 rounded-md bg-slate-800/60 text-slate-400 hover:text-white flex items-center justify-center"
+                  aria-label="Close chat"
+                >
+                  <XCircle className="w-4 h-4" />
+                </button>
+              </div>
+            </SheetHeader>
+            <div className="flex-1 min-h-0 overflow-hidden" style={{ height: isMobile ? 'calc(85vh - 52px)' : 'calc(100vh - 52px)' }}>
               <OrchestratorChatPanel
                 messages={messages}
                 onSend={handleSendMessage}
@@ -1576,39 +1647,54 @@ export default function Home() {
                 orchestrator={orchestrator}
                 delegatingAgentCount={delegatingAgentCount}
               />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+            </div>
+          </SheetContent>
+        </Sheet>
+      )}
 
       {/* ─── Bottom Floating Bar ─── */}
       <div className="flex-shrink-0 bg-black/60 backdrop-blur-md border-t border-white/10 z-30">
-        <div className="flex items-center justify-between px-3 py-1.5">
-          <div className="flex items-center gap-2">
-            {/* Toggle chat panel */}
-            <Button
-              variant="ghost"
-              size="sm"
-              className={`h-7 text-[10px] gap-1 ${chatPanelOpen ? 'bg-purple-500/20 text-purple-300' : 'text-slate-400 hover:text-white'}`}
-              onClick={() => setChatPanelOpen(!chatPanelOpen)}
-            >
-              {chatPanelOpen ? <PanelLeftClose className="w-3 h-3" /> : <PanelLeftOpen className="w-3 h-3" />}
-              <span className="hidden sm:inline">{chatPanelOpen ? 'Hide Chat' : 'Show Chat'}</span>
-            </Button>
+        <div className="flex items-center justify-between px-2 md:px-3 py-1.5">
+          <div className="flex items-center gap-1.5 md:gap-2">
+            {/* Desktop: Toggle chat panel inline */}
+            {isDesktop && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`h-7 text-[10px] gap-1 ${chatPanelOpen ? 'bg-purple-500/20 text-purple-300' : 'text-slate-400 hover:text-white'}`}
+                onClick={() => setChatPanelOpen(!chatPanelOpen)}
+              >
+                {chatPanelOpen ? <PanelLeftClose className="w-3 h-3" /> : <PanelLeftOpen className="w-3 h-3" />}
+                <span>{chatPanelOpen ? 'Hide Chat' : 'Show Chat'}</span>
+              </Button>
+            )}
+            {/* Mobile/Tablet: Toggle chat sheet */}
+            {isMobileOrTablet && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-[10px] gap-1 text-purple-300 hover:text-purple-200"
+                onClick={() => setChatSheetOpen(true)}
+              >
+                <MessageSquare className="w-3 h-3" />
+                <span>Chat{messages.length > 0 && ` (${messages.length})`}</span>
+              </Button>
+            )}
             <Separator orientation="vertical" className="h-4 bg-slate-700/50" />
-            {/* Quick agent count */}
-            <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
-              <span className="flex items-center gap-0.5"><Crown className="w-2.5 h-2.5 text-purple-400" />{totalAgents} agents</span>
-              <span>·</span>
-              <span className="flex items-center gap-0.5"><Sparkles className="w-2.5 h-2.5 text-rose-400" />{totalSkills} skills</span>
-              <span>·</span>
-              <span className="flex items-center gap-0.5"><Wrench className="w-2.5 h-2.5 text-amber-400" />{totalTools} tools</span>
+            {/* Quick agent count — compact on mobile */}
+            <div className="flex items-center gap-1 md:gap-1.5 text-[10px] text-slate-500">
+              <span className="flex items-center gap-0.5"><Crown className="w-2.5 h-2.5 text-purple-400" />{totalAgents}</span>
+              <span className="hidden sm:inline">agents</span>
+              <span className="hidden sm:inline">·</span>
+              <span className="hidden sm:inline-flex items-center gap-0.5"><Sparkles className="w-2.5 h-2.5 text-rose-400" />{totalSkills} skills</span>
+              <span className="hidden sm:inline">·</span>
+              <span className="hidden sm:inline-flex items-center gap-0.5"><Wrench className="w-2.5 h-2.5 text-amber-400" />{totalTools} tools</span>
             </div>
           </div>
           <div className="flex items-center gap-1.5">
             <Badge className="bg-slate-700/30 text-slate-400 text-[8px] h-4 px-1.5 border border-slate-600/30">
               <MessageSquare className="w-2 h-2 mr-0.5" />
-              {messages.length} msgs
+              {messages.length}
             </Badge>
           </div>
         </div>
