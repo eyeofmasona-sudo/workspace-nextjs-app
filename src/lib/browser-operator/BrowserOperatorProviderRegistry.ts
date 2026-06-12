@@ -42,12 +42,16 @@ class BrowserOperatorProviderRegistry {
   }
 
   /** List all providers with status */
-  listAll(): Array<{ id: string; name: string; active: boolean; currentUrl?: string; sessionCount: number }> {
-    return Array.from(this.providers.values()).map((p) => ({
-      id: p.id,
-      name: p.name,
-      ...p.getStatus(),
-    }));
+  listAll(): Array<{ id: string; name: string; description: string; active: boolean; currentUrl?: string; sessionCount: number }> {
+    return Array.from(this.providers.entries()).map(([id, p]) => {
+      const config = this.configs.get(id);
+      return {
+        id: p.id,
+        name: p.name,
+        description: config?.description ?? '',
+        ...p.getStatus(),
+      };
+    });
   }
 
   /** Register a provider config */
@@ -128,15 +132,15 @@ class BrowserOperatorProviderRegistry {
   }
 }
 
-// ── Singleton ──────────────────────────────────────────────────
-let _instance: BrowserOperatorProviderRegistry | null = null;
+// ── Singleton (using globalThis for HMR consistency) ─────────────
+const REGISTRY_KEY = '__browser_operator_registry__';
 
 export function getBrowserProviderRegistry(): BrowserOperatorProviderRegistry {
-  if (!_instance) {
-    _instance = new BrowserOperatorProviderRegistry();
-    _instance.loadDefaultConfigs();
+  if (!(globalThis as any)[REGISTRY_KEY]) {
+    (globalThis as any)[REGISTRY_KEY] = new BrowserOperatorProviderRegistry();
+    (globalThis as any)[REGISTRY_KEY].loadDefaultConfigs();
   }
-  return _instance;
+  return (globalThis as any)[REGISTRY_KEY];
 }
 
 export { BrowserOperatorProviderRegistry };

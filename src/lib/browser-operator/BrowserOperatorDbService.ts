@@ -198,10 +198,25 @@ class BrowserOperatorDbService {
     }
   }
 
-  /** Add multiple log entries for a task */
+  /** Add multiple log entries for a task (batch insert) */
   async addLogs(taskId: string, entries: BrowserLogEntry[]): Promise<void> {
-    for (const entry of entries) {
-      await this.addLog(taskId, entry);
+    try {
+      const database = await this.ensureDb();
+      if (!database) return;
+
+      if (entries.length === 0) return;
+
+      await database.browserOperatorLog.createMany({
+        data: entries.map((entry) => ({
+          taskId,
+          level: entry.level,
+          message: entry.message,
+          step: entry.step,
+          timestamp: entry.timestamp ? new Date(entry.timestamp) : new Date(),
+        })),
+      });
+    } catch (err) {
+      console.error('[BrowserOperatorDbService] addLogs failed:', err);
     }
   }
 

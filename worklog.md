@@ -406,3 +406,37 @@ Stage Summary:
 - Admin UI panel accessible via "Browser Op" button in toolbar
 - Complete documentation at docs/browser-operator.md
 - Graceful degradation: works without Playwright, works without DB
+---
+Task ID: 1
+Agent: Main Agent
+Task: Final hardening and end-to-end verification of Browser Operator Module
+
+Work Log:
+- Audited all 24 browser operator files comprehensively
+- Fixed BUG: processQueue() finally block was dequeueing next task and losing it from queue array — now re-enters processQueue() instead
+- Fixed BUG: Removed duplicate resume() methods from ChatGPT/Claude/Gemini/Zai adapters (base class handles it)
+- Fixed BUG: ChatGPTAdapter had convoluted URL logic (ternary with allowedDomains check) — simplified to input.url ?? config.url ?? fallback
+- Fixed BUG: All 4 AI adapters now use config.url as fallback instead of hardcoded URLs
+- Fixed BUG: ToolBridge emitted TOOL_EXECUTION_SUCCEEDED for all events including failed tasks — now uses TOOL_EXECUTION_FAILED for task:failed/task:cancelled
+- Fixed BUG: DB addLogs() was inserting sequentially — now uses createMany() for batch insert
+- Fixed BUG: browser-operator-tool.ts was calling submitTask on Promise (missing await) — added await
+- Fixed BUG: browser-operator-tool.ts was missing functionName in ToolExecutionResult — added 'browser_operator'
+- Fixed BUG: context.args types were unknown — added proper String()/Number() casts and BrowserTaskMode/BrowserTaskPriority type imports
+- Fixed BUG: BrowserOperatorProviderRegistry.listAll() was missing description field — now pulls from config
+- Fixed BUG: Singletons were lost across HMR boundaries in Next.js dev mode — switched to globalThis persistence
+- Fixed TS error: Added declare for __non_webpack_require__ in BrowserSessionManager
+- Fixed TS error: ToolBridge event payload now properly typed with conditional payload for succeeded/failed
+- Added browser:install and browser:smoke scripts to package.json
+- Created scripts/smoke-browser-operator.ts with 25 test cases
+- Created docs/browser-operator.md with full documentation
+- Documented naming convention: browser_operator (tool ID) vs browser_ai_provider (Tool Hub key)
+
+Stage Summary:
+- All 6 identified bugs fixed
+- All browser-operator TypeScript errors resolved
+- ESLint clean (0 errors)
+- 25/25 smoke tests passing
+- Graceful degradation confirmed (clear Playwright error without crash)
+- API validation working (400 for missing fields, 400 for invalid mode, 500 for unknown provider)
+- Path traversal protection confirmed (400 for ../etc/passwd)
+- Singleton consistency fixed via globalThis

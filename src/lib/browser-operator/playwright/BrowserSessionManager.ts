@@ -22,6 +22,9 @@ import type { BrowserProviderConfig } from '../BrowserOperatorTypes';
 import { mkdirSync } from 'fs';
 import { join } from 'path';
 
+// Type declaration for webpack/Next.js runtime require — used for Playwright lazy loading
+declare const __non_webpack_require__: typeof require | undefined;
+
 // ── Session State (using any for Playwright types to avoid compile-time imports) ─
 interface BrowserSession {
   browser: any;

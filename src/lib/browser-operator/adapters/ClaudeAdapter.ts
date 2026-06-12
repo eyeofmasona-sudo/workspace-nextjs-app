@@ -77,7 +77,7 @@ export class ClaudeAdapter extends BaseBrowserProviderAdapter {
     }
 
     // Step 2: Navigate to Claude
-    const targetUrl = input.url ?? 'https://claude.ai';
+    const targetUrl = input.url ?? this.config!.url ?? 'https://claude.ai';
     logs.push(this.log('info', `Navigating to: ${targetUrl}`, 1));
     const navResult = await this.safeNavigate(targetUrl, task.id, logs);
     if (!navResult.success) {
@@ -200,43 +200,6 @@ export class ClaudeAdapter extends BaseBrowserProviderAdapter {
     };
   }
 
-  /** Resume: check if human intervention resolved, then re-run */
-  async resume(taskId: string): Promise<BrowserTaskOutput> {
-    const needsHuman = await this.checkNeedsHuman();
-
-    if (needsHuman.needed) {
-      return {
-        status: 'needs_human',
-        provider: this.id,
-        result: undefined,
-        error: undefined,
-        screenshots: [],
-        logs: [this.log('warn', `Still needs human: ${needsHuman.reason}`)],
-        needsHumanReason: needsHuman.reason,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-    }
-
-    // Human resolved the issue — take screenshot of current state
-    const page = this.sessionManager.getPage(this.config!.id);
-    const screenshots: string[] = [];
-    if (page) {
-      const ss = await this.screenshotService.capture(page, taskId, 'after_resume');
-      if (ss) screenshots.push(ss);
-    }
-
-    const currentUrl = this.sessionManager.getCurrentUrl(this.config!.id);
-
-    return {
-      status: 'completed',
-      provider: this.id,
-      result: `Human intervention resolved. Current URL: ${currentUrl}`,
-      screenshots,
-      logs: [this.log('info', 'Resumed after human intervention')],
-      finalUrl: currentUrl,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-  }
+  // resume() inherited from BaseBrowserProviderAdapter —
+  // checks needs_human, takes post-resume screenshot, returns completed/needs_human
 }

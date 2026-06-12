@@ -370,12 +370,10 @@ class BrowserOperatorService {
       console.error(`[BrowserOperator] Task ${task.id} failed:`, errorMsg);
     } finally {
       this.processing = false;
-      // Check for more tasks
-      const nextTask = this.queue.dequeue();
-      if (nextTask) {
-        // Re-enqueue and let the interval pick it up
-        this.queue.updateStatus(nextTask.id, 'queued');
-      }
+      // Process the next task in queue (if any)
+      // Previously this dequeued+re-queued which lost tasks from the array.
+      // Now we simply re-enter processQueue — dequeue is idempotent.
+      this.processQueue();
     }
   }
 
@@ -411,14 +409,14 @@ class BrowserOperatorService {
   }
 }
 
-// ── Singleton ──────────────────────────────────────────────────
-let _instance: BrowserOperatorService | null = null;
+// ── Singleton (using globalThis for HMR consistency) ─────────────
+const GLOBAL_KEY = '__browser_operator_service__';
 
 export function getBrowserOperatorService(): BrowserOperatorService {
-  if (!_instance) {
-    _instance = new BrowserOperatorService();
+  if (!(globalThis as any)[GLOBAL_KEY]) {
+    (globalThis as any)[GLOBAL_KEY] = new BrowserOperatorService();
   }
-  return _instance;
+  return (globalThis as any)[GLOBAL_KEY];
 }
 
 export { BrowserOperatorService };

@@ -136,15 +136,32 @@ export class BrowserOperatorToolBridge {
         const eventBus = await getEventBus();
         const EventTypes = await getEventTypes();
 
-        await eventBus.emit(EventTypes.TOOL_EXECUTION_SUCCEEDED, {
-          executionId,
-          toolKey: 'browser_ai_provider',
-          agentId: task.input.agentId,
-          browserTaskId: task.id,
-          browserTaskStatus: task.output.status,
-          timestamp: Date.now(),
-          source: 'browser-operator-tool-bridge',
-        });
+        // Use the correct event type based on task outcome
+        const isFailure = ['task:failed', 'task:cancelled'].includes(event.type);
+        const eventType = isFailure
+          ? EventTypes.TOOL_EXECUTION_FAILED
+          : EventTypes.TOOL_EXECUTION_SUCCEEDED;
+
+        const payload = isFailure
+          ? {
+              executionId,
+              toolKey: 'browser_ai_provider',
+              agentId: task.input.agentId,
+              error: task.output.error ?? 'Browser task failed',
+              correlationId: task.id,
+              timestamp: Date.now(),
+              source: 'browser-operator-tool-bridge',
+            }
+          : {
+              executionId,
+              toolKey: 'browser_ai_provider',
+              agentId: task.input.agentId,
+              correlationId: task.id,
+              timestamp: Date.now(),
+              source: 'browser-operator-tool-bridge',
+            };
+
+        await eventBus.emit(eventType, payload as any);
       } catch {
         // EventBus not available — not critical
       }

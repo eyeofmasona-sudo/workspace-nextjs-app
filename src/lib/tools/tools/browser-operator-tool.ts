@@ -10,6 +10,7 @@
 
 import type { ITool, ToolExecutionContext, ToolExecutionResult } from '../types';
 import type { ToolPermission } from '../types';
+import type { BrowserTaskMode, BrowserTaskPriority } from '@/lib/browser-operator/BrowserOperatorTypes';
 
 // Lazy import — avoids pulling playwright into the module graph at build time
 async function getBrowserOperatorService() {
@@ -93,21 +94,22 @@ const BROWSER_OPERATOR_TOOL: ITool = {
     const args = context.args;
 
     try {
-      const service = getBrowserOperatorService();
+      const service = await getBrowserOperatorService();
       const task = await service.submitTask({
-        provider: args.provider ?? 'custom',
-        prompt: args.prompt,
-        url: args.url,
-        mode: args.mode,
+        provider: String(args.provider ?? 'custom'),
+        prompt: String(args.prompt),
+        url: args.url ? String(args.url) : undefined,
+        mode: String(args.mode) as BrowserTaskMode,
         agentId: context.agentId,
         taskId: context.toolCallId,
-        priority: args.priority ?? 'normal',
-        timeout: args.timeout,
+        priority: args.priority ? String(args.priority) as BrowserTaskPriority : 'normal',
+        timeout: args.timeout ? Number(args.timeout) : undefined,
       });
 
       return {
         success: true,
         toolCallId: context.toolCallId,
+        functionName: 'browser_operator',
         content: JSON.stringify({
           taskId: task.id,
           status: task.output.status,
@@ -122,7 +124,9 @@ const BROWSER_OPERATOR_TOOL: ITool = {
       return {
         success: false,
         toolCallId: context.toolCallId,
+        functionName: 'browser_operator',
         content: `Browser operator error: ${message}`,
+        error: message,
         durationMs: Date.now() - startTime,
       };
     }
