@@ -40,6 +40,10 @@ export function PixelOfficeCanvas({
   const isPanningRef = useRef(false);
   const panStartRef = useRef({ mouseX: 0, mouseY: 0, panX: 0, panY: 0 });
   const zoomAccumulatorRef = useRef(0);
+  // Touch state for mobile
+  const touchStartRef = useRef<{ x: number; y: number; panX: number; panY: number; time: number } | null>(null);
+  const pinchStartRef = useRef<{ dist: number; zoom: number } | null>(null);
+  const isTouchPanningRef = useRef(false);
   // Use ref to bypass immutability lint for mutable game engine
   const stateRef = useRef(officeState);
   useEffect(() => { stateRef.current = officeState; }, [officeState]);
@@ -290,6 +294,112 @@ export function PixelOfficeCanvas({
     if (e.button === 1) e.preventDefault();
   }, []);
 
+  // ─── Touch handlers for mobile ───────────────────────────────────
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      if (e.touches.length === 1) {
+        // Single touch: start pan or tap
+        const touch = e.touches[0];
+        touchStartRef.current = {
+          x: touch.clientX,
+          y: touch.clientY,
+          panX: panRef.current.x,
+          panY: panRef.current.y,
+          time: Date.now(),
+        };
+        isTouchPanningRef.current = false;
+      } else if (e.touches.length === 2) {
+        // Pinch start
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        pinchStartRef.current = { dist, zoom };
+        isTouchPanningRef.current = true; // prevent tap
+      }
+    },
+    [zoom, panRef],
+  );
+
+  const handleTouchMove = useCallback(
+    (e: React.TouchEvent) => {
+      e.preventDefault(); // prevent scroll
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      if (e.touches.length === 1 && touchStartRef.current) {
+        // Single touch pan
+        const touch = e.touches[0];
+        const dx = touch.clientX - touchStartRef.current.x;
+        const dy = touch.clientY - touchStartRef.current.y;
+
+        // If moved more than 5px, it's a pan not a tap
+        if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+          isTouchPanningRef.current = true;
+          stateRef.current.cameraFollowId = null;
+        }
+
+        if (isTouchPanningRef.current) {
+          const dpr = window.devicePixelRatio || 1;
+          panRef.current = clampPan(
+            touchStartRef.current.panX + dx * dpr,
+            touchStartRef.current.panY + dy * dpr,
+          );
+        }
+      } else if (e.touches.length === 2 && pinchStartRef.current) {
+        // Pinch zoom
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const scale = dist / pinchStartRef.current.dist;
+        const newZoom = Math.max(
+          ZOOM_MIN,
+          Math.min(ZOOM_MAX, Math.round(pinchStartRef.current.zoom * scale)),
+        );
+        if (newZoom !== zoom) onZoomChange(newZoom);
+      }
+    },
+    [zoom, onZoomChange, panRef, clampPan],
+  );
+
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      if (e.touches.length === 0 && touchStartRef.current) {
+        // All fingers lifted
+        if (!isTouchPanningRef.current) {
+          // It was a tap — check for agent click
+          const st = stateRef.current;
+          const pos = screenToWorld(touchStartRef.current.x, touchStartRef.current.y);
+          if (pos) {
+            const hitId = st.getCharacterAt(pos.worldX, pos.worldY);
+            if (hitId !== null) {
+              st.dismissBubble(hitId);
+              if (st.selectedAgentId === hitId) {
+                st.selectedAgentId = null;
+                st.cameraFollowId = null;
+              } else {
+                st.selectedAgentId = hitId;
+                st.cameraFollowId = hitId;
+              }
+              onAgentClick(hitId);
+            } else {
+              st.selectedAgentId = null;
+              st.cameraFollowId = null;
+            }
+          }
+        }
+        touchStartRef.current = null;
+        isTouchPanningRef.current = false;
+      }
+      if (e.touches.length < 2) {
+        pinchStartRef.current = null;
+      }
+    },
+    [onAgentClick, screenToWorld],
+  );
+
   const defaultZoom = useCallback((): number => {
     const dpr = window.devicePixelRatio || 1;
     return Math.max(ZOOM_MIN, Math.round(ZOOM_DEFAULT_DPR_FACTOR * dpr));
@@ -309,7 +419,10 @@ export function PixelOfficeCanvas({
         onClick={handleClick}
         onAuxClick={handleAuxClick}
         onMouseLeave={handleMouseLeave}
-        className="block"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        className="block touch-none"
         style={{ imageRendering: 'pixelated' }}
       />
     </div>

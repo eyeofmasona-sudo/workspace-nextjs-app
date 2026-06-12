@@ -63,8 +63,8 @@ export const ROLE_SEAT_MAP: Record<string, string> = {
   designer: 'chair-des',
   frontend_engineer: 'chair-fe',
   backend_engineer: 'chair-be',
-  qa_engineer: 'chair-qa',
-  devops_engineer: 'chair-devops',
+  qa_engineer: 'chair-qa2',
+  devops_engineer: 'chair-ops',
   data_engineer: 'chair-data',
   researcher: 'chair-res',
 };

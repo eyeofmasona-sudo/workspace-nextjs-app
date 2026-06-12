@@ -131,3 +131,50 @@ Stage Summary:
 - Agent status → visual state binding: working→typing, thinking→typing, waiting_approval→permission bubble, idle→wandering
 - Canvas-based pixel-art rendering with z-sorting, matrix effects, workstation glow
 - Full character FSM (TYPE→IDLE→WALK) with pathfinding and wander behavior
+---
+Task ID: 1
+Agent: Main
+Task: Add 2 new rooms, mobile responsiveness, and split-screen preview panel
+
+Work Log:
+- Analyzed entire Agent OS project structure (AgentOfficeV3.tsx, PixelOfficeCanvas, officeState.ts, all office components)
+- Expanded office grid from 40×26 to 40×36 (ROWS=36)
+- Added F9 (QA Lab) and F10 (Operations Center) tile types to buildTiles()
+- Added new lower section (rows 21-29) with 3 areas: QA Lab, Operations Center, Workshop
+- Added row 30 horizontal wall divider with doors
+- Shifted Lounge down from rows 21-24 to rows 31-34
+- Added QA Lab tile color (h:345, s:40, b:-40, c:-82 - rose/crimson)
+- Added Operations Center tile color (h:25, s:50, b:-38, c:-80 - warm orange)
+- Added full furniture sets for QA Lab (2 workstations, testing monitors, decorations)
+- Added full furniture sets for Operations Center (2 workstations, monitoring station, decorations)
+- Added Workshop collaborative area (table, benches, whiteboard, decorations)
+- Removed QA and DevOps workstations from Development Area (moved to new rooms)
+- Shifted all Lounge furniture rows down by 10 (row 20→30, 21→31, etc.)
+- Updated ZONE_DESTINATIONS with new break/research destinations
+- Updated ZONE_LABELS with QA Lab, Ops Center, Workshop labels; moved Lounge label
+- Bumped layoutRevision from 3 to 4
+- Updated ROLE_SEAT_MAP: qa_engineer → chair-qa2, devops_engineer → chair-ops
+- Created PreviewPanel component with 3 tabs (Overview, Agent, Activity)
+- Overview tab: stats grid, agent utilization, task summary, agent roster
+- Agent tab: detailed agent info (header, bio, strengths, tool executions, events, model config)
+- Activity tab: event timeline with category colors
+- Added split-screen layout: office canvas (left 65%) + preview panel (right 340-380px) on desktop
+- Added mobile-responsive collapsible preview panel (bottom, h-8 collapsed, h-[45vh] expanded)
+- Added useIsMobile hook integration for responsive layout
+- Made top bar responsive (smaller text on mobile, compact badges)
+- Made floating toolbar horizontal at bottom on mobile (h-10 w-10 touch targets)
+- Made zoom controls larger on mobile (h-9 w-9 instead of h-7 w-7)
+- Added touch support to PixelOfficeCanvas: single-finger pan, tap to select agent, pinch-to-zoom
+- Added touch-none CSS class to canvas for proper touch handling
+- Fixed page.tsx import: changed from office/AgentOffice to pixel-office/AgentOfficeV3
+- All lint checks pass, no console errors, dev server running cleanly
+
+Stage Summary:
+- 2 new rooms successfully added: QA Lab and Operations Center
+- 1 additional collaborative Workshop area to fill the 3rd column
+- Grid expanded from 40×26 to 40×36
+- Complete split-screen layout with preview panel on desktop
+- Mobile-responsive design with collapsible preview panel
+- Touch support for mobile (pan, tap, pinch-to-zoom)
+- PreviewPanel component with 3 tabs: Overview, Agent, Activity
+- All existing functionality preserved, no breaking changes

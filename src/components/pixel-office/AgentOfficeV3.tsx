@@ -15,6 +15,7 @@ import { OrchestratorPanel } from '@/components/office/OrchestratorPanel';
 import { ApprovalQueue } from '@/components/office/ApprovalQueue';
 import { EventTimeline } from '@/components/office/EventTimeline';
 import { AgentDetailsDrawer } from '@/components/office/AgentDetailsDrawer';
+import { PreviewPanel } from '@/components/office/PreviewPanel';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -28,6 +29,7 @@ import { OfficeState } from '@/lib/pixel-office/engine/officeState';
 import { BehaviorState } from '@/lib/pixel-office/types';
 import { loadAllAssets } from '@/lib/pixel-office/assetLoader';
 import type { ZoneDestination, ZoneLabel, TileType as TileTypeVal } from '@/lib/pixel-office/types';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 // Agent OS status → pixel-agents character state mapping
 function mapAgentStatusToActive(status: string): boolean {
@@ -81,11 +83,11 @@ const PANEL_CONFIG: Record<ManagementPanel, {
   events: { label: 'Events', icon: Radio, color: 'text-sky-500' },
 };
 
-// ─── New Dense Office Layout (40×26) ────────────────────────
-// 6 rooms + 1 lounge, internal walls with doors, dense furniture
+// ─── New Dense Office Layout (40×36) ────────────────────────
+// 8 rooms + 1 workshop + 1 lounge, internal walls with doors, dense furniture
 
 const COLS = 40;
-const ROWS = 26;
+const ROWS = 36;
 
 function buildTiles(): TileTypeVal[] {
   const W = 0 as TileTypeVal; // WALL
@@ -97,6 +99,8 @@ function buildTiles(): TileTypeVal[] {
   const F6 = 6 as TileTypeVal; // Research Area
   const F7 = 7 as TileTypeVal; // Lounge
   const F8 = 8 as TileTypeVal; // Door/transition
+  const F9 = 9 as TileTypeVal; // QA Lab
+  const F10 = 10 as TileTypeVal; // Operations Center
 
   const tiles: TileTypeVal[] = [];
   for (let r = 0; r < ROWS; r++) {
@@ -107,7 +111,7 @@ function buildTiles(): TileTypeVal[] {
         continue;
       }
 
-      // Horizontal divider row 10 (between upper and lower rooms)
+      // Horizontal divider row 10 (between upper and middle rooms)
       if (r === 10) {
         if ((c >= 5 && c <= 6) || (c >= 18 && c <= 19) || (c >= 31 && c <= 32)) {
           tiles.push(F8); // door openings
@@ -117,8 +121,18 @@ function buildTiles(): TileTypeVal[] {
         continue;
       }
 
-      // Horizontal divider row 20 (between lower rooms and lounge)
+      // Horizontal divider row 20 (between middle and lower rooms)
       if (r === 20) {
+        if ((c >= 5 && c <= 6) || (c >= 18 && c <= 19) || (c >= 31 && c <= 32)) {
+          tiles.push(F8); // door openings
+        } else {
+          tiles.push(W);
+        }
+        continue;
+      }
+
+      // Horizontal divider row 30 (between lower rooms and lounge)
+      if (r === 30) {
         if ((c >= 8 && c <= 9) || (c >= 28 && c <= 29)) {
           tiles.push(F8); // door openings
         } else {
@@ -148,7 +162,7 @@ function buildTiles(): TileTypeVal[] {
         continue;
       }
 
-      // Lower section (rows 11-19)
+      // Middle section (rows 11-19)
       if (r >= 11 && r <= 19) {
         // Vertical wall col 13
         if (c === 13) {
@@ -169,7 +183,28 @@ function buildTiles(): TileTypeVal[] {
         continue;
       }
 
-      // Lounge (rows 21-24)
+      // Lower section (rows 21-29)
+      if (r >= 21 && r <= 29) {
+        // Vertical wall col 13
+        if (c === 13) {
+          if (r >= 24 && r <= 25) tiles.push(F8); // door
+          else tiles.push(W);
+          continue;
+        }
+        // Vertical wall col 25
+        if (c === 25) {
+          if (r >= 24 && r <= 25) tiles.push(F8); // door
+          else tiles.push(W);
+          continue;
+        }
+        if (c >= 1 && c <= 12) tiles.push(F9);    // QA Lab
+        else if (c >= 14 && c <= 24) tiles.push(F10); // Operations Center
+        else if (c >= 26 && c <= 38) tiles.push(F7); // Workshop (reuses lounge floor type)
+        else tiles.push(W);
+        continue;
+      }
+
+      // Lounge (rows 31-34)
       tiles.push(F7);
     }
   }
@@ -186,6 +221,8 @@ function buildTileColors(): Array<{ h: number; s: number; b: number; c: number }
   const researchColor = { h: 35, s: 55, b: -38, c: -85 };  // library amber
   const loungeColor = { h: 20, s: 60, b: -35, c: -85 };    // cozy warm
   const doorColor = { h: 35, s: 25, b: 10, c: 0 };
+  const qaColor = { h: 345, s: 40, b: -40, c: -82 };       // rose/crimson for testing
+  const opsColor = { h: 25, s: 50, b: -38, c: -80 };       // warm orange for ops
 
   const tiles = buildTiles();
   const colors: Array<{ h: number; s: number; b: number; c: number } | null> = [];
@@ -202,6 +239,8 @@ function buildTileColors(): Array<{ h: number; s: number; b: number; c: number }
     if (tile === 5) { colors.push(serverColor); continue; }
     if (tile === 6) { colors.push(researchColor); continue; }
     if (tile === 7) { colors.push(loungeColor); continue; }
+    if (tile === 9) { colors.push(qaColor); continue; }
+    if (tile === 10) { colors.push(opsColor); continue; }
     colors.push(wallColor);
   }
   return colors;
@@ -211,7 +250,7 @@ const DEFAULT_AGENT_OS_LAYOUT = {
   version: 1 as const,
   cols: COLS,
   rows: ROWS,
-  layoutRevision: 3,
+  layoutRevision: 4,
   tiles: buildTiles(),
   tileColors: buildTileColors(),
   furniture: [
@@ -314,16 +353,6 @@ const DEFAULT_AGENT_OS_LAYOUT = {
     { uid: 'pc-be', type: 'PC_FRONT_OFF', col: 8, row: 12 },
     { uid: 'chair-be', type: 'WOODEN_CHAIR_BACK', col: 8, row: 14 },
 
-    // ── QA workstation ──
-    { uid: 'desk-qa', type: 'DESK_FRONT', col: 2, row: 16 },
-    { uid: 'pc-qa', type: 'PC_FRONT_OFF', col: 3, row: 16 },
-    { uid: 'chair-qa', type: 'WOODEN_CHAIR_BACK', col: 3, row: 18 },
-
-    // ── DevOps workstation ──
-    { uid: 'desk-devops', type: 'DESK_FRONT', col: 7, row: 16 },
-    { uid: 'pc-devops', type: 'PC_FRONT_OFF', col: 8, row: 16 },
-    { uid: 'chair-devops', type: 'WOODEN_CHAIR_BACK', col: 8, row: 18 },
-
     // ── Decorations ──
     { uid: 'dev-plant1', type: 'LARGE_PLANT', col: 1, row: 11 },
     { uid: 'dev-plant2', type: 'PLANT', col: 11, row: 13 },
@@ -383,49 +412,128 @@ const DEFAULT_AGENT_OS_LAYOUT = {
     { uid: 'res-bin', type: 'BIN', col: 37, row: 19 },
 
     // ═══════════════════════════════════════════════════════════
-    // LOUNGE (cols 1-38, rows 21-24)
+    // QA LAB (cols 1-12, rows 21-29)
     // ═══════════════════════════════════════════════════════════
 
     // ── Wall decorations ──
-    { uid: 'lng-paint1', type: 'LARGE_PAINTING', col: 12, row: 20 },
-    { uid: 'lng-paint2', type: 'SMALL_PAINTING', col: 28, row: 20 },
-    { uid: 'lng-clock', type: 'CLOCK', col: 20, row: 20 },
-    { uid: 'lng-hplant1', type: 'HANGING_PLANT', col: 6, row: 20 },
-    { uid: 'lng-hplant2', type: 'HANGING_PLANT', col: 35, row: 20 },
+    { uid: 'qa-shelf', type: 'DOUBLE_BOOKSHELF', col: 1, row: 20 },
+    { uid: 'qa-wb', type: 'WHITEBOARD', col: 5, row: 20 },
+    { uid: 'qa-clock', type: 'CLOCK', col: 9, row: 20 },
 
-    // ── Sofa area ──
-    { uid: 'lng-sofa1', type: 'SOFA_FRONT', col: 2, row: 22 },
-    { uid: 'lng-sofa2', type: 'SOFA_FRONT', col: 5, row: 22 },
-    { uid: 'lng-ctable', type: 'COFFEE_TABLE', col: 3, row: 21 },
+    // ── QA workstation (primary) ──
+    { uid: 'desk-qa2', type: 'DESK_FRONT', col: 2, row: 23 },
+    { uid: 'pc-qa2', type: 'PC_FRONT_OFF', col: 3, row: 23 },
+    { uid: 'chair-qa2', type: 'WOODEN_CHAIR_BACK', col: 3, row: 25 },
 
-    // ── Coffee / kitchen area ──
-    { uid: 'lng-coffee', type: 'COFFEE', col: 9, row: 21 },
-    { uid: 'lng-pot', type: 'POT', col: 10, row: 21 },  // water cooler proxy
+    // ── QA secondary workstation ──
+    { uid: 'desk-qa3', type: 'DESK_FRONT', col: 7, row: 23 },
+    { uid: 'pc-qa3', type: 'PC_FRONT_OFF', col: 8, row: 23 },
+    { uid: 'chair-qa3', type: 'WOODEN_CHAIR_BACK', col: 8, row: 25 },
 
-    // ── Dining area ──
-    { uid: 'lng-table', type: 'TABLE_FRONT', col: 16, row: 22 },
-    { uid: 'lng-bench1', type: 'CUSHIONED_BENCH', col: 15, row: 23 },
-    { uid: 'lng-bench2', type: 'CUSHIONED_BENCH', col: 18, row: 23 },
-
-    // ── Reading corner ──
-    { uid: 'lng-rtable', type: 'SMALL_TABLE', col: 24, row: 22 },
-    { uid: 'lng-rchair1', type: 'CUSHIONED_CHAIR_FRONT', col: 23, row: 23 },
-    { uid: 'lng-rchair2', type: 'CUSHIONED_CHAIR_FRONT', col: 26, row: 23 },
-    { uid: 'lng-rchair3', type: 'WOODEN_CHAIR_FRONT', col: 24, row: 21 },
-
-    // ── TV area ──
-    { uid: 'lng-tv', type: 'PC_FRONT_OFF', col: 32, row: 20 },  // TV proxy
-    { uid: 'lng-sofa3', type: 'SOFA_BACK', col: 31, row: 23 },
-    { uid: 'lng-sofa4', type: 'SOFA_BACK', col: 34, row: 23 },
+    // ── Testing monitor wall ──
+    { uid: 'qa-pc1', type: 'PC_FRONT_OFF', col: 10, row: 21 },
+    { uid: 'qa-pc2', type: 'PC_FRONT_OFF', col: 11, row: 21 },
 
     // ── Decorations ──
-    { uid: 'lng-plant1', type: 'LARGE_PLANT', col: 1, row: 21 },
-    { uid: 'lng-plant2', type: 'PLANT', col: 14, row: 21 },
-    { uid: 'lng-plant3', type: 'PLANT_2', col: 29, row: 21 },
-    { uid: 'lng-plant4', type: 'CACTUS', col: 37, row: 22 },
-    { uid: 'lng-bin1', type: 'BIN', col: 12, row: 24 },
-    { uid: 'lng-bin2', type: 'BIN', col: 37, row: 24 },
-    { uid: 'lng-shelf', type: 'BOOKSHELF', col: 1, row: 20 },
+    { uid: 'qa-plant1', type: 'LARGE_PLANT', col: 1, row: 21 },
+    { uid: 'qa-cactus', type: 'CACTUS', col: 12, row: 27 },
+    { uid: 'qa-bin', type: 'BIN', col: 12, row: 29 },
+
+    // ═══════════════════════════════════════════════════════════
+    // OPERATIONS CENTER (cols 14-24, rows 21-29)
+    // ═══════════════════════════════════════════════════════════
+
+    // ── Wall decorations ──
+    { uid: 'ops-shelf', type: 'DOUBLE_BOOKSHELF', col: 14, row: 20 },
+    { uid: 'ops-wb', type: 'WHITEBOARD', col: 18, row: 20 },
+    { uid: 'ops-paint', type: 'LARGE_PAINTING', col: 22, row: 20 },
+
+    // ── DevOps workstation ──
+    { uid: 'desk-ops', type: 'DESK_FRONT', col: 16, row: 23 },
+    { uid: 'pc-ops', type: 'PC_FRONT_OFF', col: 17, row: 23 },
+    { uid: 'chair-ops', type: 'WOODEN_CHAIR_BACK', col: 17, row: 25 },
+
+    // ── Operations monitoring station ──
+    { uid: 'desk-ops2', type: 'DESK_FRONT', col: 21, row: 23 },
+    { uid: 'pc-ops2', type: 'PC_FRONT_OFF', col: 22, row: 23 },
+    { uid: 'chair-ops2', type: 'WOODEN_CHAIR_BACK', col: 22, row: 25 },
+
+    // ── Monitor wall ──
+    { uid: 'ops-pc1', type: 'PC_FRONT_OFF', col: 14, row: 21 },
+    { uid: 'ops-pc2', type: 'PC_FRONT_OFF', col: 15, row: 21 },
+    { uid: 'ops-pc3', type: 'PC_FRONT_OFF', col: 23, row: 21 },
+
+    // ── Decorations ──
+    { uid: 'ops-plant1', type: 'PLANT_2', col: 24, row: 27 },
+    { uid: 'ops-pot', type: 'POT', col: 15, row: 28 },
+    { uid: 'ops-bin', type: 'BIN', col: 23, row: 29 },
+
+    // ═══════════════════════════════════════════════════════════
+    // WORKSHOP (cols 26-38, rows 21-29)
+    // ═══════════════════════════════════════════════════════════
+
+    // ── Wall decorations ──
+    { uid: 'ws-shelf', type: 'BOOKSHELF', col: 26, row: 20 },
+    { uid: 'ws-hplant', type: 'HANGING_PLANT', col: 32, row: 20 },
+    { uid: 'ws-paint', type: 'SMALL_PAINTING', col: 36, row: 20 },
+
+    // ── Workshop table ──
+    { uid: 'ws-table', type: 'TABLE_FRONT', col: 30, row: 24 },
+    { uid: 'ws-bench1', type: 'CUSHIONED_BENCH', col: 29, row: 25 },
+    { uid: 'ws-bench2', type: 'CUSHIONED_BENCH', col: 32, row: 25 },
+
+    // ── Whiteboard for brainstorming ──
+    { uid: 'ws-wb', type: 'WHITEBOARD', col: 35, row: 20 },
+
+    // ── Decorations ──
+    { uid: 'ws-plant1', type: 'LARGE_PLANT', col: 26, row: 21 },
+    { uid: 'ws-cactus', type: 'CACTUS', col: 37, row: 27 },
+    { uid: 'ws-bin', type: 'BIN', col: 37, row: 29 },
+
+    // ═══════════════════════════════════════════════════════════
+    // LOUNGE (cols 1-38, rows 31-34)
+    // ═══════════════════════════════════════════════════════════
+
+    // ── Wall decorations ──
+    { uid: 'lng-paint1', type: 'LARGE_PAINTING', col: 12, row: 30 },
+    { uid: 'lng-paint2', type: 'SMALL_PAINTING', col: 28, row: 30 },
+    { uid: 'lng-clock', type: 'CLOCK', col: 20, row: 30 },
+    { uid: 'lng-hplant1', type: 'HANGING_PLANT', col: 6, row: 30 },
+    { uid: 'lng-hplant2', type: 'HANGING_PLANT', col: 35, row: 30 },
+
+    // ── Sofa area ──
+    { uid: 'lng-sofa1', type: 'SOFA_FRONT', col: 2, row: 32 },
+    { uid: 'lng-sofa2', type: 'SOFA_FRONT', col: 5, row: 32 },
+    { uid: 'lng-ctable', type: 'COFFEE_TABLE', col: 3, row: 31 },
+
+    // ── Coffee / kitchen area ──
+    { uid: 'lng-coffee', type: 'COFFEE', col: 9, row: 31 },
+    { uid: 'lng-pot', type: 'POT', col: 10, row: 31 },  // water cooler proxy
+
+    // ── Dining area ──
+    { uid: 'lng-table', type: 'TABLE_FRONT', col: 16, row: 32 },
+    { uid: 'lng-bench1', type: 'CUSHIONED_BENCH', col: 15, row: 33 },
+    { uid: 'lng-bench2', type: 'CUSHIONED_BENCH', col: 18, row: 33 },
+
+    // ── Reading corner ──
+    { uid: 'lng-rtable', type: 'SMALL_TABLE', col: 24, row: 32 },
+    { uid: 'lng-rchair1', type: 'CUSHIONED_CHAIR_FRONT', col: 23, row: 33 },
+    { uid: 'lng-rchair2', type: 'CUSHIONED_CHAIR_FRONT', col: 26, row: 33 },
+    { uid: 'lng-rchair3', type: 'WOODEN_CHAIR_FRONT', col: 24, row: 31 },
+
+    // ── TV area ──
+    { uid: 'lng-tv', type: 'PC_FRONT_OFF', col: 32, row: 30 },  // TV proxy
+    { uid: 'lng-sofa3', type: 'SOFA_BACK', col: 31, row: 33 },
+    { uid: 'lng-sofa4', type: 'SOFA_BACK', col: 34, row: 33 },
+
+    // ── Decorations ──
+    { uid: 'lng-plant1', type: 'LARGE_PLANT', col: 1, row: 31 },
+    { uid: 'lng-plant2', type: 'PLANT', col: 14, row: 31 },
+    { uid: 'lng-plant3', type: 'PLANT_2', col: 29, row: 31 },
+    { uid: 'lng-plant4', type: 'CACTUS', col: 37, row: 32 },
+    { uid: 'lng-bin1', type: 'BIN', col: 12, row: 34 },
+    { uid: 'lng-bin2', type: 'BIN', col: 37, row: 34 },
+    { uid: 'lng-shelf', type: 'BOOKSHELF', col: 1, row: 30 },
   ],
 };
 
@@ -436,13 +544,14 @@ const ZONE_DESTINATIONS: Record<string, ZoneDestination[]> = {
     { col: 18, row: 7 }, { col: 19, row: 7 },
   ],
   [BehaviorState.BREAK]: [
-    { col: 3, row: 23 }, { col: 6, row: 23 }, { col: 4, row: 21 },
-    { col: 15, row: 22 }, { col: 19, row: 22 },
-    { col: 25, row: 22 }, { col: 32, row: 22 }, { col: 35, row: 22 },
+    { col: 3, row: 33 }, { col: 6, row: 33 }, { col: 4, row: 31 },
+    { col: 15, row: 32 }, { col: 19, row: 32 },
+    { col: 25, row: 32 }, { col: 32, row: 32 }, { col: 35, row: 32 },
   ],
   [BehaviorState.RESEARCH]: [
     { col: 29, row: 11 }, { col: 30, row: 11 }, { col: 31, row: 11 },
     { col: 34, row: 14 }, { col: 27, row: 14 },
+    { col: 30, row: 26 }, { col: 31, row: 26 },
   ],
 };
 
@@ -454,7 +563,10 @@ const ZONE_LABELS: ZoneLabel[] = [
   { text: '💻 DEVELOPMENT', col: 6, row: 11, color: '#6EE7B7' },
   { text: '🖥 SERVER ROOM', col: 19, row: 11, color: '#67E8F9' },
   { text: '📚 RESEARCH', col: 32, row: 11, color: '#FCD34D' },
-  { text: '☕ LOUNGE', col: 19, row: 21, color: '#FDBA74' },
+  { text: '🛡️ QA LAB', col: 6, row: 21, color: '#FDA4AF' },
+  { text: '🚀 OPS CENTER', col: 19, row: 21, color: '#FDBA74' },
+  { text: '🔧 WORKSHOP', col: 32, row: 21, color: '#D8B4FE' },
+  { text: '☕ LOUNGE', col: 19, row: 31, color: '#FED7AA' },
 ];
 
 export function AgentOffice({ workspaceId, onSeed }: AgentOfficeProps) {
@@ -466,6 +578,8 @@ export function AgentOffice({ workspaceId, onSeed }: AgentOfficeProps) {
   const [assetsLoaded, setAssetsLoaded] = useState(false);
   const [zoom, setZoom] = useState(2);
   const panRef = useRef({ x: 0, y: 0 });
+  const isMobile = useIsMobile();
+  const [previewCollapsed, setPreviewCollapsed] = useState(true); // collapsed by default on mobile
 
   // Create OfficeState from default layout (stable across renders)
   const [officeState] = useState(() => {
@@ -688,14 +802,14 @@ export function AgentOffice({ workspaceId, onSeed }: AgentOfficeProps) {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* ─── Minimal Top Bar (translucent, overlays office) ─── */}
-      <div className="flex items-center justify-between px-3 py-1 bg-black/60 backdrop-blur-md border-b border-white/10 z-30 flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <Building2 className="w-4 h-4 text-violet-400" />
-          <h1 className="text-sm font-bold text-white">Agent OS</h1>
-          <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-white/20 text-slate-300">
+      <div className="flex items-center justify-between px-2 md:px-3 py-1 bg-black/60 backdrop-blur-md border-b border-white/10 z-30 flex-shrink-0">
+        <div className="flex items-center gap-1.5 md:gap-2">
+          <Building2 className="w-3.5 h-3.5 md:w-4 md:h-4 text-violet-400" />
+          <h1 className="text-xs md:text-sm font-bold text-white">Agent OS</h1>
+          <Badge variant="outline" className="text-[8px] md:text-[9px] h-3.5 md:h-4 px-1 md:px-1.5 border-white/20 text-slate-300">
             {workspaceId?.slice(-8)}
           </Badge>
-          <span className="text-[9px] text-slate-400 ml-1">
+          <span className="text-[8px] md:text-[9px] text-slate-400 ml-0.5 md:ml-1">
             {agents.filter(a => {
               const s = a.runtimeState?.status ?? a.status;
               return s !== 'offline';
@@ -704,21 +818,21 @@ export function AgentOffice({ workspaceId, onSeed }: AgentOfficeProps) {
         </div>
 
         {/* Situation indicators */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1 md:gap-1.5">
           {situation.approvalsNeeded > 0 && (
-            <Badge variant="destructive" className="text-[9px] h-4 px-1.5 cursor-pointer" onClick={() => openPanel('approvals')}>
+            <Badge variant="destructive" className="text-[8px] md:text-[9px] h-3.5 md:h-4 px-1 md:px-1.5 cursor-pointer" onClick={() => openPanel('approvals')}>
               <AlertTriangle className="w-2.5 h-2.5 mr-0.5" />
               {situation.approvalsNeeded}
             </Badge>
           )}
           {situation.runningTools > 0 && (
-            <Badge variant="outline" className="text-[9px] h-4 px-1.5 border-white/20 text-slate-300">
+            <Badge variant="outline" className="text-[8px] md:text-[9px] h-3.5 md:h-4 px-1 md:px-1.5 border-white/20 text-slate-300">
               <Loader2 className="w-2.5 h-2.5 mr-0.5 animate-spin" />
               {situation.runningTools}
             </Badge>
           )}
           {newEvents.length > 0 && (
-            <Badge variant="secondary" className="text-[9px] h-4 px-1.5 cursor-pointer" onClick={() => openPanel('events')}>
+            <Badge variant="secondary" className="text-[8px] md:text-[9px] h-3.5 md:h-4 px-1 md:px-1.5 cursor-pointer" onClick={() => openPanel('events')}>
               <Radio className="w-2.5 h-2.5 mr-0.5" />
               {newEvents.length}
             </Badge>
@@ -729,116 +843,185 @@ export function AgentOffice({ workspaceId, onSeed }: AgentOfficeProps) {
         </div>
       </div>
 
-      {/* ─── Main Content: Pixel Office Scene fills everything ─── */}
-      <div className="flex-1 min-h-0 relative">
-        {/* Pixel Office Canvas — the hero, fills the entire area */}
-        <PixelOfficeCanvas
-          officeState={officeState}
-          onAgentClick={handleAgentClick}
-          zoom={zoom}
-          onZoomChange={setZoom}
-          panRef={panRef}
-        />
+      {/* ─── Main content area - split screen on desktop, stack on mobile ─── */}
+      <div className="flex-1 min-h-0 flex flex-col md:flex-row">
+        {/* Office canvas */}
+        <div className="flex-1 min-h-0 relative">
+          <PixelOfficeCanvas
+            officeState={officeState}
+            onAgentClick={handleAgentClick}
+            zoom={zoom}
+            onZoomChange={setZoom}
+            panRef={panRef}
+          />
 
-        {/* Asset loading overlay */}
-        {!assetsLoaded && (
-          <div className="absolute inset-0 flex items-center justify-center bg-[#1a1a2e]/80 z-20 pointer-events-none">
-            <div className="text-center space-y-2">
-              <Loader2 className="w-6 h-6 animate-spin mx-auto text-violet-400" />
-              <p className="text-xs text-slate-400">Loading pixel assets...</p>
+          {/* Asset loading overlay */}
+          {!assetsLoaded && (
+            <div className="absolute inset-0 flex items-center justify-center bg-[#1a1a2e]/80 z-20 pointer-events-none">
+              <div className="text-center space-y-2">
+                <Loader2 className="w-6 h-6 animate-spin mx-auto text-violet-400" />
+                <p className="text-xs text-slate-400">Loading pixel assets...</p>
+              </div>
             </div>
+          )}
+
+          {/* ─── Floating Management Toolbar ─── */}
+          {!isMobile ? (
+            <div className="absolute right-3 top-3 flex flex-col gap-1.5 z-40">
+              {(Object.entries(PANEL_CONFIG) as [ManagementPanel, typeof PANEL_CONFIG[ManagementPanel]][]).map(
+                ([key, config]) => {
+                  const Icon = config.icon;
+                  const count =
+                    key === 'tasks' ? tasks.length :
+                    key === 'approvals' ? approvals.length :
+                    key === 'events' ? recentEvents.length : 0;
+
+                  return (
+                    <Button
+                      key={key}
+                      variant={activePanel === key ? 'default' : 'outline'}
+                      size="sm"
+                      className={`h-9 w-9 p-0 shadow-lg backdrop-blur-sm relative transition-all ${
+                        activePanel === key
+                          ? 'bg-violet-600 hover:bg-violet-700 text-white border-violet-600'
+                          : 'bg-black/50 hover:bg-black/70 border-white/10 text-white'
+                      }`}
+                      onClick={() => activePanel === key ? closePanel() : openPanel(key)}
+                      title={config.label}
+                    >
+                      <Icon className={`w-4 h-4 ${activePanel === key ? 'text-white' : 'text-slate-300'}`} />
+                      {count > 0 && key !== 'situation' && key !== 'orchestrator' && (
+                        <span className="absolute -top-1 -right-1 text-[7px] font-bold bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center shadow-sm">
+                          {count > 9 ? '9+' : count}
+                        </span>
+                      )}
+                    </Button>
+                  );
+                },
+              )}
+            </div>
+          ) : (
+            /* Mobile: horizontal toolbar at bottom of office area */
+            <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex gap-1 z-40">
+              {(Object.entries(PANEL_CONFIG) as [ManagementPanel, typeof PANEL_CONFIG[ManagementPanel]][]).map(
+                ([key, config]) => {
+                  const Icon = config.icon;
+                  const count =
+                    key === 'tasks' ? tasks.length :
+                    key === 'approvals' ? approvals.length :
+                    key === 'events' ? recentEvents.length : 0;
+
+                  return (
+                    <Button
+                      key={key}
+                      variant={activePanel === key ? 'default' : 'outline'}
+                      size="sm"
+                      className={`h-10 w-10 p-0 shadow-lg backdrop-blur-sm relative transition-all ${
+                        activePanel === key
+                          ? 'bg-violet-600 hover:bg-violet-700 text-white border-violet-600'
+                          : 'bg-black/50 hover:bg-black/70 border-white/10 text-white'
+                      }`}
+                      onClick={() => activePanel === key ? closePanel() : openPanel(key)}
+                      title={config.label}
+                    >
+                      <Icon className={`w-4 h-4 ${activePanel === key ? 'text-white' : 'text-slate-300'}`} />
+                      {count > 0 && key !== 'situation' && key !== 'orchestrator' && (
+                        <span className="absolute -top-1 -right-1 text-[7px] font-bold bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center shadow-sm">
+                          {count > 9 ? '9+' : count}
+                        </span>
+                      )}
+                    </Button>
+                  );
+                },
+              )}
+            </div>
+          )}
+
+          {/* ─── Zoom Controls ─── */}
+          <div className="absolute left-3 bottom-3 flex items-center gap-1 z-40">
+            <Button
+              variant="outline"
+              size="sm"
+              className={`${isMobile ? 'h-9 w-9' : 'h-7 w-7'} p-0 bg-black/50 border-white/10 text-white hover:bg-black/70`}
+              onClick={() => setZoom(Math.max(1, zoom - 1))}
+            >
+              −
+            </Button>
+            <span className="text-[10px] text-slate-400 w-6 text-center">{zoom}x</span>
+            <Button
+              variant="outline"
+              size="sm"
+              className={`${isMobile ? 'h-9 w-9' : 'h-7 w-7'} p-0 bg-black/50 border-white/10 text-white hover:bg-black/70`}
+              onClick={() => setZoom(Math.min(10, zoom + 1))}
+            >
+              +
+            </Button>
+          </div>
+        </div>
+
+        {/* Preview panel - side panel on desktop, bottom panel on mobile */}
+        {!isMobile ? (
+          <div className="w-[340px] lg:w-[380px] border-l border-white/10 flex-shrink-0">
+            <PreviewPanel
+              selectedAgent={selectedAgent}
+              situation={situation}
+              agents={agents}
+              tasks={tasks}
+              recentEvents={recentEvents}
+              toolExecutions={toolExecutions}
+              approvalsCount={approvals.length}
+            />
+          </div>
+        ) : (
+          <div className={`flex-shrink-0 transition-all duration-300 ${previewCollapsed ? 'h-8' : 'h-[45vh]'}`}>
+            <PreviewPanel
+              selectedAgent={selectedAgent}
+              situation={situation}
+              agents={agents}
+              tasks={tasks}
+              recentEvents={recentEvents}
+              toolExecutions={toolExecutions}
+              approvalsCount={approvals.length}
+              isMobile={isMobile}
+              collapsed={previewCollapsed}
+              onToggleCollapse={() => setPreviewCollapsed(!previewCollapsed)}
+            />
           </div>
         )}
-
-        {/* ─── Floating Management Toolbar (overlays office) ─── */}
-        <div className="absolute right-3 top-3 flex flex-col gap-1.5 z-40">
-          {(Object.entries(PANEL_CONFIG) as [ManagementPanel, typeof PANEL_CONFIG[ManagementPanel]][]).map(
-            ([key, config]) => {
-              const Icon = config.icon;
-              const count =
-                key === 'tasks' ? tasks.length :
-                key === 'approvals' ? approvals.length :
-                key === 'events' ? recentEvents.length : 0;
-
-              return (
-                <Button
-                  key={key}
-                  variant={activePanel === key ? 'default' : 'outline'}
-                  size="sm"
-                  className={`h-9 w-9 p-0 shadow-lg backdrop-blur-sm relative transition-all ${
-                    activePanel === key
-                      ? 'bg-violet-600 hover:bg-violet-700 text-white border-violet-600'
-                      : 'bg-black/50 hover:bg-black/70 border-white/10 text-white'
-                  }`}
-                  onClick={() => activePanel === key ? closePanel() : openPanel(key)}
-                  title={config.label}
-                >
-                  <Icon className={`w-4 h-4 ${activePanel === key ? 'text-white' : 'text-slate-300'}`} />
-                  {count > 0 && key !== 'situation' && key !== 'orchestrator' && (
-                    <span className="absolute -top-1 -right-1 text-[7px] font-bold bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center shadow-sm">
-                      {count > 9 ? '9+' : count}
-                    </span>
-                  )}
-                </Button>
-              );
-            },
-          )}
-        </div>
-
-        {/* ─── Zoom Controls ─── */}
-        <div className="absolute left-3 bottom-3 flex items-center gap-1 z-40">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 w-7 p-0 bg-black/50 border-white/10 text-white hover:bg-black/70"
-            onClick={() => setZoom(Math.max(1, zoom - 1))}
-          >
-            −
-          </Button>
-          <span className="text-[10px] text-slate-400 w-6 text-center">{zoom}x</span>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 w-7 p-0 bg-black/50 border-white/10 text-white hover:bg-black/70"
-            onClick={() => setZoom(Math.min(10, zoom + 1))}
-          >
-            +
-          </Button>
-        </div>
-
-        {/* ─── Management Panel Slide-over ─── */}
-        <Sheet open={!!activePanel} onOpenChange={(open) => { if (!open) closePanel(); }}>
-          <SheetContent side="right" className="w-[420px] sm:w-[480px] p-0">
-            <SheetHeader className="px-4 py-3 border-b">
-              <div className="flex items-center gap-2">
-                {activePanel && (() => {
-                  const config = PANEL_CONFIG[activePanel];
-                  const Icon = config.icon;
-                  return (
-                    <>
-                      <Icon className={`w-4 h-4 ${config.color}`} />
-                      <SheetTitle className="text-sm">{config.label}</SheetTitle>
-                    </>
-                  );
-                })()}
-              </div>
-            </SheetHeader>
-            <div className="flex-1 overflow-auto p-4">
-              {activePanel === 'tasks' && <TaskBoard tasks={tasks} />}
-              {activePanel === 'situation' && (
-                <SituationRoom situation={situation} agents={agents} recentEvents={recentEvents} />
-              )}
-              {activePanel === 'orchestrator' && (
-                <OrchestratorPanel workspaceId={workspaceId!} agents={agents} />
-              )}
-              {activePanel === 'approvals' && (
-                <ApprovalQueue approvals={approvals} workspaceId={workspaceId!} onAction={handleApprovalAction} />
-              )}
-              {activePanel === 'events' && <EventTimeline events={recentEvents} />}
-            </div>
-          </SheetContent>
-        </Sheet>
       </div>
+
+      {/* ─── Management Panel Slide-over ─── */}
+      <Sheet open={!!activePanel} onOpenChange={(open) => { if (!open) closePanel(); }}>
+        <SheetContent side="right" className="w-[420px] sm:w-[480px] p-0">
+          <SheetHeader className="px-4 py-3 border-b">
+            <div className="flex items-center gap-2">
+              {activePanel && (() => {
+                const config = PANEL_CONFIG[activePanel];
+                const Icon = config.icon;
+                return (
+                  <>
+                    <Icon className={`w-4 h-4 ${config.color}`} />
+                    <SheetTitle className="text-sm">{config.label}</SheetTitle>
+                  </>
+                );
+              })()}
+            </div>
+          </SheetHeader>
+          <div className="flex-1 overflow-auto p-4">
+            {activePanel === 'tasks' && <TaskBoard tasks={tasks} />}
+            {activePanel === 'situation' && (
+              <SituationRoom situation={situation} agents={agents} recentEvents={recentEvents} />
+            )}
+            {activePanel === 'orchestrator' && (
+              <OrchestratorPanel workspaceId={workspaceId!} agents={agents} />
+            )}
+            {activePanel === 'approvals' && (
+              <ApprovalQueue approvals={approvals} workspaceId={workspaceId!} onAction={handleApprovalAction} />
+            )}
+            {activePanel === 'events' && <EventTimeline events={recentEvents} />}
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* ─── Agent Details Drawer ─── */}
       <AgentDetailsDrawer

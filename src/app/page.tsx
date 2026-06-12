@@ -5,7 +5,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { AgentOffice } from '@/components/office/AgentOffice';
+import { AgentOffice } from '@/components/pixel-office/AgentOfficeV3';
 import { Loader2 } from 'lucide-react';
 
 export default function Home() {
