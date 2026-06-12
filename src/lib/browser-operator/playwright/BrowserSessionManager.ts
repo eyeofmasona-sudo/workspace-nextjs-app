@@ -19,6 +19,8 @@
  */
 
 import type { BrowserProviderConfig } from '../BrowserOperatorTypes';
+import { mkdirSync } from 'fs';
+import { join } from 'path';
 
 // ── Session State (using any for Playwright types to avoid compile-time imports) ─
 interface BrowserSession {
@@ -28,6 +30,8 @@ interface BrowserSession {
   providerId: string;
   launchedAt: string;
   lastActivityAt: string;
+  /** Whether this session uses launchPersistentContext (browser === context) */
+  persistentContext: boolean;
 }
 
 // ── Detection patterns for needs_human ─────────────────────────
@@ -81,6 +85,23 @@ export class BrowserSessionManager {
     return this.loadingPromise;
   }
 
+  // ── Profile Directory ────────────────────────────────────────
+
+  /** Get the profile directory path for a provider */
+  private getProfileDir(profileDir: string): string {
+    const baseDir = join(process.cwd(), '.storage', 'browser-operator', 'profiles');
+    const fullDir = join(baseDir, profileDir);
+
+    // Ensure directory exists
+    try {
+      mkdirSync(fullDir, { recursive: true });
+    } catch {
+      // May already exist
+    }
+
+    return fullDir;
+  }
+
   // ── Session Lifecycle ────────────────────────────────────────
 
   /** Launch or reuse a browser session for a provider */
@@ -89,7 +110,13 @@ export class BrowserSessionManager {
     const existing = this.sessions.get(providerId);
     if (existing) {
       try {
-        if (existing.browser.isConnected()) {
+        if (existing.persistentContext) {
+          // For persistent context, check if the browser (which IS the context) is still connected
+          if (existing.browser && existing.browser.browserContexts) {
+            existing.lastActivityAt = new Date().toISOString();
+            return existing;
+          }
+        } else if (existing.browser.isConnected()) {
           existing.lastActivityAt = new Date().toISOString();
           return existing;
         }
@@ -107,17 +134,51 @@ export class BrowserSessionManager {
     if (!pw) return null;
 
     try {
-      const launchOptions = {
-        headless: config.headless,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-blink-features=AutomationControlled',
-        ],
-      };
+      const headless = config.headless ?? false;
+      const launchArgs = [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-blink-features=AutomationControlled',
+      ];
 
-      const browser = await pw.chromium.launch(launchOptions);
+      // Use launchPersistentContext if a profileDir is configured
+      if (config.profileDir) {
+        const profilePath = this.getProfileDir(config.profileDir);
+
+        const persistentContext = await pw.chromium.launchPersistentContext(profilePath, {
+          headless,
+          viewport: config.viewport,
+          ignoreHTTPSErrors: false,
+          args: launchArgs,
+        });
+
+        // Get or create a page
+        const pages = persistentContext.pages();
+        const page = pages.length > 0 ? pages[0] : await persistentContext.newPage();
+        page.setDefaultTimeout(config.defaultTimeout);
+        page.setDefaultNavigationTimeout(config.defaultTimeout);
+
+        const session: BrowserSession = {
+          browser: persistentContext, // In persistent context, browser IS the context
+          context: persistentContext,
+          page,
+          providerId,
+          launchedAt: new Date().toISOString(),
+          lastActivityAt: new Date().toISOString(),
+          persistentContext: true,
+        };
+
+        this.sessions.set(providerId, session);
+        console.info(`[BrowserSessionManager] Launched persistent context for "${providerId}" (profile: ${config.profileDir})`);
+        return session;
+      }
+
+      // Fallback: standard launch + newContext (for providers without profileDir)
+      const browser = await pw.chromium.launch({
+        headless,
+        args: launchArgs,
+      });
 
       const context = await browser.newContext({
         viewport: config.viewport,
@@ -135,6 +196,7 @@ export class BrowserSessionManager {
         providerId,
         launchedAt: new Date().toISOString(),
         lastActivityAt: new Date().toISOString(),
+        persistentContext: false,
       };
 
       this.sessions.set(providerId, session);
@@ -151,7 +213,12 @@ export class BrowserSessionManager {
     if (!session) return;
 
     try {
-      await session.browser.close();
+      if (session.persistentContext) {
+        // For persistent context, close the context (which also closes the browser)
+        await session.context.close();
+      } else {
+        await session.browser.close();
+      }
     } catch {
       // Swallow
     }
@@ -318,6 +385,9 @@ export class BrowserSessionManager {
   isSessionActive(providerId: string): boolean {
     const session = this.sessions.get(providerId);
     try {
+      if (session?.persistentContext) {
+        return session.browser?.browserContexts?.() !== undefined;
+      }
       return session?.browser?.isConnected?.() ?? false;
     } catch {
       return false;

@@ -115,6 +115,18 @@ export interface BrowserProviderConfig {
   blockedDomains: string[];
   /** Allowed domains (empty = all except blocked) */
   allowedDomains: string[];
+  /** Provider homepage URL (e.g. https://chatgpt.com) */
+  url?: string;
+  /** Whether this provider is enabled */
+  enabled?: boolean;
+  /** Default task mode for this provider */
+  defaultMode?: BrowserTaskMode;
+  /** How to submit prompts: 'enter' or 'ctrl+enter' */
+  submitStrategy?: 'enter' | 'ctrl+enter';
+  /** Ordered selectors for finding input elements */
+  inputSelectors?: string[];
+  /** Ordered selectors for finding response elements */
+  responseSelectors?: string[];
 }
 
 // ── Provider Adapter Interface ─────────────────────────────────

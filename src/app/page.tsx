@@ -12,7 +12,7 @@ import {
   AlertTriangle, CheckCircle2, XCircle, Loader2, Sparkles,
   Crown, Wrench, ChevronDown, ChevronUp, UserPlus, Trash2,
   ListChecks, BarChart3, Radio, Building2, MessageSquare,
-  PanelLeftClose, PanelLeftOpen,
+  PanelLeftClose, PanelLeftOpen, Globe,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -50,6 +50,9 @@ import type { ZoneDestination, ZoneLabel, TileType as TileTypeVal } from '@/lib/
 import { useOfficeData } from '@/hooks/useOfficeData';
 import { useEventStream } from '@/hooks/useEventStream';
 import type { OfficeAgent } from '@/hooks/useOfficeData';
+
+// ─── Browser Operator ─────────────────────────────────────────
+import { BrowserOperatorPanel } from '@/components/browser-operator/BrowserOperatorPanel';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -1075,6 +1078,7 @@ export default function Home() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [chatPanelOpen, setChatPanelOpen] = useState(false);
   const [chatSheetOpen, setChatSheetOpen] = useState(false);
+  const [browserOpOpen, setBrowserOpOpen] = useState(false);
 
   const orchestrator = agents.find((a) => a.role === 'orchestrator') || null;
   const hiredAgentIds = new Set(hiredAgents.map((h) => h.id));
@@ -1680,6 +1684,15 @@ export default function Home() {
                 <span>Chat{messages.length > 0 && ` (${messages.length})`}</span>
               </Button>
             )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setBrowserOpOpen(true)}
+              className="text-slate-400 hover:text-slate-200 gap-1"
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span className="text-[10px]">Browser Op</span>
+            </Button>
             <Separator orientation="vertical" className="h-4 bg-slate-700/50" />
             {/* Quick agent count — compact on mobile */}
             <div className="flex items-center gap-1 md:gap-1.5 text-[10px] text-slate-500">
@@ -1708,6 +1721,9 @@ export default function Home() {
         isHired={detailAgent ? hiredAgentIds.has(detailAgent.id) : false}
         onFire={detailAgent ? () => handleFireAgent(detailAgent.id) : undefined}
       />
+
+      {/* ─── Browser Operator Panel ─── */}
+      <BrowserOperatorPanel open={browserOpOpen} onOpenChange={setBrowserOpOpen} />
     </div>
   );
 }

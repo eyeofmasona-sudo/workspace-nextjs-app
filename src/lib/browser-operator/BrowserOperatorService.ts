@@ -4,6 +4,7 @@
  * Main orchestrator for the Browser Operator Module.
  * Connects the queue, provider registry, and adapters.
  * Runs a processing loop that dequeues and executes tasks.
+ * Persists task data to the database (graceful fallback when DB unavailable).
  *
  * Security:
  * - Localhost-only (API key check on every request)
@@ -19,13 +20,20 @@ import type {
   BrowserTaskOutput,
   BrowserTaskStatus,
   BrowserProvidersApiResponse,
+  BrowserLogEntry,
 } from './BrowserOperatorTypes';
 import { BrowserOperatorQueue } from './BrowserOperatorQueue';
 import { getBrowserProviderRegistry } from './BrowserOperatorProviderRegistry';
 import { CustomAdapter } from './adapters/CustomAdapter';
+import { ChatGPTAdapter } from './adapters/ChatGPTAdapter';
+import { ClaudeAdapter } from './adapters/ClaudeAdapter';
+import { GeminiAdapter } from './adapters/GeminiAdapter';
+import { ZaiAdapter } from './adapters/ZaiAdapter';
 import { BrowserSessionManager } from './playwright/BrowserSessionManager';
 import { ScreenshotService } from './playwright/ScreenshotService';
 import { BrowserOperatorToolBridge } from './BrowserOperatorToolBridge';
+import { browserOperatorDbService } from './BrowserOperatorDbService';
+import defaultProvidersConfig from './config/providers.config.json';
 
 // ── Service Config ─────────────────────────────────────────────
 export interface BrowserOperatorConfig {
@@ -45,6 +53,22 @@ const DEFAULT_CONFIG: BrowserOperatorConfig = {
   cleanupAge: 3600_000,
   screenshotsDir: '/tmp/browser-operator/screenshots',
 };
+
+// ── Default providers config for DB seeding ────────────────────
+const defaultProvidersSeedConfig = (defaultProvidersConfig.providers as any[]).map((p) => ({
+  providerId: p.id,
+  name: p.name,
+  description: p.description,
+  headless: p.headless ?? false,
+  profileDir: p.profileDir,
+  viewportWidth: p.viewport?.width ?? 1280,
+  viewportHeight: p.viewport?.height ?? 720,
+  defaultTimeout: p.defaultTimeout ?? 30000,
+  maxSessions: p.maxSessions ?? 1,
+  blockedDomains: p.blockedDomains ?? [],
+  allowedDomains: p.allowedDomains ?? [],
+  enabled: p.enabled ?? true,
+}));
 
 // ── Service ────────────────────────────────────────────────────
 class BrowserOperatorService {
@@ -74,10 +98,26 @@ class BrowserOperatorService {
 
     // Register built-in adapters
     const customAdapter = new CustomAdapter(this.sessionManager, this.screenshotService);
+    const chatgptAdapter = new ChatGPTAdapter(this.sessionManager, this.screenshotService);
+    const claudeAdapter = new ClaudeAdapter(this.sessionManager, this.screenshotService);
+    const geminiAdapter = new GeminiAdapter(this.sessionManager, this.screenshotService);
+    const zaiAdapter = new ZaiAdapter(this.sessionManager, this.screenshotService);
+
     registry.register(customAdapter);
+    registry.register(chatgptAdapter);
+    registry.register(claudeAdapter);
+    registry.register(geminiAdapter);
+    registry.register(zaiAdapter);
 
     // Initialize all providers
     await registry.initializeAll();
+
+    // Seed provider configs to DB (don't block on DB failure)
+    try {
+      await browserOperatorDbService.seedProviderConfigs(defaultProvidersSeedConfig);
+    } catch (err) {
+      console.warn('[BrowserOperator] DB seed failed (non-critical):', err);
+    }
 
     // Start processing loop
     this.startProcessing();
@@ -86,7 +126,7 @@ class BrowserOperatorService {
     this.toolBridge.attach(this.queue);
 
     this.initialized = true;
-    console.info('[BrowserOperator] Service initialized');
+    console.info('[BrowserOperator] Service initialized with 5 adapters (custom, chatgpt, claude, gemini, zai)');
   }
 
   // ── Task Submission ──────────────────────────────────────────
@@ -108,6 +148,23 @@ class BrowserOperatorService {
 
     const task = this.queue.enqueue(input);
     console.info(`[BrowserOperator] Task ${task.id} queued (${input.mode}, priority: ${input.priority ?? 'normal'})`);
+
+    // Persist to DB (don't block on DB failure)
+    try {
+      await browserOperatorDbService.createTask({
+        taskId: task.id,
+        provider: input.provider,
+        prompt: input.prompt,
+        url: input.url,
+        mode: input.mode,
+        priority: input.priority,
+        agentId: input.agentId,
+        workspaceId: input.options?.workspaceId as string | undefined,
+        toolExecutionId: input.options?.executionId as string | undefined,
+      });
+    } catch (err) {
+      console.warn('[BrowserOperator] DB createTask failed (non-critical):', err);
+    }
 
     // Try to process immediately
     this.processQueue();
@@ -140,6 +197,14 @@ class BrowserOperatorService {
     const task = this.queue.retry(taskId);
     if (!task) throw new Error(`Cannot retry task "${taskId}" (not found, not failed, or max retries reached)`);
     console.info(`[BrowserOperator] Task ${taskId} retried (attempt ${task.retryCount})`);
+
+    // Update DB (don't block on DB failure)
+    try {
+      await browserOperatorDbService.updateTaskStatus(taskId, 'queued');
+    } catch (err) {
+      console.warn('[BrowserOperator] DB updateTaskStatus (retry) failed (non-critical):', err);
+    }
+
     this.processQueue();
     return task;
   }
@@ -158,8 +223,25 @@ class BrowserOperatorService {
     const adapter = registry.getOrThrow(task.input.provider);
     const result = await adapter.resume(taskId);
 
-    // Update task
+    // Update task in-memory
     this.queue.updateStatus(taskId, result.status, result);
+
+    // Update DB (don't block on DB failure)
+    try {
+      await browserOperatorDbService.updateTaskStatus(taskId, result.status, {
+        result: result.result,
+        error: result.error,
+        needsHumanReason: result.needsHumanReason,
+        finalUrl: result.finalUrl,
+      });
+
+      // Sync logs to DB
+      if (result.logs?.length) {
+        await browserOperatorDbService.addLogs(taskId, result.logs);
+      }
+    } catch (err) {
+      console.warn('[BrowserOperator] DB updateTaskStatus (resume) failed (non-critical):', err);
+    }
 
     console.info(`[BrowserOperator] Task ${taskId} resumed → ${result.status}`);
     return result;
@@ -180,6 +262,13 @@ class BrowserOperatorService {
     // Add screenshot to task
     task.output.screenshots.push(filename);
     task.updatedAt = new Date().toISOString();
+
+    // Persist screenshot to DB (don't block on DB failure)
+    try {
+      await browserOperatorDbService.addScreenshot(taskId, filename, 'manual');
+    } catch (err) {
+      console.warn('[BrowserOperator] DB addScreenshot failed (non-critical):', err);
+    }
 
     return filename;
   }
@@ -221,6 +310,14 @@ class BrowserOperatorService {
 
     try {
       this.queue.updateStatus(task.id, 'running');
+
+      // Update DB status to running (don't block on DB failure)
+      try {
+        await browserOperatorDbService.updateTaskStatus(task.id, 'running');
+      } catch (err) {
+        console.warn('[BrowserOperator] DB updateTaskStatus (running) failed (non-critical):', err);
+      }
+
       console.info(`[BrowserOperator] Processing task ${task.id} (${task.input.mode})`);
 
       const registry = getBrowserProviderRegistry();
@@ -228,6 +325,31 @@ class BrowserOperatorService {
       const result = await adapter.execute(task.input, task);
 
       this.queue.updateStatus(task.id, result.status, result);
+
+      // Update DB with result (don't block on DB failure)
+      try {
+        await browserOperatorDbService.updateTaskStatus(task.id, result.status, {
+          result: result.result,
+          error: result.error,
+          needsHumanReason: result.needsHumanReason,
+          finalUrl: result.finalUrl,
+        });
+
+        // Sync logs to DB
+        if (result.logs?.length) {
+          await browserOperatorDbService.addLogs(task.id, result.logs);
+        }
+
+        // Sync screenshots to DB
+        if (result.screenshots?.length) {
+          for (const ss of result.screenshots) {
+            await browserOperatorDbService.addScreenshot(task.id, ss, 'auto');
+          }
+        }
+      } catch (err) {
+        console.warn('[BrowserOperator] DB sync after task completion failed (non-critical):', err);
+      }
+
       console.info(`[BrowserOperator] Task ${task.id} → ${result.status}`);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
@@ -235,6 +357,16 @@ class BrowserOperatorService {
         error: errorMsg,
         status: 'failed',
       });
+
+      // Update DB with failure (don't block on DB failure)
+      try {
+        await browserOperatorDbService.updateTaskStatus(task.id, 'failed', {
+          error: errorMsg,
+        });
+      } catch (dbErr) {
+        console.warn('[BrowserOperator] DB updateTaskStatus (failed) failed (non-critical):', dbErr);
+      }
+
       console.error(`[BrowserOperator] Task ${task.id} failed:`, errorMsg);
     } finally {
       this.processing = false;

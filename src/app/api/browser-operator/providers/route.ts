@@ -22,6 +22,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const service = getBrowserOperatorService();
+    // Ensure service is initialized so adapters are registered
+    await service.initialize();
     const response = service.getProviders();
 
     return NextResponse.json(response);

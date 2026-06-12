@@ -245,3 +245,164 @@ Stage Summary:
 - Orchestrator handles needs_human as non-failure, has fallback provider
 - DB models for persistent browser operator data
 - Agent config has optional browser operator fields (backward compatible)
+
+---
+Task ID: 1
+Agent: main
+Task: Implement Browser Operator Part 3 — DB Persistence, Provider Adapters, Persistent Profiles
+
+Work Log:
+- Created src/lib/browser-operator/BrowserOperatorDbService.ts — DB persistence layer with:
+  - Lazy import of Prisma db with try/catch for graceful fallback
+  - createTask() — creates BrowserOperatorTask record in DB
+  - updateTaskStatus() — updates status, result, error, needsHumanReason, finalUrl, links toolExecutionId/agentId/workspaceId
+  - addLog() / addLogs() — creates BrowserOperatorLog records
+  - addScreenshot() — creates BrowserOperatorScreenshot records
+  - getTask() — gets task with logs and screenshots
+  - listTasks() — lists tasks with optional status/provider filter
+  - getProviderConfigs() — gets all BrowserOperatorProviderConfig records
+  - seedProviderConfigs() — seeds provider configs from JSON if not already in DB
+  - All methods wrapped in try/catch, returns null/empty gracefully
+  - Private dbAvailable flag set on first successful DB call
+  - Export singleton browserOperatorDbService
+- Created src/lib/browser-operator/adapters/adapter-utils.ts — Shared utility for provider adapters:
+  - findInput(page, selectors) — try each selector until one works
+  - fillPrompt(page, selectors, prompt) — clipboard fill (navigator.clipboard + document.execCommand) with fallback to page.fill and keyboard.type
+  - submitPrompt(page, strategy) — Enter or Ctrl+Enter based on config
+  - waitForResponse(page, selectors, timeout) — wait for new response to appear with polling
+  - extractLastResponse(page, selectors) — get the last assistant message text
+  - executeProviderInteraction() — complete flow: navigate → check human → fill → submit → wait → extract
+  - AdapterHelperConfig type for reusable configuration
+- Created src/lib/browser-operator/adapters/ChatGPTAdapter.ts — ChatGPT via chatgpt.com:
+  - Input selectors: textarea → [contenteditable='true'] → [role='textbox']
+  - Response selectors: [data-message-author-role='assistant'] → .markdown → main
+  - Submit: Enter key
+  - Custom resume() — re-checks needs_human, takes screenshot after human resolves
+- Created src/lib/browser-operator/adapters/ClaudeAdapter.ts — Claude via claude.ai:
+  - Input selectors: textarea → [contenteditable='true'] → div.ProseMirror → [role='textbox']
+  - Response selectors: .font-claude-message → [data-testid='assistant-message'] → main
+  - Submit: Enter key
+- Created src/lib/browser-operator/adapters/GeminiAdapter.ts — Gemini via gemini.google.com:
+  - Input selectors: textarea → [contenteditable='true'] → div.ql-editor → [role='textbox']
+  - Response selectors: model-response → message-content → main
+  - Submit: Enter key
+- Created src/lib/browser-operator/adapters/ZaiAdapter.ts — Z.AI via chat.z.ai:
+  - Input selectors: textarea → [contenteditable='true'] → [role='textbox']
+  - Response selectors: [data-message-role='assistant'] → .assistant-message → main
+  - Submit: Enter key
+- Updated src/lib/browser-operator/config/providers.config.json — 5 provider configs:
+  - chatgpt (chatgpt.com, headless: false, allowedDomains: chatgpt.com, chat.openai.com)
+  - claude (claude.ai, headless: false, allowedDomains: claude.ai)
+  - gemini (gemini.google.com, headless: false, allowedDomains: gemini.google.com)
+  - zai (chat.z.ai, headless: false, allowedDomains: chat.z.ai, z.ai)
+  - custom (headless: false, all domains allowed, defaultMode: navigate)
+  - Each includes url, enabled, defaultMode, submitStrategy, inputSelectors, responseSelectors
+- Updated src/lib/browser-operator/playwright/BrowserSessionManager.ts — Persistent profiles:
+  - getSession() now uses launchPersistentContext when profileDir is configured
+  - Profile directory at .storage/browser-operator/profiles/{profileDir}
+  - Creates profile directory if it doesn't exist
+  - BrowserSession now tracks persistentContext flag
+  - When persistentContext is used, browser === context (same object)
+  - Kept existing launch + newContext path as fallback for providers without profileDir
+  - headless defaults to false (headful mode)
+  - Updated isSessionActive() and closeSession() to handle persistent context
+- Updated src/lib/browser-operator/BrowserOperatorService.ts — DB integration + new adapters:
+  - Imports browserOperatorDbService from ./BrowserOperatorDbService
+  - initialize(): registers 5 adapters (custom, chatgpt, claude, gemini, zai), seeds provider configs to DB
+  - submitTask(): after queue.enqueue, also calls browserOperatorDbService.createTask()
+  - processQueue(): after each status update, calls browserOperatorDbService.updateTaskStatus(), syncs logs and screenshots
+  - resumeTask(): after updating status, also updates DB and syncs logs
+  - retryTask(): updates DB status to queued
+  - takeScreenshot(): after capturing, calls browserOperatorDbService.addScreenshot()
+  - ALL DB calls wrapped in try/catch — DB failures never break in-memory flow
+- Updated src/lib/browser-operator/BrowserOperatorTypes.ts — Extended BrowserProviderConfig:
+  - Added optional url, enabled, defaultMode, submitStrategy, inputSelectors, responseSelectors fields
+- Updated src/lib/browser-operator/index.ts — Barrel exports:
+  - Added ChatGPTAdapter, ClaudeAdapter, GeminiAdapter, ZaiAdapter
+  - Added adapter-utils exports (findInput, fillPrompt, submitPrompt, waitForResponse, extractLastResponse, AdapterHelperConfig)
+  - Added BrowserOperatorDbService and browserOperatorDbService
+- Created src/app/api/browser-operator/screenshots/[filename]/route.ts — Screenshot serving:
+  - GET handler serves screenshot files from /tmp/browser-operator/screenshots
+  - Validates filename: no path traversal (no .., no leading /), only .png, no directory separators
+  - Returns file with Content-Type: image/png, Cache-Control: public, max-age=3600
+  - Returns 404 if file doesn't exist, 400 for invalid filenames
+  - Requires BROWSER_OPERATOR_API_KEY if configured
+- Lint clean, dev server running, no compilation errors
+
+Stage Summary:
+- Browser Operator DB persistence layer fully implemented with graceful fallback
+- 4 new AI provider adapters (ChatGPT, Claude, Gemini, ZAI) with resilient selector chains
+- Shared adapter-utils with common interaction patterns (findInput, fillPrompt, submitPrompt, waitForResponse, extractLastResponse)
+- 5 provider configs in providers.config.json with domain restrictions and provider-specific selectors
+- Persistent browser profiles via launchPersistentContext for manual login sessions
+- Screenshot serving API route with security validation
+- All DB operations non-blocking — in-memory flow never breaks on DB failure
+- BrowserProviderConfig type extended with url, enabled, defaultMode, submitStrategy, inputSelectors, responseSelectors
+---
+Task ID: 4
+Agent: ui-builder
+Task: Create Browser Operator admin panel UI
+
+Work Log:
+- Read worklog.md and existing project architecture (page.tsx 1714 lines, pixel office + orchestrator chat)
+- Studied Browser Operator API endpoints: tasks (GET/POST), providers (GET), retry/resume/screenshot (POST), screenshots/[filename] (GET)
+- Studied BrowserOperatorTypes.ts for data structures: BrowserTask, BrowserTaskOutput, BrowserProviderConfig, etc.
+- Created src/components/browser-operator/BrowserOperatorPanel.tsx — Full admin panel with:
+  - Sheet-based overlay matching existing project style (bg-[#0f0f1a], slate colors)
+  - Task List section with TaskCard component showing: ID (truncated + copy), status badge (color-coded), provider badge, agent ID badge, prompt preview (100 chars), result preview (200 chars + copy), error (red), needsHumanReason (amber + warning icon), screenshots count (clickable), collapsible logs, relative timestamps, action buttons (Retry/Resume/Screenshot)
+  - Providers section with ProviderCard showing: name, ID, active status, current URL, session count
+  - Manual Takeover section (shown when needs_human tasks exist): warning banner, reason text, screenshot thumbnail, instructions, Resume button
+  - New Task form (collapsible): provider dropdown, mode dropdown (navigate/extract/interact/automate), URL input, priority dropdown, prompt textarea, submit button
+  - Screenshot viewer overlay with image navigation
+  - Auto-refresh every 5 seconds when panel is open
+  - Stats bar showing counts by status
+  - Error banner with dismiss
+- Modified src/app/page.tsx — Minimal changes:
+  - Added Globe import from lucide-react
+  - Added BrowserOperatorPanel import
+  - Added browserOpOpen state
+  - Added "Browser Op" button with Globe icon in bottom toolbar (between chat button and stats)
+  - Added BrowserOperatorPanel Sheet component after AgentDetailSheet
+- Fixed lint error: moved setLoading out of useEffect body into fetchData callback with showLoading parameter
+- Lint passes cleanly, dev server compiles successfully
+
+Stage Summary:
+- Browser Operator admin panel fully implemented as Sheet overlay
+- No changes to pixel office UI or existing agents
+- All 7 API endpoints integrated (tasks, providers, retry, resume, screenshot, screenshots)
+- Dark theme consistent with existing project (bg-[#0f0f1a], slate-700 borders, slate-300/400 text)
+- Compact, information-dense admin/ops panel with collapsible sections
+- Responsive design via Sheet component
+- Auto-refresh with 5-second interval when panel is open
+
+---
+Task ID: 4
+Agent: main
+Task: Browser Operator Part 3 — DB persistence, provider adapters, persistent profiles, UI panel, documentation
+
+Work Log:
+- Created BrowserOperatorDbService.ts with Prisma persistence (graceful fallback to in-memory)
+- Updated BrowserOperatorService.ts to integrate DB service throughout lifecycle
+- Updated providers.config.json with 5 providers (chatgpt, claude, gemini, zai, custom)
+- Created adapter-utils.ts with shared utilities (findInput, fillPrompt, submitPrompt, waitForResponse, extractLastResponse)
+- Created ChatGPTAdapter.ts, ClaudeAdapter.ts, GeminiAdapter.ts, ZaiAdapter.ts
+- Updated BrowserSessionManager.ts for persistent profiles via launchPersistentContext
+- Updated BrowserOperatorTypes.ts with extended BrowserProviderConfig fields
+- Updated index.ts barrel exports for all new modules
+- Added screenshot serving API route at /api/browser-operator/screenshots/[filename]
+- Fixed providers route to call initialize() before listing
+- Created BrowserOperatorPanel.tsx component with tasks, providers, manual takeover, new task form
+- Added "Browser Op" button to page.tsx toolbar
+- Fixed TaskStats type mismatch (API returns flat fields, not byStatus)
+- Created docs/browser-operator.md with comprehensive documentation
+- All lint checks pass
+- Agent Browser verification: panel opens, shows 2 tasks, 5 providers, new task form works
+- Pixel office UI unchanged
+
+Stage Summary:
+- Browser Operator now has full DB persistence layer
+- 5 provider adapters with resilient selector chains
+- Persistent browser profiles at .storage/browser-operator/profiles/
+- Admin UI panel accessible via "Browser Op" button in toolbar
+- Complete documentation at docs/browser-operator.md
+- Graceful degradation: works without Playwright, works without DB
