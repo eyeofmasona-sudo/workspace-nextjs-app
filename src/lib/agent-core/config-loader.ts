@@ -1,22 +1,56 @@
-// ─── Agent OS — Stage 2: Config Loader ──────────────────────
+// ─── Agent OS — Stage 3: Config Loader ─────────────────────────
 // Loads agent configs from definitions and registers them.
+// Also registers built-in skills and tools.
 // This is the bridge between static config definitions and the
 // runtime registry.
 
 import type { AgentConfig } from './types';
 import { agentRegistry } from './registry';
 import { loggingHook, costTrackingHook } from './hooks';
+import { skillRegistry } from '../skills/registry';
+import { BUILTIN_SKILLS } from '../skills';
+import { toolRegistry } from '../tools/registry';
+import { BUILTIN_TOOLS } from '../tools';
+
+// ─── Initialization Flag ────────────────────────────────────
+
+let skillsAndToolsInitialized = false;
+
+/**
+ * Register all built-in skills and tools.
+ * Called once during initialization.
+ */
+export function registerBuiltinSkillsAndTools(): void {
+  if (skillsAndToolsInitialized) return;
+
+  skillRegistry.registerAll(BUILTIN_SKILLS, 'builtin');
+  toolRegistry.registerAll(BUILTIN_TOOLS, 'builtin');
+
+  skillsAndToolsInitialized = true;
+
+  const skillStats = skillRegistry.getStats();
+  const toolStats = toolRegistry.getStats();
+
+  console.log(
+    `[ConfigLoader] Registered ${skillStats.totalSkills} built-in skills, ` +
+    `${toolStats.totalTools} built-in tools`
+  );
+}
 
 // ─── Config Loader ──────────────────────────────────────────
 
 /**
  * Load agent configs into the registry.
  * Adds built-in hooks (logging, cost tracking) to each config.
+ * Also ensures skills and tools are registered.
  */
 export function loadAgentConfigs(configs: AgentConfig[]): {
   loaded: number;
   skipped: number;
 } {
+  // Ensure skills and tools are registered
+  registerBuiltinSkillsAndTools();
+
   let loaded = 0;
   let skipped = 0;
 
@@ -57,6 +91,9 @@ export async function loadAgentsFromDb(workspaceId: string): Promise<{
   loaded: number;
   skipped: number;
 }> {
+  // Ensure skills and tools are registered
+  registerBuiltinSkillsAndTools();
+
   try {
     const { db } = await import('../db');
     const agents = await db.agent.findMany({

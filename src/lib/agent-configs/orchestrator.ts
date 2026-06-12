@@ -1,4 +1,5 @@
 // ─── Agent Config: Orchestrator ─────────────────────────────
+// Stage 3: Now with skills and tools enabled.
 
 import type { AgentConfig } from '../agent-core/types';
 import { DEFAULT_EXECUTION_CONFIG } from '../agent-core/types';
@@ -38,8 +39,39 @@ You think strategically and coordinate the team efficiently. You delegate, you d
     maxTokens: 4096,
   },
 
-  skills: [],
-  tools: [],
+  // ── Stage 3: Skills ──────────────────────────────────────────
+  skills: [
+    {
+      skillId: 'planning',
+      enabled: true,
+      config: {
+        defaultStepCount: 5,
+        autoPrioritize: true,
+      },
+    },
+    {
+      skillId: 'validation',
+      enabled: true,
+      config: {
+        strictness: 'high',
+      },
+    },
+  ],
+
+  // ── Stage 3: Tools ───────────────────────────────────────────
+  tools: [
+    {
+      toolId: 'calculator',
+      enabled: true,
+      requiredPermission: 'none',
+    },
+    {
+      toolId: 'http_request',
+      enabled: true,
+      requiredPermission: 'read',
+    },
+  ],
+
   hooks: [],
 
   visualProfile: {

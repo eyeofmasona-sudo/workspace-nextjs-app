@@ -1,13 +1,17 @@
-// ─── Agent OS — Stage 2: Agent Runtime ──────────────────────
-// Executes agents: resolves config → resolves model → builds prompt →
-// calls provider → handles lifecycle → returns result.
+// ─── Agent OS — Stage 3: Agent Runtime (with Skills + Tools) ───
+// Executes agents: resolves config → runs skills → resolves model →
+// builds prompt → collects tools → calls provider → handles tool calls →
+// runs skills → handles lifecycle → returns result.
 //
 // Key design decisions:
 // - Runtime does NOT own agent configs (that's Registry)
 // - Runtime does NOT own providers (that's ProviderRegistry)
+// - Runtime does NOT own skills/tools (that's SkillRegistry/ToolRegistry)
 // - Runtime does NOT own DB persistence (that's external)
-// - Runtime OWNS the execution lifecycle and hook pipeline
+// - Runtime OWNS the execution lifecycle, hook pipeline, and tool call loop
 // - Runtime is small, focused, and testable
+// - Skills run BEFORE hooks (prepare ground) and AFTER hooks (post-process)
+// - Tools are resolved from both skill injections and agent config
 
 import type {
   AgentConfig,
@@ -17,15 +21,28 @@ import type {
   AgentStatus,
   HookContext,
 } from './types';
-import { DEFAULT_EXECUTION_CONFIG } from './types';
 import { agentRegistry } from './registry';
 import { providerRegistry } from '../ai-provider/provider-registry';
 import { eventBus } from '../event-bus';
 import { EventTypes } from '../types/events';
 import { composeHooks } from './hooks';
 import type { AgentHook } from './types';
-import type { CompletionRequest, ChatMessage } from '../ai-provider/types';
+import type {
+  CompletionRequest,
+  ChatMessage,
+  ToolCall,
+  ToolDefinition,
+} from '../ai-provider/types';
 import { ProviderError } from '../ai-provider/types';
+import { skillRegistry } from '../skills/registry';
+import type { SkillContext } from '../skills/types';
+import { toolRegistry } from '../tools/registry';
+import { toolExecutor } from '../tools/executor';
+
+// ─── Constants ───────────────────────────────────────────────
+
+/** Maximum number of tool call rounds before breaking the loop */
+const MAX_TOOL_CALL_ROUNDS = 5;
 
 // ─── Agent Runtime ──────────────────────────────────────────
 
@@ -52,15 +69,19 @@ class AgentRuntime {
    *
    * Flow:
    * 1. Resolve agent config from registry
-   * 2. Build hook pipeline (global + agent-specific hooks)
-   * 3. Run beforeExecute hooks
-   * 4. Resolve model
-   * 5. Build messages with system prompt
-   * 6. Call provider
-   * 7. Handle errors (with fallback model retry)
-   * 8. Run afterExecute hooks
-   * 9. Update status
-   * 10. Return result
+   * 2. Resolve and run enabled skills (beforeRun)
+   * 3. Collect tool definitions (from skills + agent config)
+   * 4. Apply skill system prompt appendix
+   * 5. Build hook pipeline
+   * 6. Run beforeExecute hooks
+   * 7. Resolve model
+   * 8. Build completion request with tools
+   * 9. Call provider (with tool call loop)
+   * 10. Handle errors (with fallback model retry)
+   * 11. Run afterExecute hooks
+   * 12. Run skill afterRun hooks
+   * 13. Update state
+   * 14. Return result
    */
   async execute(agentId: string, input: AgentInput): Promise<AgentResult> {
     const startTime = Date.now();
@@ -68,33 +89,39 @@ class AgentRuntime {
     // 1. Resolve agent config
     const config = agentRegistry.getOrThrow(agentId);
 
-    // 2. Build hook pipeline
+    // 2. Resolve and run enabled skills (beforeRun)
+    const skillContext = await this.runSkillBeforeRun(config, input);
+
+    // 3. Collect tool definitions
+    const toolDefinitions = this.collectToolDefinitions(config, skillContext);
+
+    // 4. Build messages (with skill system prompt appendix)
+    const messages = this.buildMessages(config, input, skillContext.systemPromptAppendix);
+
+    // 5. Build hook pipeline
     const hookPipeline = this.buildHookPipeline(config);
 
-    // 3. Build messages
-    const messages = this.buildMessages(config, input);
-
-    // 4. Create hook context
+    // 6. Create hook context (bridge from skill context)
     let context: HookContext = {
       agentConfig: config,
       messages,
-      data: {},
+      data: { ...skillContext.data },
     };
 
-    // 5. Run beforeExecute hooks
+    // 7. Run beforeExecute hooks
     context = await hookPipeline.beforeExecute(context);
 
-    // 6. Resolve model
+    // 8. Resolve model
     const resolvedModel = agentRegistry.resolveModel(agentId, input.modelOverride);
     context.resolvedModel = resolvedModel;
 
-    // 7. Update status to "thinking"
+    // 9. Update status to "thinking"
     this.setStatus(agentId, 'thinking');
 
-    // 8. Get provider
+    // 10. Get provider
     const provider = providerRegistry.getOrThrow(resolvedModel.provider);
 
-    // 9. Build completion request
+    // 11. Build completion request (with tool definitions if any)
     const executionConfig = config.execution;
     const completionRequest: CompletionRequest = {
       model: resolvedModel.model,
@@ -103,15 +130,25 @@ class AgentRuntime {
       maxTokens: input.maxTokens ?? resolvedModel.maxTokens ?? executionConfig.maxTokens,
       topP: executionConfig.topP,
       stop: executionConfig.stop,
+      ...(toolDefinitions.length > 0
+        ? {
+            tools: toolDefinitions,
+            toolChoice: 'auto',
+          }
+        : {}),
     };
 
-    // 10. Execute with error handling
+    // 12. Execute with tool call loop
     let result: AgentResult;
 
     try {
-      const response = await provider.complete(completionRequest);
+      const response = await this.executeWithToolLoop(
+        provider,
+        completionRequest,
+        config,
+        input.correlationId,
+      );
 
-      // Update status to "working" briefly
       this.setStatus(agentId, 'working');
 
       result = {
@@ -123,6 +160,7 @@ class AgentRuntime {
         finishReason: response.finishReason,
         durationMs: Date.now() - startTime,
         status: 'success',
+        toolCalls: response.toolCalls,
       };
     } catch (error) {
       // Try fallback model on retryable errors
@@ -152,7 +190,12 @@ class AgentRuntime {
             maxTokens: input.maxTokens ?? fallbackModel.maxTokens ?? executionConfig.maxTokens,
           };
 
-          const response = await fallbackProvider.complete(fallbackRequest);
+          const response = await this.executeWithToolLoop(
+            fallbackProvider,
+            fallbackRequest,
+            config,
+            input.correlationId,
+          );
 
           this.setStatus(agentId, 'working');
 
@@ -165,6 +208,7 @@ class AgentRuntime {
             finishReason: response.finishReason,
             durationMs: Date.now() - startTime,
             status: 'success',
+            toolCalls: response.toolCalls,
           };
         } catch (fallbackError) {
           result = this.handleError(agentId, fallbackError, resolvedModel, startTime);
@@ -181,22 +225,30 @@ class AgentRuntime {
           result.error = modifiedError.message;
         }
       }
+
+      // Run skill onError
+      if (result.status === 'error') {
+        await this.runSkillOnError(config, skillContext, new Error(result.error ?? 'Unknown error'));
+      }
     }
 
-    // 11. Run afterExecute hooks
+    // 13. Run afterExecute hooks
     result = await hookPipeline.afterExecute(context, result);
 
-    // 12. Update state
+    // 14. Run skill afterRun hooks
+    result = await this.runSkillAfterRun(config, skillContext, result);
+
+    // 15. Update state
     this.executionCounts.set(agentId, (this.executionCounts.get(agentId) ?? 0) + 1);
     this.lastActivities.set(agentId, Date.now());
     this.lastErrors.set(agentId, result.status === 'error' ? result.error ?? null : null);
 
-    // 13. Set back to idle after delay
+    // 16. Set back to idle after delay
     setTimeout(() => {
       this.setStatus(agentId, 'idle');
     }, 1500);
 
-    // 14. Emit cost event to DB
+    // 17. Emit cost event to DB
     if (result.status === 'success') {
       this.logCostToDb(agentId, result).catch(console.error);
     }
@@ -235,14 +287,269 @@ class AgentRuntime {
     return this.executionCounts.get(agentId) ?? 0;
   }
 
+  // ── Skill Integration ──────────────────────────────────────
+
+  /**
+   * Run beforeRun on all enabled skills for an agent.
+   * Returns the skill context with injected tools and system prompt appendix.
+   */
+  private async runSkillBeforeRun(
+    config: AgentConfig,
+    input: AgentInput,
+  ): Promise<SkillContext> {
+    const context: SkillContext = {
+      agentConfig: config,
+      messages: [],
+      data: {},
+      injectedToolDefinitions: [],
+      systemPromptAppendix: '',
+    };
+
+    // Resolve enabled skills and run beforeRun
+    for (const skillRef of config.skills) {
+      if (!skillRef.enabled) continue;
+
+      try {
+        const skill = skillRegistry.get(skillRef.skillId);
+        if (!skill) {
+          console.warn(
+            `[AgentRuntime] Skill "${skillRef.skillId}" not found in registry, skipping`
+          );
+          continue;
+        }
+
+        // Merge skill-specific config into context data
+        if (skillRef.config) {
+          context.data[`skill:${skillRef.skillId}:config`] = skillRef.config;
+        }
+
+        // Run beforeRun
+        const updatedContext = await skill.beforeRun(context);
+
+        // Merge back (skills return a new context object)
+        context.injectedToolDefinitions = updatedContext.injectedToolDefinitions;
+        context.systemPromptAppendix = updatedContext.systemPromptAppendix;
+        context.data = updatedContext.data;
+        context.messages = updatedContext.messages;
+
+        console.log(
+          `[AgentRuntime] Skill "${skillRef.skillId}" beforeRun completed. ` +
+          `Injected ${updatedContext.injectedToolDefinitions.length} tools, ` +
+          `appendix length: ${updatedContext.systemPromptAppendix.length}`
+        );
+      } catch (error) {
+        console.error(
+          `[AgentRuntime] Skill "${skillRef.skillId}" beforeRun failed:`,
+          error
+        );
+        // Continue with other skills — don't fail the entire execution
+      }
+    }
+
+    return context;
+  }
+
+  /**
+   * Run afterRun on all enabled skills for an agent.
+   * Skills post-process the result in reverse order.
+   */
+  private async runSkillAfterRun(
+    config: AgentConfig,
+    skillContext: SkillContext,
+    result: AgentResult,
+  ): Promise<AgentResult> {
+    let currentResult = result;
+
+    // Run in reverse order (like unwinding middleware)
+    const enabledSkills = config.skills
+      .filter((s) => s.enabled)
+      .reverse();
+
+    for (const skillRef of enabledSkills) {
+      try {
+        const skill = skillRegistry.get(skillRef.skillId);
+        if (!skill) continue;
+
+        currentResult = await skill.afterRun(skillContext, currentResult);
+      } catch (error) {
+        console.error(
+          `[AgentRuntime] Skill "${skillRef.skillId}" afterRun failed:`,
+          error
+        );
+        // Continue with other skills — don't fail
+      }
+    }
+
+    return currentResult;
+  }
+
+  /**
+   * Run onError on all enabled skills for an agent.
+   */
+  private async runSkillOnError(
+    config: AgentConfig,
+    skillContext: SkillContext,
+    error: Error,
+  ): Promise<void> {
+    for (const skillRef of config.skills) {
+      if (!skillRef.enabled) continue;
+
+      try {
+        const skill = skillRegistry.get(skillRef.skillId);
+        if (!skill) continue;
+
+        const modifiedError = await skill.onError(skillContext, error);
+        if (modifiedError !== null) {
+          // Skill handled the error — update error message
+          console.log(
+            `[AgentRuntime] Skill "${skillRef.skillId}" handled error: ${modifiedError.message}`
+          );
+        }
+      } catch (skillError) {
+        console.error(
+          `[AgentRuntime] Skill "${skillRef.skillId}" onError failed:`,
+          skillError
+        );
+      }
+    }
+  }
+
+  // ── Tool Integration ───────────────────────────────────────
+
+  /**
+   * Collect all tool definitions for an agent.
+   * Sources:
+   * 1. Tool definitions injected by skills (from skill beforeRun)
+   * 2. Tool definitions from agent's enabled tools (from registry)
+   */
+  private collectToolDefinitions(
+    config: AgentConfig,
+    skillContext: SkillContext,
+  ): ToolDefinition[] {
+    const definitions: ToolDefinition[] = [];
+
+    // 1. From skills (already resolved during beforeRun)
+    definitions.push(...skillContext.injectedToolDefinitions);
+
+    // 2. From agent's enabled tools
+    for (const toolRef of config.tools) {
+      if (!toolRef.enabled) continue;
+
+      const tool = toolRegistry.get(toolRef.toolId);
+      if (!tool) {
+        console.warn(
+          `[AgentRuntime] Tool "${toolRef.toolId}" not found in registry, skipping`
+        );
+        continue;
+      }
+
+      // Convert ITool to ToolDefinition format
+      definitions.push({
+        type: 'function',
+        function: tool.functionDefinition,
+      });
+    }
+
+    return definitions;
+  }
+
+  /**
+   * Execute provider with tool call loop.
+   * When the model returns tool_calls, execute them and feed results back.
+   * Continues until the model stops requesting tool calls or max rounds reached.
+   */
+  private async executeWithToolLoop(
+    provider: import('../ai-provider/types').AIProvider,
+    request: CompletionRequest,
+    config: AgentConfig,
+    correlationId?: string,
+  ): Promise<import('../ai-provider/types').CompletionResponse> {
+    let currentMessages = [...request.messages];
+    let round = 0;
+    let totalUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+
+    while (round < MAX_TOOL_CALL_ROUNDS) {
+      const currentRequest: CompletionRequest = {
+        ...request,
+        messages: currentMessages,
+      };
+
+      const response = await provider.complete(currentRequest);
+
+      // Accumulate usage
+      totalUsage.promptTokens += response.usage.promptTokens;
+      totalUsage.completionTokens += response.usage.completionTokens;
+      totalUsage.totalTokens += response.usage.totalTokens;
+
+      // If no tool calls, return the final response
+      if (!response.toolCalls || response.toolCalls.length === 0) {
+        return {
+          ...response,
+          usage: totalUsage,
+        };
+      }
+
+      console.log(
+        `[AgentRuntime] Tool call round ${round + 1}: ${response.toolCalls.length} tool calls requested`
+      );
+
+      // Add assistant message with tool calls to conversation
+      currentMessages.push({
+        role: 'assistant',
+        content: response.content || '',
+        toolCalls: response.toolCalls,
+      });
+
+      // Execute each tool call
+      const toolResults = await toolExecutor.executeToolCalls(
+        response.toolCalls,
+        config,
+        correlationId,
+      );
+
+      // Add tool results to conversation
+      for (const toolResult of toolResults) {
+        currentMessages.push({
+          role: 'tool',
+          content: toolResult.content,
+          toolCallId: toolResult.toolCallId,
+        });
+
+        console.log(
+          `[AgentRuntime] Tool ${toolResult.functionName} → ${toolResult.success ? 'success' : 'error'} ` +
+          `(${toolResult.durationMs}ms)`
+        );
+      }
+
+      round++;
+    }
+
+    // If we hit max rounds, return the last response content or a summary
+    console.warn(
+      `[AgentRuntime] Max tool call rounds (${MAX_TOOL_CALL_ROUNDS}) reached for agent ${config.id}`
+    );
+
+    return {
+      content: 'Maximum tool call iterations reached. Here is the current state of the work.',
+      model: request.model,
+      finishReason: 'stop',
+      usage: totalUsage,
+    };
+  }
+
   // ── Private Helpers ────────────────────────────────────────
 
-  private buildMessages(config: AgentConfig, input: AgentInput): ChatMessage[] {
+  private buildMessages(
+    config: AgentConfig,
+    input: AgentInput,
+    systemPromptAppendix: string = '',
+  ): ChatMessage[] {
     const messages: ChatMessage[] = [];
 
-    // System prompt first
-    if (config.systemPrompt) {
-      messages.push({ role: 'system', content: config.systemPrompt });
+    // System prompt + skill appendix
+    const systemPrompt = config.systemPrompt + systemPromptAppendix;
+    if (systemPrompt) {
+      messages.push({ role: 'system', content: systemPrompt });
     }
 
     // History

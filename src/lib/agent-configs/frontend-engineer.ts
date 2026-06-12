@@ -1,4 +1,5 @@
 // ─── Agent Config: Frontend Engineer ────────────────────────
+// Stage 3: Now with skills and tools enabled.
 
 import type { AgentConfig } from '../agent-core/types';
 import { DEFAULT_EXECUTION_CONFIG } from '../agent-core/types';
@@ -38,8 +39,32 @@ You write clean, type-safe React code with proper error handling and loading sta
     maxTokens: 4096,
   },
 
-  skills: [],
-  tools: [],
+  // ── Stage 3: Skills ──────────────────────────────────────────
+  skills: [
+    {
+      skillId: 'validation',
+      enabled: true,
+      config: {
+        strictness: 'medium',
+        checkAccessibility: true,
+      },
+    },
+  ],
+
+  // ── Stage 3: Tools ───────────────────────────────────────────
+  tools: [
+    {
+      toolId: 'calculator',
+      enabled: true,
+      requiredPermission: 'none',
+    },
+    {
+      toolId: 'file_reader',
+      enabled: true,
+      requiredPermission: 'read',
+    },
+  ],
+
   hooks: [],
 
   visualProfile: {

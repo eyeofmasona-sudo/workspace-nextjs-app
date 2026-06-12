@@ -1,7 +1,7 @@
-// ─── Agent OS — Stage 2: Runtime + Registry + Config Dashboard ──
+// ─── Agent OS — Stage 3: Skills + Tools Dashboard ───────────────
 // Complete dashboard showcasing the multi-agent system architecture:
-// Config Layer → Registry Layer → Runtime Layer
-// With agent cards, chat interface, multi-agent demo, and Stage 3 preview.
+// Config → Registry → Runtime → Skills → Tools
+// With agent cards, chat, skills/tools panels, and execution demo.
 
 'use client';
 
@@ -11,7 +11,8 @@ import {
   AlertTriangle, CheckCircle2, XCircle, Loader2, Sparkles,
   ArrowRight, Terminal, Crown, Code2, BookOpen, Settings,
   Layers, Database, Play, Wrench, Anchor, Activity, Shield,
-  ChevronRight, Boxes, CircuitBoard, Gauge,
+  ChevronRight, Boxes, CircuitBoard, Gauge, Puzzle,
+  Globe, FileText, Calculator, Target, Eye, Scale,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -23,6 +24,18 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // ─── Types ────────────────────────────────────────────────────
+
+interface AgentSkillRef {
+  skillId: string;
+  enabled: boolean;
+  hasConfig: boolean;
+}
+
+interface AgentToolRef {
+  toolId: string;
+  enabled: boolean;
+  requiredPermission: string;
+}
 
 interface RuntimeAgent {
   id: string;
@@ -39,8 +52,8 @@ interface RuntimeAgent {
     temperature: number;
     maxTokens: number;
   };
-  skills: number;
-  tools: number;
+  skills: AgentSkillRef[];
+  tools: AgentToolRef[];
   hooks: string[];
   visualProfile: {
     color: string;
@@ -49,6 +62,22 @@ interface RuntimeAgent {
   };
   executionCount: number;
   lastActivityAt: number | null;
+}
+
+interface SkillInfo {
+  id: string;
+  name: string;
+  description: string;
+  version?: string;
+}
+
+interface ToolInfo {
+  id: string;
+  name: string;
+  description: string;
+  version?: string;
+  requiredPermission: string;
+  functionName: string;
 }
 
 interface RuntimeStatus {
@@ -61,6 +90,28 @@ interface RuntimeStatus {
     agentsByStatus: Record<string, number>;
   };
   registrySize: number;
+  skills: {
+    totalSkills: number;
+    skillIds: string[];
+    registrations: Array<{
+      id: string;
+      name: string;
+      version?: string;
+      source: string;
+    }>;
+  };
+  tools: {
+    totalTools: number;
+    toolIds: string[];
+    toolsByPermission: Record<string, number>;
+    registrations: Array<{
+      id: string;
+      name: string;
+      version?: string;
+      permission: string;
+      source: string;
+    }>;
+  };
 }
 
 interface AIProviderStatus {
@@ -91,23 +142,6 @@ interface ChatMessage {
   finishReason?: string;
   timestamp: number;
   error?: boolean;
-}
-
-interface DemoResult {
-  agentId: string;
-  agentName: string;
-  agentRole: string;
-  emoji: string;
-  color: string;
-  model: string;
-  content: string;
-  durationMs: number;
-  usage?: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-  };
-  error?: string;
 }
 
 // ─── Constants ────────────────────────────────────────────────
@@ -171,6 +205,25 @@ const ROLE_ICONS: Record<string, React.ReactNode> = {
   researcher: <BookOpen className="w-4 h-4" />,
 };
 
+const SKILL_ICONS: Record<string, React.ReactNode> = {
+  planning: <Target className="w-3.5 h-3.5" />,
+  summarization: <FileText className="w-3.5 h-3.5" />,
+  validation: <Shield className="w-3.5 h-3.5" />,
+};
+
+const TOOL_ICONS: Record<string, React.ReactNode> = {
+  calculator: <Calculator className="w-3.5 h-3.5" />,
+  http_request: <Globe className="w-3.5 h-3.5" />,
+  file_reader: <FileText className="w-3.5 h-3.5" />,
+};
+
+const PERMISSION_COLORS: Record<string, string> = {
+  none: 'bg-slate-500/20 text-slate-400',
+  read: 'bg-cyan-500/20 text-cyan-300',
+  write: 'bg-amber-500/20 text-amber-300',
+  admin: 'bg-red-500/20 text-red-300',
+};
+
 // ─── Sub-components ───────────────────────────────────────────
 
 function StatusDot({ status }: { status: string }) {
@@ -187,17 +240,15 @@ function StatusDot({ status }: { status: string }) {
 function ArchitectureOverview() {
   const layers = [
     {
-      label: 'Config Layer',
-      sub: 'AgentConfig',
+      label: 'Config',
       icon: <Settings className="w-3.5 h-3.5" />,
       color: 'from-cyan-500/20 to-cyan-500/5',
       border: 'border-cyan-500/30',
       text: 'text-cyan-400',
-      desc: 'Definitions',
+      desc: 'AgentConfig',
     },
     {
-      label: 'Registry Layer',
-      sub: 'AgentRegistry',
+      label: 'Registry',
       icon: <Database className="w-3.5 h-3.5" />,
       color: 'from-purple-500/20 to-purple-500/5',
       border: 'border-purple-500/30',
@@ -205,20 +256,35 @@ function ArchitectureOverview() {
       desc: 'Lookup & Resolve',
     },
     {
-      label: 'Runtime Layer',
-      sub: 'AgentRuntime',
+      label: 'Runtime',
       icon: <CircuitBoard className="w-3.5 h-3.5" />,
       color: 'from-emerald-500/20 to-emerald-500/5',
       border: 'border-emerald-500/30',
       text: 'text-emerald-400',
-      desc: 'Execute & Hook',
+      desc: 'Execute & Loop',
+    },
+    {
+      label: 'Skills',
+      icon: <Sparkles className="w-3.5 h-3.5" />,
+      color: 'from-rose-500/20 to-rose-500/5',
+      border: 'border-rose-500/30',
+      text: 'text-rose-400',
+      desc: 'Capabilities',
+    },
+    {
+      label: 'Tools',
+      icon: <Wrench className="w-3.5 h-3.5" />,
+      color: 'from-amber-500/20 to-amber-500/5',
+      border: 'border-amber-500/30',
+      text: 'text-amber-400',
+      desc: 'Functions',
     },
   ];
 
   return (
-    <div className="flex items-center gap-2 overflow-x-auto pb-1">
+    <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
       {layers.map((layer, i) => (
-        <div key={layer.label} className="flex items-center gap-2 shrink-0">
+        <div key={layer.label} className="flex items-center gap-1.5 shrink-0">
           <motion.div
             whileHover={{ scale: 1.05 }}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gradient-to-r ${layer.color} border ${layer.border}`}
@@ -230,7 +296,7 @@ function ArchitectureOverview() {
             </div>
           </motion.div>
           {i < layers.length - 1 && (
-            <ArrowRight className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+            <ArrowRight className="w-3 h-3 text-slate-600 shrink-0" />
           )}
         </div>
       ))}
@@ -250,6 +316,8 @@ function AgentCard({
   onSelect: () => void;
 }) {
   const colors = ROLE_COLORS[agent.role] || DEFAULT_ROLE_COLORS;
+  const enabledSkills = agent.skills.filter((s) => s.enabled).length;
+  const enabledTools = agent.tools.filter((t) => t.enabled).length;
 
   return (
     <motion.div
@@ -289,6 +357,42 @@ function AgentCard({
             </div>
           </div>
 
+          {/* Skills & Tools Row */}
+          <div className="flex items-center gap-2 mb-3">
+            {/* Skills pills */}
+            {agent.skills.filter((s) => s.enabled).map((s) => (
+              <TooltipProvider key={s.skillId}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] bg-rose-500/15 text-rose-300 border border-rose-500/20`}>
+                      {SKILL_ICONS[s.skillId] || <Sparkles className="w-2.5 h-2.5" />}
+                      {s.skillId}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="bg-slate-800 text-slate-300 text-xs">
+                    Skill: {s.skillId} {s.hasConfig ? '(configured)' : ''}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ))}
+            {/* Tools pills */}
+            {agent.tools.filter((t) => t.enabled).map((t) => (
+              <TooltipProvider key={t.toolId}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] bg-amber-500/15 text-amber-300 border border-amber-500/20`}>
+                      {TOOL_ICONS[t.toolId] || <Wrench className="w-2.5 h-2.5" />}
+                      {t.toolId}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="bg-slate-800 text-slate-300 text-xs">
+                    Tool: {t.toolId} (perm: {t.requiredPermission})
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ))}
+          </div>
+
           {/* Stats Row */}
           <div className="flex items-center gap-3 text-[10px] text-slate-500 mb-3">
             <TooltipProvider>
@@ -306,11 +410,11 @@ function AgentCard({
             </TooltipProvider>
             <span className="flex items-center gap-1">
               <Sparkles className="w-3 h-3" />
-              {agent.skills}
+              {enabledSkills}
             </span>
             <span className="flex items-center gap-1">
               <Wrench className="w-3 h-3" />
-              {agent.tools}
+              {enabledTools}
             </span>
             <span className="flex items-center gap-1">
               <Anchor className="w-3 h-3" />
@@ -408,7 +512,7 @@ function ChatPanel({
           <span className="text-2xl leading-none">{agent.visualProfile.avatarEmoji}</span>
           <div className="flex-1 min-w-0">
             <CardTitle className="text-base text-slate-200">{agent.name}</CardTitle>
-            <CardDescription className="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
+            <CardDescription className="text-xs text-slate-500 flex items-center gap-2 mt-0.5 flex-wrap">
               <span>{agent.role.replace(/_/g, ' ')}</span>
               <span className="text-slate-700">·</span>
               <span className="font-mono">{modelShort}</span>
@@ -416,6 +520,19 @@ function ChatPanel({
               <StatusDot status={agent.status} />
             </CardDescription>
           </div>
+        </div>
+        {/* Skills & Tools badges */}
+        <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+          {agent.skills.filter((s) => s.enabled).map((s) => (
+            <Badge key={s.skillId} className="bg-rose-500/15 text-rose-300 border-rose-500/20 text-[9px] h-4 px-1.5">
+              {SKILL_ICONS[s.skillId]} <span className="ml-0.5">{s.skillId}</span>
+            </Badge>
+          ))}
+          {agent.tools.filter((t) => t.enabled).map((t) => (
+            <Badge key={t.toolId} className="bg-amber-500/15 text-amber-300 border-amber-500/20 text-[9px] h-4 px-1.5">
+              {TOOL_ICONS[t.toolId]} <span className="ml-0.5">{t.toolId}</span>
+            </Badge>
+          ))}
         </div>
       </CardHeader>
 
@@ -426,6 +543,11 @@ function ChatPanel({
             <div className="text-3xl mb-3">{agent.visualProfile.avatarEmoji}</div>
             <p className="text-sm text-slate-500 mb-1">Chat with {agent.name}</p>
             <p className="text-xs text-slate-600">Model: {modelShort} · Temp: {agent.execution.temperature}</p>
+            <div className="flex items-center justify-center gap-1.5 mt-2">
+              <span className="text-[10px] text-rose-400">{agent.skills.filter(s => s.enabled).length} skills</span>
+              <span className="text-slate-700">·</span>
+              <span className="text-[10px] text-amber-400">{agent.tools.filter(t => t.enabled).length} tools</span>
+            </div>
             {!configured && (
               <div className="mt-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 max-w-sm mx-auto">
                 <p className="text-xs text-amber-300 flex items-center gap-1.5">
@@ -490,6 +612,7 @@ function ChatPanel({
               <div className="flex items-center gap-2 text-sm text-slate-400">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span>Thinking...</span>
+                <span className="text-[10px] text-slate-500">(skills + tools active)</span>
               </div>
             </div>
           </div>
@@ -518,6 +641,191 @@ function ChatPanel({
           </Button>
         </div>
       </div>
+    </Card>
+  );
+}
+
+// ─── Skills & Tools Registry Panel ────────────────────────────
+
+function SkillsToolsPanel({
+  runtimeStatus,
+}: {
+  runtimeStatus: RuntimeStatus | null;
+}) {
+  if (!runtimeStatus) return null;
+
+  const skills = runtimeStatus.skills;
+  const tools = runtimeStatus.tools;
+
+  return (
+    <Card className="bg-[#12122a] border-slate-700/50">
+      <CardHeader className="pb-3">
+        <div className="flex items-center gap-2">
+          <Puzzle className="w-4 h-4 text-slate-400" />
+          <CardTitle className="text-sm font-medium text-slate-300">Skills & Tools Registry</CardTitle>
+        </div>
+        <CardDescription className="text-xs text-slate-500">
+          {skills.totalSkills} skills · {tools.totalTools} tools registered
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Skills Column */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles className="w-3.5 h-3.5 text-rose-400" />
+              <h3 className="text-xs font-semibold text-rose-400">Skills</h3>
+              <Badge variant="outline" className="text-[9px] h-4 bg-slate-800/50 text-slate-500 border-slate-700">
+                {skills.totalSkills}
+              </Badge>
+            </div>
+            <div className="space-y-2">
+              {skills.registrations.map((s) => (
+                <motion.div
+                  key={s.id}
+                  initial={{ opacity: 0, x: -5 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="flex items-start gap-2 p-2.5 rounded-lg bg-rose-500/5 border border-rose-500/15"
+                >
+                  <span className="mt-0.5">{SKILL_ICONS[s.id] || <Sparkles className="w-3.5 h-3.5 text-rose-400" />}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-medium text-rose-300">{s.name}</span>
+                      {s.version && (
+                        <Badge variant="outline" className="text-[8px] h-3 px-1 bg-slate-800/50 text-slate-500 border-slate-700">
+                          v{s.version}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">
+                      id: {s.id} · from: {s.source}
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+
+          {/* Tools Column */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Wrench className="w-3.5 h-3.5 text-amber-400" />
+              <h3 className="text-xs font-semibold text-amber-400">Tools</h3>
+              <Badge variant="outline" className="text-[9px] h-4 bg-slate-800/50 text-slate-500 border-slate-700">
+                {tools.totalTools}
+              </Badge>
+            </div>
+            <div className="space-y-2">
+              {tools.registrations.map((t) => (
+                <motion.div
+                  key={t.id}
+                  initial={{ opacity: 0, x: 5 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-500/5 border border-amber-500/15"
+                >
+                  <span className="mt-0.5">{TOOL_ICONS[t.id] || <Wrench className="w-3.5 h-3.5 text-amber-400" />}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-medium text-amber-300">{t.name}</span>
+                      {t.version && (
+                        <Badge variant="outline" className="text-[8px] h-3 px-1 bg-slate-800/50 text-slate-500 border-slate-700">
+                          v{t.version}
+                        </Badge>
+                      )}
+                      <Badge className={`text-[8px] h-3 px-1 ${PERMISSION_COLORS[t.permission] || PERMISSION_COLORS.none}`}>
+                        {t.permission}
+                      </Badge>
+                    </div>
+                    <div className="text-[10px] text-slate-500 mt-0.5">
+                      id: {t.id} · from: {t.source}
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Agent Detail Panel ───────────────────────────────────────
+
+function AgentDetailPanel({ agent }: { agent: RuntimeAgent }) {
+  const colors = ROLE_COLORS[agent.role] || DEFAULT_ROLE_COLORS;
+
+  return (
+    <Card className="bg-[#12122a] border-slate-700/50">
+      <CardHeader className="pb-3">
+        <div className="flex items-center gap-2">
+          <Eye className="w-4 h-4 text-slate-400" />
+          <CardTitle className="text-sm font-medium text-slate-300">Agent Detail: {agent.name}</CardTitle>
+        </div>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Skills binding */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles className="w-3 h-3 text-rose-400" />
+              <span className="text-[11px] font-semibold text-rose-300">Bound Skills</span>
+            </div>
+            {agent.skills.length === 0 ? (
+              <p className="text-[10px] text-slate-600 italic">No skills configured</p>
+            ) : (
+              <div className="space-y-1.5">
+                {agent.skills.map((s) => (
+                  <div
+                    key={s.skillId}
+                    className={`flex items-center gap-2 px-2 py-1.5 rounded text-[10px] ${
+                      s.enabled
+                        ? 'bg-rose-500/10 border border-rose-500/20'
+                        : 'bg-slate-800/30 border border-slate-700/30 opacity-50'
+                    }`}
+                  >
+                    {SKILL_ICONS[s.skillId] || <Sparkles className="w-3 h-3" />}
+                    <span className={s.enabled ? 'text-rose-300' : 'text-slate-500'}>{s.skillId}</span>
+                    {!s.enabled && <span className="text-slate-600">(disabled)</span>}
+                    {s.hasConfig && <Badge className="bg-rose-500/20 text-rose-300 text-[8px] h-3 px-1">configured</Badge>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Tools binding */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Wrench className="w-3 h-3 text-amber-400" />
+              <span className="text-[11px] font-semibold text-amber-300">Bound Tools</span>
+            </div>
+            {agent.tools.length === 0 ? (
+              <p className="text-[10px] text-slate-600 italic">No tools configured</p>
+            ) : (
+              <div className="space-y-1.5">
+                {agent.tools.map((t) => (
+                  <div
+                    key={t.toolId}
+                    className={`flex items-center gap-2 px-2 py-1.5 rounded text-[10px] ${
+                      t.enabled
+                        ? 'bg-amber-500/10 border border-amber-500/20'
+                        : 'bg-slate-800/30 border border-slate-700/30 opacity-50'
+                    }`}
+                  >
+                    {TOOL_ICONS[t.toolId] || <Wrench className="w-3 h-3" />}
+                    <span className={t.enabled ? 'text-amber-300' : 'text-slate-500'}>{t.toolId}</span>
+                    {!t.enabled && <span className="text-slate-600">(disabled)</span>}
+                    <Badge className={`${PERMISSION_COLORS[t.requiredPermission] || PERMISSION_COLORS.none} text-[8px] h-3 px-1 ml-auto`}>
+                      {t.requiredPermission}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </CardContent>
     </Card>
   );
 }
@@ -565,7 +873,7 @@ function MultiAgentDemo({
           </Button>
         </div>
         <CardDescription className="text-xs text-slate-500">
-          Send the same prompt to all agents simultaneously — each responds using its own model and personality.
+          Send the same prompt to all agents — each responds with its own model, skills, and tools.
         </CardDescription>
       </CardHeader>
 
@@ -621,90 +929,21 @@ function MultiAgentDemo({
   );
 }
 
-// ─── Stage 3 Extension Points ─────────────────────────────────
-
-function Stage3Extensions({ agents }: { agents: RuntimeAgent[] }) {
-  const totalSkills = agents.reduce((sum, a) => sum + a.skills, 0);
-  const totalTools = agents.reduce((sum, a) => sum + a.tools, 0);
-  const allHooks = [...new Set(agents.flatMap((a) => a.hooks))];
-
-  const extensions = [
-    {
-      label: 'Skills',
-      icon: <Sparkles className="w-4 h-4" />,
-      defined: totalSkills,
-      implemented: 0,
-      color: 'text-cyan-400',
-      bg: 'bg-cyan-500/10',
-      border: 'border-cyan-500/20',
-      desc: 'Higher-level capabilities (code_review, web_search, etc.)',
-    },
-    {
-      label: 'Tools',
-      icon: <Wrench className="w-4 h-4" />,
-      defined: totalTools,
-      implemented: 0,
-      color: 'text-amber-400',
-      bg: 'bg-amber-500/10',
-      border: 'border-amber-500/20',
-      desc: 'Concrete actions (filesystem.read, terminal.exec, etc.)',
-    },
-    {
-      label: 'Hooks',
-      icon: <Anchor className="w-4 h-4" />,
-      defined: allHooks.length,
-      implemented: allHooks.length,
-      color: 'text-emerald-400',
-      bg: 'bg-emerald-500/10',
-      border: 'border-emerald-500/20',
-      desc: `Built-in: ${allHooks.join(', ') || 'none'}`,
-    },
-  ];
-
-  return (
-    <Card className="bg-[#12122a] border-slate-700/50">
-      <CardHeader className="pb-3">
-        <div className="flex items-center gap-2">
-          <Boxes className="w-4 h-4 text-slate-400" />
-          <CardTitle className="text-sm font-medium text-slate-300">Stage 3 Extension Points</CardTitle>
-        </div>
-        <CardDescription className="text-xs text-slate-500">
-          Interfaces defined in Stage 2 — ready for implementation in Stage 3
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="pt-0">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {extensions.map((ext) => (
-            <div
-              key={ext.label}
-              className={`rounded-lg ${ext.bg} border ${ext.border} p-3`}
-            >
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className={ext.color}>{ext.icon}</span>
-                <span className={`text-xs font-semibold ${ext.color}`}>{ext.label}</span>
-              </div>
-              <div className="text-[10px] text-slate-500 mb-1">{ext.desc}</div>
-              <div className="flex items-center gap-2 text-[10px]">
-                <Badge variant="outline" className="h-4 px-1.5 text-[9px] bg-slate-800/50 text-slate-400 border-slate-700">
-                  {ext.defined} defined
-                </Badge>
-                <Badge
-                  variant="outline"
-                  className={`h-4 px-1.5 text-[9px] ${
-                    ext.implemented > 0
-                      ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30'
-                      : 'bg-slate-800/50 text-slate-500 border-slate-700'
-                  }`}
-                >
-                  {ext.implemented} implemented
-                </Badge>
-              </div>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
+interface DemoResult {
+  agentId: string;
+  agentName: string;
+  agentRole: string;
+  emoji: string;
+  color: string;
+  model: string;
+  content: string;
+  durationMs: number;
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  error?: string;
 }
 
 // ─── Main Page ────────────────────────────────────────────────
@@ -712,6 +951,7 @@ function Stage3Extensions({ agents }: { agents: RuntimeAgent[] }) {
 export default function Home() {
   const isMobile = useIsMobile();
   const [agents, setAgents] = useState<RuntimeAgent[]>([]);
+  const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus | null>(null);
   const [aiStatus, setAIStatus] = useState<AIStatus | null>(null);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [chatHistories, setChatHistories] = useState<Record<string, ChatMessage[]>>({});
@@ -730,6 +970,7 @@ export default function Home() {
       const res = await fetch('/api/runtime/status');
       if (!res.ok) throw new Error('Failed');
       const data: RuntimeStatus = await res.json();
+      setRuntimeStatus(data);
       setAgents(data.agents);
       return data;
     } catch (err) {
@@ -840,7 +1081,6 @@ export default function Home() {
         }));
       } finally {
         setChatLoading(false);
-        // Refresh agent status
         fetchRuntimeStatus();
       }
     },
@@ -926,6 +1166,8 @@ export default function Home() {
 
   const currentMessages = selectedAgentId ? chatHistories[selectedAgentId] || [] : [];
   const configured = aiStatus?.configured ?? false;
+  const totalSkills = agents.reduce((sum, a) => sum + a.skills.filter((s) => s.enabled).length, 0);
+  const totalTools = agents.reduce((sum, a) => sum + a.tools.filter((t) => t.enabled).length, 0);
 
   return (
     <div className="min-h-screen flex flex-col bg-[#0f0f1a]">
@@ -940,7 +1182,7 @@ export default function Home() {
               </h1>
             </div>
             <Badge variant="outline" className="text-[10px] h-5 bg-slate-800/50 text-slate-400 border-slate-700">
-              Stage 2: Runtime + Registry + Config
+              Stage 3: Skills + Tools
             </Badge>
           </div>
           <div className="flex items-center gap-2">
@@ -976,7 +1218,7 @@ export default function Home() {
             <Layers className="w-4 h-4 text-slate-400" />
             <h2 className="text-sm font-medium text-slate-300">Architecture</h2>
             <Badge variant="outline" className="text-[9px] h-4 bg-slate-800/50 text-slate-500 border-slate-700">
-              3-Layer
+              5-Layer
             </Badge>
           </div>
           <ArchitectureOverview />
@@ -1046,6 +1288,18 @@ export default function Home() {
           </div>
         </section>
 
+        {/* Agent Detail Panel (when selected) */}
+        {selectedAgent && (
+          <section>
+            <AgentDetailPanel agent={selectedAgent} />
+          </section>
+        )}
+
+        {/* Skills & Tools Registry */}
+        <section>
+          <SkillsToolsPanel runtimeStatus={runtimeStatus} />
+        </section>
+
         {/* Multi-Agent Demo */}
         <section>
           <MultiAgentDemo
@@ -1056,11 +1310,6 @@ export default function Home() {
             results={demoResults}
           />
         </section>
-
-        {/* Stage 3 Extensions */}
-        <section>
-          <Stage3Extensions agents={agents} />
-        </section>
       </main>
 
       {/* ─── Footer ────────────────────────────────────────── */}
@@ -1069,12 +1318,16 @@ export default function Home() {
           <div className="flex items-center justify-between text-xs text-slate-600">
             <div className="flex items-center gap-2">
               <Gauge className="w-3.5 h-3.5" />
-              <span>Stage 2 Complete</span>
+              <span>Stage 3 Complete</span>
               <ChevronRight className="w-3 h-3" />
-              <span className="text-slate-500">Ready for Stage 3: Skills & Tools</span>
+              <span className="text-slate-500">Skills & Tools integrated</span>
             </div>
             <div className="flex items-center gap-3">
               <span>{agents.length} agents</span>
+              <span className="text-slate-700">·</span>
+              <span className="text-rose-400">{totalSkills} skills</span>
+              <span className="text-slate-700">·</span>
+              <span className="text-amber-400">{totalTools} tools</span>
               <span className="text-slate-700">·</span>
               <span>{configured ? 'Provider active' : 'No provider'}</span>
             </div>
