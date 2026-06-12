@@ -1,11 +1,13 @@
 // ─── Agent OS — Orchestrator Module Exports ──────────────────
 
 export { orchestratorEngine } from './OrchestratorEngine';
+export { orchestratorChatEngine } from './OrchestratorChatEngine';
 export { planningEngine } from './PlanningEngine';
 export { taskDecompositionEngine } from './TaskDecompositionEngine';
 export { agentAssignmentEngine } from './AgentAssignmentEngine';
 export { approvalEngine } from './ApprovalEngine';
 export { costEstimationEngine } from './CostEstimationEngine';
+export { agentHiringService } from './AgentHiringService';
 
 export type {
   OrchestratorInput,
@@ -29,3 +31,14 @@ export type {
   ApprovePlanInput,
   ClarificationQuestion,
 } from './types';
+
+export type {
+  DelegationStep,
+  OrchestratorChatResponse,
+  OrchestratorChatInput,
+} from './OrchestratorChatEngine';
+
+export type {
+  AgentHireRequest,
+  AgentHireResult,
+} from './AgentHiringService';

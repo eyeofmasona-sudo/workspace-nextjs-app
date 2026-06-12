@@ -36,6 +36,7 @@ export const AgentRoles = {
   DATA_ENGINEER: 'data_engineer',
   QA_ENGINEER: 'qa_engineer',
   DEVOPS_ENGINEER: 'devops_engineer',
+  SECURITY_ENGINEER: 'security_engineer',
   RESEARCHER: 'researcher',
 } as const;
 
@@ -49,7 +50,7 @@ export const ZoneDefaultAgents: Record<OfficeZone, string[]> = {
   development_area: [AgentRoles.FRONTEND_ENGINEER, AgentRoles.BACKEND_ENGINEER],
   design_area: [AgentRoles.DESIGNER],
   research_area: [AgentRoles.RESEARCHER, AgentRoles.ANALYST],
-  server_room: [AgentRoles.DEVOPS_ENGINEER, AgentRoles.DATA_ENGINEER],
+  server_room: [AgentRoles.DEVOPS_ENGINEER, AgentRoles.DATA_ENGINEER, AgentRoles.SECURITY_ENGINEER],
   meeting_room: [AgentRoles.ARCHITECT, AgentRoles.ANALYST],
   lounge_area: [],
 };

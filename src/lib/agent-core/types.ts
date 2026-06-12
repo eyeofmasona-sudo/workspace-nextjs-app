@@ -18,6 +18,7 @@ export type AgentRole =
   | 'data_engineer'
   | 'qa_engineer'
   | 'devops_engineer'
+  | 'security_engineer'
   | 'researcher'
   | 'custom';
 

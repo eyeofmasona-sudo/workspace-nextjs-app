@@ -1,5 +1,6 @@
 // GET /api/runtime/status — Get runtime status for all registered agents
 // Stage 3: Now includes skills and tools information.
+// Stage 4: Ensures all 11 agent configs are loaded with skills and tools.
 
 import { NextResponse } from 'next/server';
 import { agentRuntime } from '@/lib/agent-core/runtime';
@@ -15,13 +16,13 @@ async function ensureInitialized() {
   if (initialized) return;
   await initProviders();
   loadAgentConfigs(AGENT_CONFIGS);
+  registerBuiltinSkillsAndTools();
   initialized = true;
 }
 
 export async function GET() {
   try {
     await ensureInitialized();
-    registerBuiltinSkillsAndTools();
 
     const configs = agentRegistry.listAll();
     const stats = agentRegistry.getStats();
