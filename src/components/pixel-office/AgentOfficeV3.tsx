@@ -25,7 +25,7 @@ import {
   Building2,
 } from 'lucide-react';
 import type { OfficeAgent } from '@/hooks/useOfficeData';
-import { OfficeState } from '@/lib/pixel-office/engine/officeState';
+import { OfficeState, ROLE_SEAT_MAP } from '@/lib/pixel-office/engine/officeState';
 import { BehaviorState } from '@/lib/pixel-office/types';
 import { loadAllAssets } from '@/lib/pixel-office/assetLoader';
 import type { ZoneDestination, ZoneLabel, TileType as TileTypeVal } from '@/lib/pixel-office/types';
@@ -616,11 +616,14 @@ export function AgentOffice({ workspaceId, onSeed }: AgentOfficeProps) {
       const numericId = hashAgentId(agent.id);
       if (!officeState.characters.has(numericId)) {
         const status = agent.runtimeState?.status ?? agent.status;
-        officeState.addAgent(
-          numericId,
-          agent.name || agent.role,
-          agent.role,
-        );
+        const preferredSeatId = ROLE_SEAT_MAP[agent.role];
+        officeState.addAgent(numericId, undefined, undefined, preferredSeatId);
+        // Set name and role on the newly created character
+        const ch = officeState.characters.get(numericId);
+        if (ch) {
+          ch.name = agent.name || agent.role;
+          ch.role = agent.role;
+        }
         officeState.setAgentActive(numericId, mapAgentStatusToActive(status));
         officeState.setAgentTool(numericId, mapAgentStatusToTool(status));
 

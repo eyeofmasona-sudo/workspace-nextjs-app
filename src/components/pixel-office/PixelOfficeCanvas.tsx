@@ -97,6 +97,10 @@ export function PixelOfficeCanvas({
         const h = canvas.height;
         const st = stateRef.current;
 
+        // Fill background so canvas is never fully transparent
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fillRect(0, 0, w, h);
+
         // Camera follow
         if (st.cameraFollowId !== null) {
           const followCh = st.characters.get(st.cameraFollowId);
@@ -119,24 +123,34 @@ export function PixelOfficeCanvas({
           }
         }
 
-        const { offsetX, offsetY } = renderFrame(
-          ctx,
-          w,
-          h,
-          st.tileMap,
-          st.furniture,
-          st.getCharacters(),
-          zoom,
-          panRef.current.x,
-          panRef.current.y,
-          st.selectedAgentId,
-          st.hoveredAgentId,
-          st.getLayout().tileColors,
-          st.getLayout().cols,
-          st.getLayout().rows,
-          st.zoneLabels,
-        );
-        offsetRef.current = { x: offsetX, y: offsetY };
+        try {
+          const { offsetX, offsetY } = renderFrame(
+            ctx,
+            w,
+            h,
+            st.tileMap,
+            st.furniture,
+            st.getCharacters(),
+            zoom,
+            panRef.current.x,
+            panRef.current.y,
+            st.selectedAgentId,
+            st.hoveredAgentId,
+            st.getLayout().tileColors,
+            st.getLayout().cols,
+            st.getLayout().rows,
+            st.zoneLabels,
+          );
+          offsetRef.current = { x: offsetX, y: offsetY };
+        } catch (err) {
+          // If renderFrame fails, draw error indicator
+          console.error('[PixelOfficeCanvas] renderFrame error:', err);
+          ctx.fillStyle = '#ff0000';
+          ctx.fillRect(10, 10, 200, 40);
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '14px monospace';
+          ctx.fillText('Render Error - see console', 15, 35);
+        }
       },
     });
 

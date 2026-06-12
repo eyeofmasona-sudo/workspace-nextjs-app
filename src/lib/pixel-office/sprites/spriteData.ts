@@ -918,43 +918,81 @@ export function getCharacterSprites(paletteIndex: number, hueShift = 0): Charact
   if (cached) return cached;
 
   let sprites: CharacterSprites;
+  const flip = flipSpriteHorizontal;
 
-  if (loadedCharacters) {
-    // Use pre-colored character sprites directly (no palette swapping)
-    const char = loadedCharacters[paletteIndex % loadedCharacters.length];
-    const d = char.down;
-    const u = char.up;
-    const rt = char.right;
-    const flip = flipSpriteHorizontal;
+  // Try loaded PNG sprites first, then fall back to hardcoded
+  const source = loadedCharacters && loadedCharacters.length > 0
+    ? loadedCharacters
+    : getHardcodedSprites();
 
+  if (source.length === 0) {
+    // Emergency fallback: create a minimal visible character
+    const fallbackSprite = emptySprite(16, 24);
+    // Draw a simple colored body
+    for (let r = 4; r < 20; r++) {
+      for (let c = 4; c < 12; c++) {
+        fallbackSprite[r][c] = '#4A7AB5';
+      }
+    }
+    // Head
+    for (let r = 1; r < 4; r++) {
+      for (let c = 5; c < 11; c++) {
+        fallbackSprite[r][c] = '#FDCA94';
+      }
+    }
+    const fb = [fallbackSprite, fallbackSprite, fallbackSprite, fallbackSprite, fallbackSprite, fallbackSprite, fallbackSprite];
     sprites = {
       walk: {
-        [Dir.DOWN]: [d[0], d[1], d[2], d[1]],
-        [Dir.UP]: [u[0], u[1], u[2], u[1]],
-        [Dir.RIGHT]: [rt[0], rt[1], rt[2], rt[1]],
-        [Dir.LEFT]: [flip(rt[0]), flip(rt[1]), flip(rt[2]), flip(rt[1])],
+        [Dir.DOWN]: [fb[0], fb[1], fb[2], fb[1]],
+        [Dir.UP]: [fb[0], fb[1], fb[2], fb[1]],
+        [Dir.RIGHT]: [fb[0], fb[1], fb[2], fb[1]],
+        [Dir.LEFT]: [flip(fb[0]), flip(fb[1]), flip(fb[2]), flip(fb[1])],
       },
       typing: {
-        [Dir.DOWN]: [d[3], d[4]],
-        [Dir.UP]: [u[3], u[4]],
-        [Dir.RIGHT]: [rt[3], rt[4]],
-        [Dir.LEFT]: [flip(rt[3]), flip(rt[4])],
+        [Dir.DOWN]: [fb[3], fb[4]],
+        [Dir.UP]: [fb[3], fb[4]],
+        [Dir.RIGHT]: [fb[3], fb[4]],
+        [Dir.LEFT]: [flip(fb[3]), flip(fb[4])],
       },
       reading: {
-        [Dir.DOWN]: [d[5], d[6]],
-        [Dir.UP]: [u[5], u[6]],
-        [Dir.RIGHT]: [rt[5], rt[6]],
-        [Dir.LEFT]: [flip(rt[5]), flip(rt[6])],
+        [Dir.DOWN]: [fb[5], fb[6]],
+        [Dir.UP]: [fb[5], fb[6]],
+        [Dir.RIGHT]: [fb[5], fb[6]],
+        [Dir.LEFT]: [flip(fb[5]), flip(fb[6])],
       },
     };
   } else {
-    // Use hardcoded pixel art sprites as fallback
-    const hardcoded = getHardcodedSprites();
-    const char = hardcoded[paletteIndex % hardcoded.length];
-    const d = char.down;
-    const u = char.up;
-    const rt = char.right;
-    const flip = flipSpriteHorizontal;
+    const safeIndex = ((paletteIndex % source.length) + source.length) % source.length;
+    const char = source[safeIndex];
+    if (!char) {
+      // Defensive fallback if source entry is unexpectedly undefined
+      console.warn(`[getCharacterSprites] source[${safeIndex}] is undefined (palette=${paletteIndex}, sourceLen=${source.length})`);
+      const fallbackSprite = emptySprite(16, 24);
+      const fb = [fallbackSprite, fallbackSprite, fallbackSprite, fallbackSprite, fallbackSprite, fallbackSprite, fallbackSprite];
+      sprites = {
+        walk: {
+          [Dir.DOWN]: [fb[0], fb[1], fb[2], fb[1]],
+          [Dir.UP]: [fb[0], fb[1], fb[2], fb[1]],
+          [Dir.RIGHT]: [fb[0], fb[1], fb[2], fb[1]],
+          [Dir.LEFT]: [flip(fb[0]), flip(fb[1]), flip(fb[2]), flip(fb[1])],
+        },
+        typing: {
+          [Dir.DOWN]: [fb[3], fb[4]],
+          [Dir.UP]: [fb[3], fb[4]],
+          [Dir.RIGHT]: [fb[3], fb[4]],
+          [Dir.LEFT]: [flip(fb[3]), flip(fb[4])],
+        },
+        reading: {
+          [Dir.DOWN]: [fb[5], fb[6]],
+          [Dir.UP]: [fb[5], fb[6]],
+          [Dir.RIGHT]: [fb[5], fb[6]],
+          [Dir.LEFT]: [flip(fb[5]), flip(fb[6])],
+        },
+      };
+    } else {
+      const d = char.down;
+      const u = char.up;
+      const rt = char.right;
 
     sprites = {
       walk: {
@@ -976,6 +1014,7 @@ export function getCharacterSprites(paletteIndex: number, hueShift = 0): Charact
         [Dir.LEFT]: [flip(rt[5]), flip(rt[6])],
       },
     };
+    }
   }
 
   // Apply hue shift if non-zero

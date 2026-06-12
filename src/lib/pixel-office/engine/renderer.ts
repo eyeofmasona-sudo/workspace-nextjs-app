@@ -963,8 +963,9 @@ export function renderFrame(
   // Update frame time for animations
   _frameTime = performance.now() / 1000;
 
-  // Clear
-  ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+  // Clear with dark background (not transparent)
+  ctx.fillStyle = '#1a1a2e';
+  ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
   // Use layout dimensions (fallback to tileMap size)
   const cols =

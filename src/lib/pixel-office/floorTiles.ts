@@ -30,14 +30,19 @@ export function setFloorSprites(sprites: SpriteData[]): void {
   clearColorizeCache();
 }
 
-/** Get the raw (grayscale) floor sprite for a pattern index (1-7 -> array index 0-6).
- *  Falls back to the default solid gray tile when floors.png is not loaded. */
+/** Get the raw (grayscale) floor sprite for a pattern index (1-based).
+ *  Falls back to the default solid gray tile when floors.png is not loaded.
+ *  For pattern indices beyond loaded sprites, wraps around using modulo. */
 function getFloorSprite(patternIndex: number): SpriteData | null {
   const idx = patternIndex - 1;
   if (idx < 0) return null;
   if (idx < floorSprites.length) return floorSprites[idx];
   // No PNG sprites loaded — return default solid tile for any valid pattern index
   if (floorSprites.length === 0 && patternIndex >= 1) return DEFAULT_FLOOR_SPRITE;
+  // For pattern indices beyond loaded sprites, wrap around
+  if (floorSprites.length > 0 && patternIndex >= 1) {
+    return floorSprites[idx % floorSprites.length];
+  }
   return null;
 }
 

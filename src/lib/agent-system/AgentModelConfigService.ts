@@ -12,16 +12,70 @@ interface RoleModels {
   fallback: { provider: string; model: string };
 }
 
+// ─── OpenRouter model assignments per role ──────────────────────
+// All models go through OpenRouter (provider = "openrouter").
+// Each agent gets a model suited to its role:
+//   - Orchestrator/Architect: Claude 3.5 Sonnet (strong reasoning)
+//   - Engineers: GPT-4o (great code generation)
+//   - Researcher/Analyst: Claude 3.5 Sonnet (thorough analysis)
+//   - Designer: Gemini 2.0 Flash (fast, creative)
+//   - DevOps/QA: Llama 3.1 70B (efficient, structured)
+//   - Fallbacks: Cheaper models for resilience
+
 const DEFAULT_MODELS: Record<string, RoleModels> = {
-  // All agents default to GPT-4o preferred, Claude fallback
-  // except researcher which prefers Claude
   _default: {
-    preferred: { provider: 'openai', model: 'gpt-4o' },
-    fallback: { provider: 'anthropic', model: 'claude-3.5-sonnet' },
+    preferred: { provider: 'openrouter', model: 'openai/gpt-4o' },
+    fallback: { provider: 'openrouter', model: 'meta-llama/llama-3.1-70b-instruct' },
   },
+  // Orchestrator needs strong reasoning & coordination
+  orchestrator: {
+    preferred: { provider: 'openrouter', model: 'anthropic/claude-3.5-sonnet' },
+    fallback: { provider: 'openrouter', model: 'openai/gpt-4o' },
+  },
+  // Analyst needs thorough analysis
+  analyst: {
+    preferred: { provider: 'openrouter', model: 'anthropic/claude-3.5-sonnet' },
+    fallback: { provider: 'openrouter', model: 'openai/gpt-4o' },
+  },
+  // Architect needs deep reasoning
+  architect: {
+    preferred: { provider: 'openrouter', model: 'anthropic/claude-3.5-sonnet' },
+    fallback: { provider: 'openrouter', model: 'openai/gpt-4o' },
+  },
+  // Designer benefits from fast creative output
+  designer: {
+    preferred: { provider: 'openrouter', model: 'google/gemini-2.0-flash-001' },
+    fallback: { provider: 'openrouter', model: 'openai/gpt-4o' },
+  },
+  // Frontend Engineer: GPT-4o excels at code
+  frontend_engineer: {
+    preferred: { provider: 'openrouter', model: 'openai/gpt-4o' },
+    fallback: { provider: 'openrouter', model: 'anthropic/claude-3.5-sonnet' },
+  },
+  // Backend Engineer: GPT-4o for robust API code
+  backend_engineer: {
+    preferred: { provider: 'openrouter', model: 'openai/gpt-4o' },
+    fallback: { provider: 'openrouter', model: 'anthropic/claude-3.5-sonnet' },
+  },
+  // Data Engineer: Claude for schema/query reasoning
+  data_engineer: {
+    preferred: { provider: 'openrouter', model: 'anthropic/claude-3.5-sonnet' },
+    fallback: { provider: 'openrouter', model: 'openai/gpt-4o' },
+  },
+  // QA Engineer: Llama 3.1 70B for structured test logic
+  qa_engineer: {
+    preferred: { provider: 'openrouter', model: 'meta-llama/llama-3.1-70b-instruct' },
+    fallback: { provider: 'openrouter', model: 'openai/gpt-4o' },
+  },
+  // DevOps: Llama 3.1 70B for infrastructure automation
+  devops_engineer: {
+    preferred: { provider: 'openrouter', model: 'meta-llama/llama-3.1-70b-instruct' },
+    fallback: { provider: 'openrouter', model: 'openai/gpt-4o' },
+  },
+  // Researcher: Claude for thorough, well-sourced analysis
   researcher: {
-    preferred: { provider: 'anthropic', model: 'claude-3.5-sonnet' },
-    fallback: { provider: 'openai', model: 'gpt-4o' },
+    preferred: { provider: 'openrouter', model: 'anthropic/claude-3.5-sonnet' },
+    fallback: { provider: 'openrouter', model: 'google/gemini-2.0-flash-001' },
   },
 };
 
