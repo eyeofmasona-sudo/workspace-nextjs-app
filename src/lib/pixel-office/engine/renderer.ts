@@ -774,28 +774,28 @@ function renderNameLabels(
     const isSelected = selectedAgentId === ch.id;
     const roleColor = roleInfo.color;
 
-    // ── Line 1: Role/Profession name (LARGE, BOLD, CONTRAST) ──
+    // ── Line 1: Role/Profession name (compact, BOLD, CONTRAST) ──
     ctx.font = `bold ${roleFontSize}px monospace`;
     ctx.textAlign = 'center';
     const roleText = roleInfo.title;
     const roleTextWidth = ctx.measureText(roleText).width;
-    const rolePadding = 4;
-    const roleLineH = roleFontSize + 4;
+    const rolePadding = 2;
+    const roleLineH = roleFontSize + 2;
 
     // ── Line 2: Zone/Location (smaller, secondary) ──
     ctx.font = `${zoneFontSize}px monospace`;
     const zoneText = roleInfo.zone;
     const zoneTextWidth = ctx.measureText(zoneText).width;
-    const zonePadding = 3;
-    const zoneLineH = zoneFontSize + 2;
+    const zonePadding = 2;
+    const zoneLineH = zoneFontSize + 1;
 
     // Calculate combined box dimensions
     const boxWidth =
       Math.max(
         roleTextWidth + rolePadding * 2,
         zoneTextWidth + zonePadding * 2,
-      ) + 8;
-    const boxHeight = roleLineH + zoneLineH + 2;
+      ) + 6;
+    const boxHeight = roleLineH + zoneLineH + 1;
     const boxX = labelX - boxWidth / 2;
     const boxY = labelY - boxHeight;
 
@@ -809,33 +809,33 @@ function renderNameLabels(
 
     // Role color accent bar on left side
     ctx.fillStyle = roleColor;
-    ctx.fillRect(boxX, boxY, 3, boxHeight);
+    ctx.fillRect(boxX, boxY, 2, boxHeight);
 
     // Small role color dot
     ctx.fillStyle = roleColor;
     ctx.beginPath();
     ctx.arc(
-      boxX + 10,
-      boxY + roleLineH / 2 + 1,
-      Math.max(2, zoom * 1),
+      boxX + 7,
+      boxY + roleLineH / 2 + 0.5,
+      Math.max(1.5, zoom * 0.7),
       0,
       Math.PI * 2,
     );
     ctx.fill();
 
-    // Role text (LARGE, BOLD, WHITE)
+    // Role text (BOLD, WHITE)
     ctx.font = `bold ${roleFontSize}px monospace`;
     ctx.textAlign = 'left';
     ctx.fillStyle = '#FFFFFF';
-    ctx.fillText(roleText, boxX + 16, boxY + roleLineH - 2);
+    ctx.fillText(roleText, boxX + 12, boxY + roleLineH - 1);
 
     // Zone text (smaller, secondary, muted)
     ctx.font = `${zoneFontSize}px monospace`;
     ctx.fillStyle = 'rgba(203, 213, 225, 0.75)'; // slate-300 at 75%
     ctx.fillText(
       zoneText,
-      boxX + 6,
-      boxY + roleLineH + zoneLineH - 1,
+      boxX + 4,
+      boxY + roleLineH + zoneLineH - 0.5,
     );
 
     // Status indicator for active agents
@@ -854,12 +854,12 @@ function renderNameLabels(
         error: '#ef4444',
       };
       const statusColor = statusColors[ch.agentStatus] ?? '#64748b';
-      const dotRadius = Math.max(2, zoom * 0.8);
+      const dotRadius = Math.max(1.5, zoom * 0.5);
       ctx.fillStyle = statusColor;
       ctx.beginPath();
       ctx.arc(
-        boxX + boxWidth - 8,
-        boxY + 6,
+        boxX + boxWidth - 5,
+        boxY + 4,
         dotRadius,
         0,
         Math.PI * 2,
@@ -880,9 +880,9 @@ function renderNameLabels(
             .padStart(2, '0');
         ctx.beginPath();
         ctx.arc(
-          boxX + boxWidth - 8,
-          boxY + 6,
-          dotRadius + 2,
+          boxX + boxWidth - 5,
+          boxY + 4,
+          dotRadius + 1,
           0,
           Math.PI * 2,
         );

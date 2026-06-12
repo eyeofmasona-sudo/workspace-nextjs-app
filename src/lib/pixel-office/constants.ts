@@ -178,10 +178,10 @@ export const DONE_BUBBLE_DURATION_SEC = 3.0;
 export const CHARACTER_SCALE_FACTOR = 1.15;
 
 /** Role label rendering constants */
-export const ROLE_LABEL_ROLE_FONT_SCALE = 8;
-export const ROLE_LABEL_ZONE_FONT_SCALE = 4.5;
-export const ROLE_LABEL_MIN_ROLE_FONT = 12;
-export const ROLE_LABEL_MIN_ZONE_FONT = 8;
+export const ROLE_LABEL_ROLE_FONT_SCALE = 5;
+export const ROLE_LABEL_ZONE_FONT_SCALE = 3;
+export const ROLE_LABEL_MIN_ROLE_FONT = 8;
+export const ROLE_LABEL_MIN_ZONE_FONT = 6;
 
 /** Typing animation amplitude (pixels, in world coords) */
 export const TYPING_SWAY_AMPLITUDE_PX = 1.5;
