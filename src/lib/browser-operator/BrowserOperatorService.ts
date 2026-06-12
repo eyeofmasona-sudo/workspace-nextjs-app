@@ -25,6 +25,7 @@ import { getBrowserProviderRegistry } from './BrowserOperatorProviderRegistry';
 import { CustomAdapter } from './adapters/CustomAdapter';
 import { BrowserSessionManager } from './playwright/BrowserSessionManager';
 import { ScreenshotService } from './playwright/ScreenshotService';
+import { BrowserOperatorToolBridge } from './BrowserOperatorToolBridge';
 
 // ── Service Config ─────────────────────────────────────────────
 export interface BrowserOperatorConfig {
@@ -51,6 +52,7 @@ class BrowserOperatorService {
   private config: BrowserOperatorConfig;
   private sessionManager: BrowserSessionManager;
   private screenshotService: ScreenshotService;
+  private toolBridge: BrowserOperatorToolBridge;
   private processing: boolean = false;
   private processTimer: ReturnType<typeof setInterval> | null = null;
   private initialized: boolean = false;
@@ -60,6 +62,7 @@ class BrowserOperatorService {
     this.sessionManager = new BrowserSessionManager(this.config.screenshotsDir);
     this.screenshotService = new ScreenshotService(this.config.screenshotsDir);
     this.queue = new BrowserOperatorQueue(this.config.maxConcurrent);
+    this.toolBridge = new BrowserOperatorToolBridge();
   }
 
   // ── Initialization ───────────────────────────────────────────
@@ -78,6 +81,9 @@ class BrowserOperatorService {
 
     // Start processing loop
     this.startProcessing();
+
+    // Attach ToolExecution bridge for DB sync
+    this.toolBridge.attach(this.queue);
 
     this.initialized = true;
     console.info('[BrowserOperator] Service initialized');
@@ -256,6 +262,7 @@ class BrowserOperatorService {
   /** Full shutdown */
   async shutdown(): Promise<void> {
     this.stopProcessing();
+    this.toolBridge.detach();
     await this.sessionManager.closeAll();
     const registry = getBrowserProviderRegistry();
     await registry.shutdownAll();

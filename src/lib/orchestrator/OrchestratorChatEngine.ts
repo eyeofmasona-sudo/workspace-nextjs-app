@@ -28,7 +28,7 @@ export interface DelegationStep {
   agentId: string;
   agentName: string;
   task: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'needs_human';
   result?: string;
   error?: string;
   durationMs?: number;
@@ -189,9 +189,21 @@ class OrchestratorChatEngine {
           correlationId,
         });
 
-        step.status = result.status === 'success' ? 'completed' : 'failed';
-        step.result = result.content ?? undefined;
-        step.error = result.error ?? undefined;
+        // Check if result contains a needs_human indicator from browser_operator
+        const resultContent = result.content ?? '';
+        const isNeedsHuman = resultContent.includes('"status":"needs_human"') ||
+          resultContent.includes('"status": "needs_human"') ||
+          resultContent.includes('needs_human');
+
+        if (isNeedsHuman) {
+          step.status = 'needs_human';
+          step.result = resultContent;
+        } else {
+          step.status = result.status === 'success' ? 'completed' : 'failed';
+          step.result = resultContent;
+          step.error = result.error ?? undefined;
+        }
+
         step.durationMs = Date.now() - agentStartTime;
 
         return result;
@@ -199,6 +211,30 @@ class OrchestratorChatEngine {
         step.status = 'failed';
         step.error = error instanceof Error ? error.message : 'Unknown execution error';
         step.durationMs = Date.now() - agentStartTime;
+
+        // Attempt fallback: if the agent has a fallback provider, try it
+        // This prevents the entire workflow from crashing on a single agent failure
+        try {
+          const agentConfig = agentRegistry.get(decision.agentId);
+          if (agentConfig?.model?.fallback) {
+            const fallbackResult = await agentRuntime.execute(decision.agentId, {
+              message: decision.task,
+              correlationId,
+              modelOverride: `${agentConfig.model.fallback.provider}/${agentConfig.model.fallback.model}`,
+            });
+
+            if (fallbackResult.status === 'success') {
+              step.status = 'completed';
+              step.result = fallbackResult.content ?? undefined;
+              step.error = undefined;
+              step.durationMs = Date.now() - agentStartTime;
+              return fallbackResult;
+            }
+          }
+        } catch {
+          // Fallback also failed — keep the original error
+        }
+
         return null;
       }
     });
@@ -483,7 +519,7 @@ Format:
       const agentSummaries = delegationSteps
         .map((step) => {
           const result = agentResults.find((r) => r.agentId === step.agentId);
-          const statusIcon = step.status === 'completed' ? '✅' : step.status === 'failed' ? '❌' : '⏳';
+          const statusIcon = step.status === 'completed' ? '✅' : step.status === 'failed' ? '❌' : step.status === 'needs_human' ? '🖐️' : '⏳';
           return (
             `${statusIcon} Agent: ${step.agentName} (${step.agentId})\n` +
             `   Task: ${step.task}\n` +
@@ -501,9 +537,10 @@ GUIDELINES:
 1. Start with a direct answer to the user's original question
 2. Reference which agents contributed to the answer
 3. If any agents failed, mention it honestly and suggest alternatives
-4. Be concise but comprehensive
-5. Don't just concatenate agent outputs — integrate them into a coherent response
-6. If the results are technical, provide a summary that's accessible
+4. If any agents returned needs_human status (🖐️), explain that manual intervention is required (e.g. login, CAPTCHA, 2FA) and the task is paused pending human action. This is NOT a failure — the task will continue after manual intervention via the browser operator resume endpoint.
+5. Be concise but comprehensive
+6. Don't just concatenate agent outputs — integrate them into a coherent response
+7. If the results are technical, provide a summary that's accessible
 
 ORIGINAL USER REQUEST:
 ${originalMessage}

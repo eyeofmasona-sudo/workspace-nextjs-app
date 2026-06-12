@@ -204,4 +204,21 @@ export const DEFAULT_TOOLS: ToolConfig[] = [
     requiresApproval: false,
     policies: [], // No permission check — internal tool
   },
+
+  // ─── Browser Operator ──────────────────────────────────────
+  {
+    name: 'Browser AI Provider',
+    key: 'browser_ai_provider',
+    category: 'browser',
+    description:
+      'Browser automation via Playwright. Agents can navigate, extract content, interact with pages, and automate multi-step workflows. ' +
+      'When login/CAPTCHA/2FA is detected, pauses with status=needs_human for manual intervention. ' +
+      'Async execution — returns taskId for tracking. Supports manual takeover.',
+    enabled: true,
+    riskLevel: 'high',
+    requiresApproval: false, // Configurable per workspace
+    policies: [
+      { permissionKey: 'browser', requiredLevel: 'write' },
+    ],
+  },
 ];

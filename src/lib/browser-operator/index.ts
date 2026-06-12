@@ -40,3 +40,6 @@ export { CustomAdapter } from './adapters/CustomAdapter';
 // Playwright
 export { BrowserSessionManager } from './playwright/BrowserSessionManager';
 export { ScreenshotService } from './playwright/ScreenshotService';
+
+// Tool Hub Bridge
+export { BrowserOperatorToolBridge } from './BrowserOperatorToolBridge';

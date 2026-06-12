@@ -364,3 +364,79 @@ model ToolPermissionPolicy {
   @@unique([toolId, permissionKey])
   @@map("tool_permission_policies")
 }
+
+// ─── Browser Operator ────────────────────────────────────────
+
+model BrowserOperatorTask {
+  id              String   @id @default(cuid())
+  workspaceId     String?
+  agentId         String?
+  toolExecutionId String?  // FK to ToolExecution for DB-backed Tool Hub sync
+  provider        String   @default("custom") // custom | playwright
+  prompt          String
+  url             String?
+  mode            String   @default("extract") // navigate | extract | interact | automate
+  status          String   @default("queued") // queued | running | completed | failed | needs_human | cancelled
+  priority        String   @default("normal") // low | normal | high | critical
+  result          String?  // JSON: extracted content or result
+  error           String?
+  needsHumanReason String?
+  finalUrl        String?
+  retryCount      Int      @default(0)
+  maxRetries      Int      @default(2)
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  logs        BrowserOperatorLog[]
+  screenshots BrowserOperatorScreenshot[]
+
+  @@map("browser_operator_tasks")
+}
+
+model BrowserOperatorLog {
+  id        String   @id @default(cuid())
+  taskId    String
+  level     String   @default("info") // info | warn | error | debug
+  message   String
+  step      Int?
+  timestamp DateTime @default(now())
+
+  task BrowserOperatorTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@map("browser_operator_logs")
+}
+
+model BrowserOperatorScreenshot {
+  id        String   @id @default(cuid())
+  taskId    String
+  filename  String
+  label     String?
+  sizeBytes Int      @default(0)
+  createdAt DateTime @default(now())
+
+  task BrowserOperatorTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@map("browser_operator_screenshots")
+}
+
+model BrowserOperatorProviderConfig {
+  id             String  @id @default(cuid())
+  providerId     String  @unique // custom | playwright | chatgpt | claude | gemini | zai
+  name           String
+  description    String?
+  headless       Boolean @default(false)
+  profileDir     String?
+  viewportWidth  Int     @default(1280)
+  viewportHeight Int     @default(720)
+  defaultTimeout Int     @default(30000)
+  maxSessions    Int     @default(1)
+  blockedDomains String? // JSON: array of blocked domain strings
+  allowedDomains String? // JSON: array of allowed domain strings
+  enabled        Boolean @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("browser_operator_provider_configs")
+}

@@ -262,6 +262,107 @@ export const notificationSendAdapter: ToolAdapter = {
   },
 };
 
+// ─── Browser AI Provider Adapter ─────────────────────────────
+// Real adapter — delegates to BrowserOperatorService.
+// Creates a BrowserOperator task and links it to the ToolExecution.
+
+export const browserAiProviderAdapter: ToolAdapter = {
+  key: 'browser_ai_provider',
+  async execute(input: ToolExecutionInput): Promise<ToolExecutionOutput> {
+    // Lazy import to avoid pulling playwright into the module graph at build time
+    const { getBrowserOperatorService } = await import('@/lib/browser-operator');
+
+    const typedInput = input.input as Record<string, unknown> ?? {};
+
+    try {
+      const service = getBrowserOperatorService();
+      const task = await service.submitTask({
+        provider: (typedInput.provider as string) ?? 'custom',
+        prompt: (typedInput.prompt as string) ?? '',
+        url: typedInput.url as string | undefined,
+        mode: (typedInput.mode as 'navigate' | 'extract' | 'interact' | 'automate') ?? 'extract',
+        agentId: input.agentId,
+        taskId: input.taskId,
+        priority: (typedInput.priority as 'low' | 'normal' | 'high' | 'critical') ?? 'normal',
+        timeout: typedInput.timeout as number | undefined,
+        options: typedInput.options as Record<string, unknown> | undefined,
+      });
+
+      // Poll for result with timeout (max 60s wait for async task)
+      const maxWaitMs = 60_000;
+      const pollIntervalMs = 1000;
+      const startMs = Date.now();
+      let completedTask = service.getTask(task.id);
+
+      while (completedTask && Date.now() - startMs < maxWaitMs) {
+        const status = completedTask.output.status;
+        if (status === 'completed' || status === 'failed' || status === 'needs_human' || status === 'cancelled') {
+          break;
+        }
+        await new Promise((r) => setTimeout(r, pollIntervalMs));
+        completedTask = service.getTask(task.id);
+      }
+
+      if (!completedTask) {
+        return {
+          success: false,
+          error: 'Task disappeared during execution',
+          metadata: { adapter: 'browser_ai_provider', taskId: task.id },
+        };
+      }
+
+      const isTerminal = ['completed', 'failed', 'needs_human', 'cancelled'].includes(completedTask.output.status);
+
+      if (completedTask.output.status === 'needs_human') {
+        // NOT a failure — return special state so orchestrator knows to wait
+        return {
+          success: true, // Not failed — needs manual intervention
+          data: {
+            taskId: task.id,
+            status: 'needs_human',
+            needsHumanReason: completedTask.output.needsHumanReason,
+            message: `Browser task paused: ${completedTask.output.needsHumanReason}. Use POST /api/browser-operator/tasks/${task.id}/resume after manual intervention.`,
+            screenshots: completedTask.output.screenshots,
+            supportsManualTakeover: true,
+          },
+          metadata: {
+            adapter: 'browser_ai_provider',
+            taskId: task.id,
+            status: 'needs_human',
+            executionType: 'async',
+          },
+        };
+      }
+
+      return {
+        success: completedTask.output.status === 'completed',
+        data: {
+          taskId: task.id,
+          status: completedTask.output.status,
+          result: completedTask.output.result,
+          screenshots: completedTask.output.screenshots,
+          logs: completedTask.output.logs,
+          finalUrl: completedTask.output.finalUrl,
+        },
+        error: completedTask.output.error ?? undefined,
+        metadata: {
+          adapter: 'browser_ai_provider',
+          taskId: task.id,
+          executionType: 'async',
+          supportsManualTakeover: true,
+        },
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        success: false,
+        error: `Browser AI Provider error: ${msg}`,
+        metadata: { adapter: 'browser_ai_provider', error: msg },
+      };
+    }
+  },
+};
+
 // ─── Adapter Registry ────────────────────────────────────────
 
 const ALL_ADAPTERS: ToolAdapter[] = [
@@ -280,6 +381,7 @@ const ALL_ADAPTERS: ToolAdapter[] = [
   deploymentDeployAdapter,
   modelResolveAdapter,
   notificationSendAdapter,
+  browserAiProviderAdapter,
 ];
 
 export const ADAPTER_MAP = new Map<string, ToolAdapter>(

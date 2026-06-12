@@ -221,3 +221,27 @@ Stage Summary:
 - No changes to UI/UX, agents, or orchestrator
 - 4 tools now registered (calculator, http_request, file_reader, browser_operator)
 - Lint clean, dev server running, all endpoints verified
+---
+Task ID: 5
+Agent: main
+Task: Integrate Browser Operator with Tool Hub, agents, and orchestrator
+
+Work Log:
+- Audited both tool systems: src/lib/tools/ (in-memory, Stage 3) and src/lib/tool-hub/ (DB-backed, permission-gated)
+- Added browser_ai_provider to Tool Hub defaults (defaults.ts): key=browser_ai_provider, category=browser, riskLevel=high, requiresApproval=false (configurable)
+- Added browserAiProviderAdapter to Tool Hub adapters (adapters/index.ts): real adapter that delegates to BrowserOperatorService, polls for async result, handles needs_human as success with metadata
+- Added browser_ai_provider to ADAPTER_MAP registry
+- Added optional aiProviderMode ('api'|'browser_operator') and browserProvider ('chatgpt'|'claude'|'gemini'|'zai'|'custom') to AgentConfig types with backward compatibility
+- Created BrowserOperatorToolBridge: syncs BrowserOperatorTask status with ToolExecution records (completed→success, failed→failed, needs_human→success with metadata, cancelled→failed)
+- Attached bridge to BrowserOperatorService.initialize() and detached on shutdown()
+- Updated OrchestratorChatEngine: added 'needs_human' to DelegationStep status, needs_human detection in result content, fallback provider on agent failure, needs_human icon (🖐️) in synthesis, updated synthesis guidelines
+- Added 4 Prisma models: BrowserOperatorTask, BrowserOperatorLog, BrowserOperatorScreenshot, BrowserOperatorProviderConfig
+- Pushed schema to DB successfully
+- Lint clean, dev server running, all endpoints verified
+
+Stage Summary:
+- Browser Operator now integrated with both tool layers (in-memory + DB-backed)
+- ToolExecution ↔ BrowserOperatorTask sync via bridge
+- Orchestrator handles needs_human as non-failure, has fallback provider
+- DB models for persistent browser operator data
+- Agent config has optional browser operator fields (backward compatible)

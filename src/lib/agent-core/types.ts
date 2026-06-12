@@ -201,6 +201,12 @@ export interface AgentConfig {
   };
   /** Default office zone */
   defaultZone: string;
+
+  // ── Browser Operator (optional, backward compatible) ──────
+  /** How this agent communicates with AI providers. Default: "api" */
+  aiProviderMode?: 'api' | 'browser_operator';
+  /** Which browser provider to use when aiProviderMode="browser_operator" */
+  browserProvider?: 'chatgpt' | 'claude' | 'gemini' | 'zai' | 'custom';
 }
 
 // ─── Runtime Types ───────────────────────────────────────────
