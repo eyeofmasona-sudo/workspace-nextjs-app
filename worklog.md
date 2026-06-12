@@ -194,3 +194,30 @@ Stage Summary:
 - Sticky footer at bottom when content is short (min-h-screen flex flex-col + mt-auto)
 - Dark theme with bg-[#0a0a1a] and bg-[#12122a] backgrounds
 - Graceful handling when OPENROUTER_API_KEY not configured
+---
+Task ID: 4
+Agent: main
+Task: Add Browser Operator Module as standalone module to Agent OS
+
+Work Log:
+- Audited existing architecture: Tool Hub (src/lib/tools/ + src/lib/tool-hub/), Orchestrator (src/lib/orchestrator/), Agent Configs (src/lib/agent-configs/), DB Schema (prisma/schema.prisma), API Routes (42 endpoints under src/app/api/)
+- Created src/lib/browser-operator/BrowserOperatorTypes.ts — 13 types: BrowserTaskStatus, BrowserTaskMode, BrowserTaskPriority, BrowserTaskInput, BrowserTaskOutput, BrowserLogEntry, BrowserTask, BrowserProviderConfig, IBrowserProviderAdapter, BrowserQueueEvent, BrowserQueueEventHandler, BrowserTaskApiResponse, BrowserProvidersApiResponse
+- Created src/lib/browser-operator/BrowserOperatorQueue.ts — Priority queue with events, retry, cleanup
+- Created src/lib/browser-operator/BrowserOperatorProviderRegistry.ts — Provider adapter registry with URL allow/block lists
+- Created src/lib/browser-operator/config/providers.config.json — 2 default providers: custom (headful) + playwright (headless)
+- Created src/lib/browser-operator/playwright/BrowserSessionManager.ts — Playwright session lifecycle, needs_human detection (login/captcha/2FA patterns)
+- Created src/lib/browser-operator/playwright/ScreenshotService.ts — Screenshot capture, storage, cleanup
+- Created src/lib/browser-operator/adapters/BaseBrowserProviderAdapter.ts — Abstract base with common lifecycle
+- Created src/lib/browser-operator/adapters/CustomAdapter.ts — Headful browser with 4 modes: navigate, extract, interact, automate
+- Created src/lib/browser-operator/BrowserOperatorService.ts — Main service with queue processing, task management, singleton
+- Created src/lib/browser-operator/index.ts — Barrel export
+- Added 5 API routes: POST/GET /api/browser-operator/tasks, GET /api/browser-operator/tasks/:id, POST retry/resume/screenshot, GET /api/browser-operator/providers
+- Added browser_operator tool to Stage 3 tool registry (permission: write)
+- Fixed Playwright import issue: used lazy dynamic import in browser-operator-tool.ts to avoid pulling playwright into the build graph
+- All API endpoints tested and working with graceful degradation when Playwright not installed
+
+Stage Summary:
+- Browser Operator Module fully implemented as standalone module
+- No changes to UI/UX, agents, or orchestrator
+- 4 tools now registered (calculator, http_request, file_reader, browser_operator)
+- Lint clean, dev server running, all endpoints verified

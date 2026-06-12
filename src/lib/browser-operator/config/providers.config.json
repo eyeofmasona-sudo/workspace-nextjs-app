@@ -1,0 +1,28 @@
+{
+  "providers": [
+    {
+      "id": "custom",
+      "name": "Custom Browser",
+      "description": "Default headful browser with persistent profile for manual login and automation",
+      "headless": false,
+      "profileDir": "custom-profile",
+      "viewport": { "width": 1280, "height": 720 },
+      "defaultTimeout": 30000,
+      "maxSessions": 1,
+      "blockedDomains": [],
+      "allowedDomains": []
+    },
+    {
+      "id": "playwright",
+      "name": "Playwright Default",
+      "description": "Headless browser for automated data extraction and navigation tasks",
+      "headless": true,
+      "profileDir": "pw-default",
+      "viewport": { "width": 1280, "height": 720 },
+      "defaultTimeout": 30000,
+      "maxSessions": 2,
+      "blockedDomains": [],
+      "allowedDomains": []
+    }
+  ]
+}
