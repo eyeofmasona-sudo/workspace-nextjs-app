@@ -38,6 +38,11 @@ export const AgentRoles = {
   DEVOPS_ENGINEER: 'devops_engineer',
   SECURITY_ENGINEER: 'security_engineer',
   RESEARCHER: 'researcher',
+  MARKETING_LEAD: 'marketing_lead',
+  MARKET_RESEARCHER: 'market_researcher',
+  CONTENT_STRATEGIST: 'content_strategist',
+  GROWTH_MANAGER: 'growth_manager',
+  MARKETING_ANALYST: 'marketing_analyst',
 } as const;
 
 export type AgentRole = (typeof AgentRoles)[keyof typeof AgentRoles];
@@ -53,4 +58,7 @@ export const ZoneDefaultAgents: Record<OfficeZone, string[]> = {
   server_room: [AgentRoles.DEVOPS_ENGINEER, AgentRoles.DATA_ENGINEER, AgentRoles.SECURITY_ENGINEER],
   meeting_room: [AgentRoles.ARCHITECT, AgentRoles.ANALYST],
   lounge_area: [],
+  marketing_area: [AgentRoles.MARKETING_LEAD, AgentRoles.MARKET_RESEARCHER],
+  content_studio: [AgentRoles.CONTENT_STRATEGIST],
+  growth_lab: [AgentRoles.GROWTH_MANAGER, AgentRoles.MARKETING_ANALYST],
 };

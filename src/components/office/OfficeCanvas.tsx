@@ -31,6 +31,10 @@ const GRID_ZONES = [
   { zone: 'server_room', area: 'server' },
   { zone: 'research_area', area: 'research' },
   { zone: 'lounge_area', area: 'lounge' },
+  // Row 4: Marketing department
+  { zone: 'marketing_area', area: 'marketing' },
+  { zone: 'content_studio', area: 'content' },
+  { zone: 'growth_lab', area: 'growth' },
 ];
 
 // Runtime-first helper: prefer runtimeState over static agent fields
@@ -57,7 +61,7 @@ export function OfficeCanvas({
   }
 
   // Unique zones for the grid
-  const uniqueZones = ['command_area', 'situation_room', 'meeting_room', 'development_area', 'design_area', 'server_room', 'research_area', 'lounge_area'];
+  const uniqueZones = ['command_area', 'situation_room', 'meeting_room', 'development_area', 'design_area', 'server_room', 'research_area', 'lounge_area', 'marketing_area', 'content_studio', 'growth_lab'];
 
   return (
     <div className="w-full h-full relative">
@@ -153,11 +157,12 @@ export function OfficeCanvas({
               className="grid gap-3"
               style={{
                 gridTemplateColumns: '1fr 1fr 1.5fr',
-                gridTemplateRows: 'auto auto auto',
+                gridTemplateRows: 'auto auto auto auto',
                 gridTemplateAreas: `
                   "command   situation  meeting"
                   "dev       dev        design"
                   "server    research   lounge"
+                  "marketing content   growth"
                 `,
               }}
             >
@@ -254,6 +259,42 @@ export function OfficeCanvas({
                   onAgentClick={onAgentClick}
                   agentAnimations={agentAnimations}
                   zoneAnimation={zoneAnimations['lounge_area'] ?? null}
+                />
+              </div>
+
+              {/* Marketing HQ */}
+              <div style={{ gridArea: 'marketing' }}>
+                <OfficeRoom
+                  zoneKey="marketing_area"
+                  agents={agentsByZone['marketing_area'] ?? []}
+                  tasks={tasks}
+                  onAgentClick={onAgentClick}
+                  agentAnimations={agentAnimations}
+                  zoneAnimation={zoneAnimations['marketing_area'] ?? null}
+                />
+              </div>
+
+              {/* Content Studio */}
+              <div style={{ gridArea: 'content' }}>
+                <OfficeRoom
+                  zoneKey="content_studio"
+                  agents={agentsByZone['content_studio'] ?? []}
+                  tasks={tasks}
+                  onAgentClick={onAgentClick}
+                  agentAnimations={agentAnimations}
+                  zoneAnimation={zoneAnimations['content_studio'] ?? null}
+                />
+              </div>
+
+              {/* Growth Lab */}
+              <div style={{ gridArea: 'growth' }}>
+                <OfficeRoom
+                  zoneKey="growth_lab"
+                  agents={agentsByZone['growth_lab'] ?? []}
+                  tasks={tasks}
+                  onAgentClick={onAgentClick}
+                  agentAnimations={agentAnimations}
+                  zoneAnimation={zoneAnimations['growth_lab'] ?? null}
                 />
               </div>
             </div>

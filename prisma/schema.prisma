@@ -125,6 +125,9 @@ model Agent {
   permissions      AgentPermission[]
   runtimeState     AgentRuntimeState?
   memoryLinks      AgentMemoryLink[]
+  skillLinks       AgentSkillLink[]
+  toolLinks        AgentToolLink[]
+  capabilityScores AgentCapabilityScore[]
 
   @@map("agents")
 }
@@ -320,6 +323,9 @@ model Tool {
 
   policies   ToolPermissionPolicy[]
   executions ToolExecution[]
+  agentLinks AgentToolLink[]
+  packItems  ToolPackItem[]
+  usageLogs  ToolUsageLog[]
 
   @@unique([key, workspaceId])
   @@map("tools")
@@ -439,4 +445,272 @@ model BrowserOperatorProviderConfig {
   updatedAt      DateTime @updatedAt
 
   @@map("browser_operator_provider_configs")
+}
+
+// ─── Skill Registry ──────────────────────────────────────────
+
+model SkillDefinition {
+  id          String   @id @default(cuid())
+  key         String   @unique // research | deep_research | web_search | legal_analysis | etc.
+  name        String
+  description String
+  category    String   // analysis | creation | communication | automation | management | technical | media | specialized
+  icon        String?  // emoji or icon name
+  version     String   @default("1.0.0")
+  status      String   @default("available") // available | deprecated | beta | experimental
+  requiredTools String? // JSON: array of tool keys required
+  tags        String? // JSON: array of tags
+  installCount Int     @default(0)
+  metadata    String? // JSON: extended info
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  agentLinks  AgentSkillLink[]
+  packItems   SkillPackItem[]
+  usageLogs   SkillUsageLog[]
+
+  @@map("skill_definitions")
+}
+
+model AgentSkillLink {
+  id         String   @id @default(cuid())
+  agentId    String
+  skillId    String
+  enabled    Boolean  @default(true)
+  installed  Boolean  @default(true) // installed vs available
+  config     String? // JSON: agent-specific config
+  score      Int      @default(50) // 0-100 capability score
+  installedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  agent Agent           @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  skill SkillDefinition @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, skillId])
+  @@map("agent_skill_links")
+}
+
+model SkillUsageLog {
+  id        String   @id @default(cuid())
+  skillId   String
+  agentId   String?
+  taskId    String?
+  action    String   // execute | install | uninstall | enable | disable
+  success   Boolean  @default(true)
+  durationMs Int?
+  metadata  String? // JSON
+  createdAt DateTime @default(now())
+
+  skill SkillDefinition @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@map("skill_usage_logs")
+}
+
+// ─── Skill Packs ─────────────────────────────────────────────
+
+model SkillPack {
+  id          String   @id @default(cuid())
+  key         String   @unique // legal_pack | research_pack | coding_pack | etc.
+  name        String
+  description String
+  icon        String?
+  color       String?  // theme color
+  version     String   @default("1.0.0")
+  status      String   @default("available") // available | deprecated | beta
+  installCount Int     @default(0)
+  metadata    String? // JSON
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items SkillPackItem[]
+
+  @@map("skill_packs")
+}
+
+model SkillPackItem {
+  id       String @id @default(cuid())
+  packId   String
+  skillId  String
+  required Boolean @default(true) // required vs optional in pack
+
+  pack  SkillPack        @relation(fields: [packId], references: [id], onDelete: Cascade)
+  skill SkillDefinition  @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([packId, skillId])
+  @@map("skill_pack_items")
+}
+
+// ─── Tool Packs ──────────────────────────────────────────────
+
+model ToolPack {
+  id          String   @id @default(cuid())
+  key         String   @unique // dev_tools | analytics_tools | etc.
+  name        String
+  description String
+  icon        String?
+  color       String?
+  version     String   @default("1.0.0")
+  status      String   @default("available") // available | deprecated | beta
+  installCount Int     @default(0)
+  metadata    String? // JSON
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items ToolPackItem[]
+
+  @@map("tool_packs")
+}
+
+model ToolPackItem {
+  id       String @id @default(cuid())
+  packId   String
+  toolId   String
+  required Boolean @default(true)
+
+  pack ToolPack @relation(fields: [packId], references: [id], onDelete: Cascade)
+  tool Tool     @relation(fields: [toolId], references: [id], onDelete: Cascade)
+
+  @@unique([packId, toolId])
+  @@map("tool_pack_items")
+}
+
+// ─── Agent Capability Scores ─────────────────────────────────
+
+model AgentCapabilityScore {
+  id             String   @id @default(cuid())
+  agentId        String
+  capabilityKey  String // coding | research | design | communication | automation | etc.
+  score          Int      @default(0) // 0-100
+  trend          String   @default("stable") // improving | stable | declining
+  evidence       String? // JSON: array of evidence items
+  lastAssessedAt DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, capabilityKey])
+  @@map("agent_capability_scores")
+}
+
+// ─── Agent Tool Links (DB-level) ─────────────────────────────
+
+model AgentToolLink {
+  id         String   @id @default(cuid())
+  agentId    String
+  toolId     String
+  enabled    Boolean  @default(true)
+  installed  Boolean  @default(true)
+  config     String? // JSON
+  installedAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  agent Agent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  tool  Tool  @relation(fields: [toolId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, toolId])
+  @@map("agent_tool_links")
+}
+
+// ─── Marketplace ─────────────────────────────────────────────
+
+model MarketplaceItem {
+  id          String   @id @default(cuid())
+  type        String   // skill_pack | tool_pack | agent_template | workflow_template
+  key         String   @unique
+  name        String
+  description String
+  author      String   @default("Agent OS")
+  version     String   @default("1.0.0")
+  icon        String?
+  color       String?
+  category    String?
+  tags        String? // JSON: array
+  content     String? // JSON: full item definition (skills, tools, config, etc.)
+  rating      Float    @default(0) // 0-5 average rating
+  reviewCount Int      @default(0)
+  installCount Int     @default(0)
+  status      String   @default("published") // published | review | draft | deprecated
+  featured    Boolean  @default(false)
+  metadata    String? // JSON
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("marketplace_items")
+}
+
+// ─── Workflow Templates ──────────────────────────────────────
+
+model WorkflowTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  steps       String // JSON: array of { agentId, skillId, toolId, input, output } steps
+  category    String? // development | research | deployment | review | custom
+  icon        String?
+  version     String   @default("1.0.0")
+  status      String   @default("available")
+  metadata    String? // JSON
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("workflow_templates")
+}
+
+// ─── Tool Usage Analytics ────────────────────────────────────
+
+model ToolUsageLog {
+  id        String   @id @default(cuid())
+  toolId    String
+  agentId   String?
+  taskId    String?
+  action    String // execute | install | disable | enable
+  success   Boolean  @default(true)
+  durationMs Int?
+  metadata  String? // JSON
+  createdAt DateTime @default(now())
+
+  tool Tool @relation(fields: [toolId], references: [id], onDelete: Cascade)
+
+  @@map("tool_usage_logs")
+}
+
+// ─── Department System ───────────────────────────────────────
+
+model Department {
+  id          String   @id @default(cuid())
+  key         String   @unique // dev_department | marketing_department
+  name        String
+  description String?
+  color       String?  // Theme color for UI
+  icon        String?  // Icon name
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  handoffs HandoffRecord[]
+
+  @@map("departments")
+}
+
+model HandoffRecord {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  projectId       String?
+  fromDepartment  String   // dev_department | marketing_department
+  toDepartment    String   // dev_department | marketing_department
+  triggerEvent    String   // handoff.product_concept_ready | etc.
+  status          String   @default("pending") // pending | in_progress | completed | failed
+  inputArtifacts  String?  // JSON: array of HandoffArtifact
+  outputArtifacts String?  // JSON: array of HandoffArtifact
+  receivingAgentId String?
+  errors          String?  // JSON: array of error strings
+  startedAt       DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  department Department @relation(fields: [fromDepartment], references: [key], onDelete: Cascade)
+
+  @@map("handoff_records")
 }

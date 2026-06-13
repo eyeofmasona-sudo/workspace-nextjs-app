@@ -8,7 +8,7 @@ export type {
   SkillRegistryStats,
 } from './types';
 
-// Registry
+// Registry (in-memory)
 export { skillRegistry } from './registry';
 
 // Built-in Skills
@@ -22,3 +22,6 @@ import { summarizationSkill } from './skills/summarization-skill';
 import { validationSkill } from './skills/validation-skill';
 
 export const BUILTIN_SKILLS = [planningSkill, summarizationSkill, validationSkill];
+
+// Re-export the DB-backed SkillRegistryService from skill-registry module
+export { skillRegistryService } from '../skill-registry';

@@ -20,6 +20,11 @@ export type AgentRole =
   | 'devops_engineer'
   | 'security_engineer'
   | 'researcher'
+  | 'marketing_lead'
+  | 'market_researcher'
+  | 'content_strategist'
+  | 'growth_manager'
+  | 'marketing_analyst'
   | 'custom';
 
 export type AgentType = 'permanent' | 'temporary';

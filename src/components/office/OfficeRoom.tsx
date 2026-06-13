@@ -13,6 +13,7 @@ import type { OfficeAgent, OfficeTask } from '@/hooks/useOfficeData';
 import type { AgentAnimationState, ZoneAnimationState } from '@/hooks/useOfficeAnimations';
 import {
   Crown, Monitor, Code, Palette, BookOpen, Server, Users, Coffee,
+  Megaphone, PenTool, TrendingUp,
 } from 'lucide-react';
 
 const ZONE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -24,6 +25,9 @@ const ZONE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = 
   server_room: Server,
   meeting_room: Users,
   lounge_area: Coffee,
+  marketing_area: Megaphone,
+  content_studio: PenTool,
+  growth_lab: TrendingUp,
 };
 
 // Zone-specific furniture type
@@ -48,6 +52,9 @@ const ZONE_FURNITURE: Record<string, FurnitureType> = {
   research_area: 'workstation',
   server_room: 'server',
   lounge_area: 'lounge',
+  marketing_area: 'workstation',
+  content_studio: 'workstation',
+  growth_lab: 'workstation',
 };
 
 // Runtime-first helpers

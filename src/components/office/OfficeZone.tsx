@@ -9,7 +9,8 @@ import { getZoneVisual } from '@/lib/office/zoneMapping';
 import { AgentCharacter } from './AgentCharacter';
 import type { OfficeAgent, OfficeTask } from '@/hooks/useOfficeData';
 import {
-  Crown, Monitor, Code, Palette, BookOpen, Server, Users, Coffee
+  Crown, Monitor, Code, Palette, BookOpen, Server, Users, Coffee,
+  Megaphone, PenTool, TrendingUp,
 } from 'lucide-react';
 
 const ZONE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -21,6 +22,9 @@ const ZONE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = 
   server_room: Server,
   meeting_room: Users,
   lounge_area: Coffee,
+  marketing_area: Megaphone,
+  content_studio: PenTool,
+  growth_lab: TrendingUp,
 };
 
 interface OfficeZoneProps {

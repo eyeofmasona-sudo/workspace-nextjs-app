@@ -491,6 +491,43 @@ const DEFAULT_AGENT_OS_LAYOUT = {
     { uid: 'ws-bin', type: 'BIN', col: 37, row: 29 },
 
     // ═══════════════════════════════════════════════════════════
+    // MARKETING AREA (within QA Lab, cols 1-12, rows 21-29)
+    // ═══════════════════════════════════════════════════════════
+
+    // ── Marketing Lead workstation ──
+    { uid: 'desk-mktl', type: 'DESK_FRONT', col: 5, row: 26 },
+    { uid: 'pc-mktl', type: 'PC_FRONT_OFF', col: 6, row: 26 },
+    { uid: 'chair-mktl', type: 'WOODEN_CHAIR_BACK', col: 6, row: 28 },
+
+    // ── Market Researcher workstation ──
+    { uid: 'desk-mktr', type: 'DESK_FRONT', col: 10, row: 26 },
+    { uid: 'pc-mktr', type: 'PC_FRONT_OFF', col: 11, row: 26 },
+    { uid: 'chair-mktr', type: 'WOODEN_CHAIR_BACK', col: 11, row: 28 },
+
+    // ═══════════════════════════════════════════════════════════
+    // CONTENT STUDIO (within Operations Center, cols 14-24, rows 21-29)
+    // ═══════════════════════════════════════════════════════════
+
+    // ── Content Strategist workstation ──
+    { uid: 'desk-cnts', type: 'DESK_FRONT', col: 18, row: 26 },
+    { uid: 'pc-cnts', type: 'PC_FRONT_OFF', col: 19, row: 26 },
+    { uid: 'chair-cnts', type: 'WOODEN_CHAIR_BACK', col: 19, row: 28 },
+
+    // ═══════════════════════════════════════════════════════════
+    // GROWTH LAB (within Workshop, cols 26-38, rows 21-29)
+    // ═══════════════════════════════════════════════════════════
+
+    // ── Growth Manager workstation ──
+    { uid: 'desk-grwm', type: 'DESK_FRONT', col: 27, row: 27 },
+    { uid: 'pc-grwm', type: 'PC_FRONT_OFF', col: 28, row: 27 },
+    { uid: 'chair-grwm', type: 'WOODEN_CHAIR_BACK', col: 28, row: 29 },
+
+    // ── Marketing Analyst workstation ──
+    { uid: 'desk-mkta', type: 'DESK_FRONT', col: 34, row: 27 },
+    { uid: 'pc-mkta', type: 'PC_FRONT_OFF', col: 35, row: 27 },
+    { uid: 'chair-mkta', type: 'WOODEN_CHAIR_BACK', col: 35, row: 29 },
+
+    // ═══════════════════════════════════════════════════════════
     // LOUNGE (cols 1-38, rows 31-34)
     // ═══════════════════════════════════════════════════════════
 
@@ -567,6 +604,9 @@ const ZONE_LABELS: ZoneLabel[] = [
   { text: '🚀 OPS CENTER', col: 19, row: 21, color: '#FDBA74' },
   { text: '🔧 WORKSHOP', col: 32, row: 21, color: '#D8B4FE' },
   { text: '☕ LOUNGE', col: 19, row: 31, color: '#FED7AA' },
+  { text: '📢 MARKETING', col: 4, row: 26, color: '#E879F9' },
+  { text: '✍️ CONTENT', col: 17, row: 26, color: '#FCD34D' },
+  { text: '📈 GROWTH', col: 30, row: 26, color: '#22D3EE' },
 ];
 
 export function AgentOffice({ workspaceId, onSeed }: AgentOfficeProps) {

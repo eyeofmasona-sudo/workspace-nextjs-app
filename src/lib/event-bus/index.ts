@@ -135,6 +135,13 @@ class EventBus {
       TOOL_EXECUTION_BLOCKED: 'tool.execution_blocked',
       TOOL_APPROVAL_REQUIRED: 'tool.approval_required',
       TOOL_EXECUTION_RESUMED: 'tool.execution_resumed',
+      PRODUCT_CONCEPT_READY: 'handoff.product_concept_ready',
+      MVP_READY_FOR_MARKETING: 'handoff.mvp_ready_for_marketing',
+      RELEASE_CANDIDATE_READY: 'handoff.release_candidate_ready',
+      LAUNCH_APPROVED: 'handoff.launch_approved',
+      CAMPAIGN_LIVE: 'handoff.campaign_live',
+      MARKET_FEEDBACK_COLLECTED: 'handoff.market_feedback_collected',
+      POST_LAUNCH_REVIEW: 'handoff.post_launch_review',
     } satisfies Record<string, EventType>) as EventType[];
 
     for (const eventType of allEventTypes) {

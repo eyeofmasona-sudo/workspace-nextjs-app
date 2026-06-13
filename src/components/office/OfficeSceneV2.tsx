@@ -88,6 +88,16 @@ const ZONES: ZoneDef[] = [
   { key: 'lounge_area', label: 'Lounge', emoji: '☕',
     x: 721, y: 122, w: 235, h: 112,
     floorColor: '#fafaf9', wallColor: '#78716C' },
+  // Marketing Department
+  { key: 'marketing_area', label: 'Marketing', emoji: '📢',
+    x: 4, y: 240, w: 350, h: 112,
+    floorColor: '#fdf4ff', wallColor: '#D946EF' },
+  { key: 'content_studio', label: 'Content', emoji: '✍️',
+    x: 360, y: 240, w: 300, h: 112,
+    floorColor: '#fffbeb', wallColor: '#F59E0B' },
+  { key: 'growth_lab', label: 'Growth', emoji: '📈',
+    x: 666, y: 240, w: 290, h: 112,
+    floorColor: '#ecfeff', wallColor: '#06B6D4' },
 ];
 
 // ─── Furniture placements per zone ──────────────────────────────
@@ -172,6 +182,37 @@ const ZONE_FURNITURE: Record<string, FurnitureItem[]> = {
     { type: 'coffee_machine', x: 145, y: 10 },
     { type: 'plant', x: 195, y: 6 },
   ],
+  marketing_area: [
+    { type: 'desk', x: 20, y: 28, props: { color: '#D946EF' } },
+    { type: 'monitor', x: 43, y: 25 },
+    { type: 'keyboard', x: 37, y: 48 },
+    { type: 'chair', x: 37, y: 60 },
+    { type: 'desk', x: 180, y: 28, props: { color: '#0EA5E9' } },
+    { type: 'monitor', x: 203, y: 25 },
+    { type: 'keyboard', x: 197, y: 48 },
+    { type: 'chair', x: 197, y: 60 },
+    { type: 'whiteboard', x: 110, y: 5 },
+    { type: 'plant', x: 310, y: 8 },
+  ],
+  content_studio: [
+    { type: 'desk', x: 20, y: 28, props: { color: '#F59E0B' } },
+    { type: 'monitor', x: 43, y: 25 },
+    { type: 'keyboard', x: 37, y: 48 },
+    { type: 'chair', x: 37, y: 60 },
+    { type: 'whiteboard', x: 140, y: 5 },
+    { type: 'plant', x: 250, y: 8 },
+  ],
+  growth_lab: [
+    { type: 'desk', x: 20, y: 28, props: { color: '#22C55E' } },
+    { type: 'monitor', x: 43, y: 25 },
+    { type: 'keyboard', x: 37, y: 48 },
+    { type: 'chair', x: 37, y: 60 },
+    { type: 'desk', x: 140, y: 28, props: { color: '#06B6D4' } },
+    { type: 'monitor', x: 163, y: 25 },
+    { type: 'keyboard', x: 157, y: 48 },
+    { type: 'chair', x: 157, y: 60 },
+    { type: 'plant', x: 250, y: 8 },
+  ],
 };
 
 // ─── Agent seat positions per zone (relative to zone origin) ────
@@ -213,6 +254,17 @@ const ZONE_SEATS: Record<string, AgentSeat[]> = {
   ],
   lounge_area: [
     { x: 55, y: 42, sitting: false, facing: 'down' },
+  ],
+  marketing_area: [
+    { x: 37, y: 52, sitting: true, facing: 'down' },
+    { x: 197, y: 52, sitting: true, facing: 'down' },
+  ],
+  content_studio: [
+    { x: 37, y: 52, sitting: true, facing: 'down' },
+  ],
+  growth_lab: [
+    { x: 37, y: 52, sitting: true, facing: 'down' },
+    { x: 157, y: 52, sitting: true, facing: 'down' },
   ],
 };
 

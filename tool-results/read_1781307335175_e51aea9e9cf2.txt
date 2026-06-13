@@ -1,0 +1,578 @@
+     1→     1→---
+     2→     2→Task ID: 1
+     3→     3→Agent: main
+     4→     4→Task: Implement Stage 2 — Agent Runtime + Registry + Config Layer
+     5→     5→
+     6→     6→Work Log:
+     7→     7→- Explored existing project: AI provider layer, AgentExecutor, AgentRegistry, AgentModelConfigService, Prisma schema
+     8→     8→- Designed 3-layer architecture: Config → Registry → Runtime
+     9→     9→- Created src/lib/agent-core/types.ts — AgentConfig, AgentResult, SkillRef, ToolRef, AgentHook, HookContext
+    10→    10→- Created src/lib/agent-core/registry.ts — AgentRegistry singleton with register/get/resolveModel/getStats
+    11→    11→- Created src/lib/agent-core/runtime.ts — AgentRuntime with execute() lifecycle, fallback retry, hook pipeline, cost logging
+    12→    12→- Created src/lib/agent-core/hooks.ts — composeHooks(), loggingHook, costTrackingHook
+    13→    13→- Created src/lib/agent-core/config-loader.ts — loadAgentConfigs() and loadAgentsFromDb()
+    14→    14→- Created src/lib/agent-core/index.ts — barrel export
+    15→    15→- Created src/lib/agent-configs/orchestrator.ts — Claude 3.5 Sonnet, temp 0.6
+    16→    16→- Created src/lib/agent-configs/frontend-engineer.ts — GPT-4o, temp 0.5
+    17→    17→- Created src/lib/agent-configs/researcher.ts — Claude 3.5 Sonnet, temp 0.8
+    18→    18→- Created src/lib/agent-configs/index.ts — AGENT_CONFIGS barrel
+    19→    19→- Created src/app/api/runtime/execute/route.ts — POST endpoint using AgentRuntime
+    20→    20→- Created src/app/api/runtime/status/route.ts — GET endpoint for runtime status
+    21→    21→- Updated src/app/page.tsx — full Stage 2 dashboard with architecture, registry, chat, demo, extensions
+    22→    22→- Fixed lucide-react Hook icon (replaced with Anchor)
+    23→    23→- Verified page renders, API works, lint passes
+    24→    24→
+    25→    25→Stage Summary:
+    26→    26→- 3-layer architecture fully implemented: Config → Registry → Runtime
+    27→    27→- 3 demo agents with distinct models and temperatures
+    28→    28→- AgentRuntime handles full lifecycle: config resolution → model resolution → prompt building → provider call → hook pipeline → cost logging
+    29→    29→- Extension points for Stage 3: SkillRef, ToolRef, AgentHook interfaces defined
+    30→    30→- Built-in hooks: logging, cost-tracking
+    31→    31→- API endpoints: POST /api/runtime/execute, GET /api/runtime/status
+    32→    32→- UI: architecture diagram, agent registry, chat panel, multi-agent demo, Stage 3 preview
+    33→    33→
+    34→    34→---
+    35→    35→Task ID: 2
+    36→    36→Agent: main
+    37→    37→Task: Implement Stage 3 — Skills + Tools System
+    38→    38→
+    39→    39→Work Log:
+    40→    40→- Explored existing Stage 2 codebase: agent-core (types, registry, runtime, hooks, config-loader), agent-configs, AI provider layer
+    41→    41→- Designed Skills vs Tools distinction: Skills = capability/orchestration layer (beforeRun/afterRun/onError), Tools = executable functions (called by model via function calling)
+    42→    42→- Created src/lib/skills/types.ts — ISkill, SkillContext, SkillRegistration, SkillRegistryStats
+    43→    43→- Created src/lib/skills/registry.ts — SkillRegistry singleton with register/get/getOrThrow/listAll/getStats
+    44→    44→- Created src/lib/skills/skills/planning-skill.ts — Injects create_plan + prioritize_tasks tools + planning instructions
+    45→    45→- Created src/lib/skills/skills/summarization-skill.ts — Injects summarize + extract_key_points tools + summarization instructions
+    46→    46→- Created src/lib/skills/skills/validation-skill.ts — Injects validate_output + check_facts tools + quality instructions
+    47→    47→- Created src/lib/skills/index.ts — barrel export with BUILTIN_SKILLS array
+    48→    48→- Created src/lib/tools/types.ts — ITool, ToolPermission, ToolInputSchema, ToolExecutionContext, ToolExecutionResult, ToolValidationError, ToolPermissionError
+    49→    49→- Created src/lib/tools/registry.ts — ToolRegistry singleton with register/get/getOrThrow/listAll/getStats
+    50→    50→- Created src/lib/tools/executor.ts — ToolExecutor singleton with executeToolCall/executeToolCalls, permission checking, schema validation
+    51→    51→- Created src/lib/tools/tools/calculator-tool.ts — Math operations (add, subtract, multiply, divide, power, modulo, sqrt, abs), permission: none
+    52→    52→- Created src/lib/tools/tools/http-tool.ts — HTTP GET/POST requests, permission: read, security: protocol check, timeout, truncation
+    53→    53→- Created src/lib/tools/tools/file-reader-tool.ts — File reading with line range, permission: read, security: path traversal, sensitive file blocking
+    54→    54→- Created src/lib/tools/index.ts — barrel export with BUILTIN_TOOLS array
+    55→    55→- Updated src/lib/agent-core/runtime.ts — Integrated skills beforeRun/afterRun/onError, tool definition collection, tool call loop (MAX_TOOL_CALL_ROUNDS=5), skill system prompt appendix
+    56→    56→- Updated src/lib/agent-core/config-loader.ts — Added registerBuiltinSkillsAndTools(), auto-registers on loadAgentConfigs
+    57→    57→- Updated src/lib/agent-configs/orchestrator.ts — Added planning+validation skills, calculator+http_request tools
+    58→    58→- Updated src/lib/agent-configs/frontend-engineer.ts — Added validation skill, calculator+file_reader tools
+    59→    59→- Updated src/lib/agent-configs/researcher.ts — Added summarization+validation skills, calculator+http_request+file_reader tools
+    60→    60→- Updated src/app/api/runtime/status/route.ts — Now includes skills/tools details per agent, registry stats
+    61→    61→- Created src/app/api/runtime/skills/route.ts — GET endpoint for skills registry
+    62→    62→- Created src/app/api/runtime/tools/route.ts — GET endpoint for tools registry
+    63→    63→- Updated src/app/page.tsx — Full Stage 3 dashboard with 5-layer architecture, skills/tools pills on agent cards, Skills & Tools Registry panel, Agent Detail panel, permission badges
+    64→    64→- Ran lint (passed), verified dev server (clean), tested all APIs (200 OK), verified page rendering via VLM
+    65→    65→
+    66→    66→Stage Summary:
+    67→    67→- Skills system: ISkill interface, SkillRegistry, 3 built-in skills (planning, summarization, validation)
+    68→    68→- Tools system: ITool interface, ToolRegistry, ToolExecutor, 3 built-in tools (calculator, http_request, file_reader)
+    69→    69→- Runtime integration: Skills run beforeRun → hooks → execute → tool call loop → hooks → skills afterRun
+    70→    70→- Tool call loop: Model returns tool_calls → ToolExecutor validates & executes → results fed back → loop until no more tool calls
+    71→    71→- Permission system: none/read/write/admin hierarchy, per-agent-per-tool binding
+    72→    72→- Schema validation: Required field checks, type validation, ToolValidationError/ToolPermissionError classes
+    73→    73→- Skills inject tool definitions dynamically (e.g. planning skill injects create_plan tool)
+    74→    74→- Agent configs now have skills[] and tools[] with enabled flags and per-agent config
+    75→    75→- 3 API endpoints: GET /api/runtime/status (with skills/tools), GET /api/runtime/skills, GET /api/runtime/tools
+    76→    76→- UI: 5-layer architecture, skill/tool pills on cards, registry panel, detail panel, permission badges
+    77→    77→
+    78→    78→---
+    79→    79→Task ID: 1
+    80→    80→Agent: agent-config-creator
+    81→    81→Task: Create 8 missing agent configs and update index
+    82→    82→
+    83→    83→Work Log:
+    84→    84→- Created src/lib/agent-configs/analyst.ts — Product/System Analyst, claude-3.5-sonnet/gemini-2.0-flash, planning+validation skills, calculator+http_request tools
+    85→    85→- Created src/lib/agent-configs/architect.ts — Software Architect, claude-3.5-sonnet/gpt-4o, planning+validation skills, calculator+http_request+file_reader tools
+    86→    86→- Created src/lib/agent-configs/designer.ts — UI/UX Designer, claude-3.5-sonnet/gpt-4o, summarization+validation skills, http_request+file_reader tools
+    87→    87→- Created src/lib/agent-configs/backend-engineer.ts — Backend Engineer, gpt-4o/claude-3.5-sonnet, validation+planning skills, calculator+http_request+file_reader tools
+    88→    88→- Created src/lib/agent-configs/data-engineer.ts — Database/Data Engineer, claude-3.5-sonnet/gemini-2.0-flash, validation+summarization skills, calculator+file_reader tools
+    89→    89→- Created src/lib/agent-configs/qa-engineer.ts — QA/Test Engineer, gpt-4o/claude-3.5-sonnet, validation+planning skills, calculator+http_request+file_reader tools
+    90→    90→- Created src/lib/agent-configs/devops-engineer.ts — DevOps/Deployment Engineer, gpt-4o/claude-3.5-sonnet, validation+planning skills, http_request+file_reader tools
+    91→    91→- Created src/lib/agent-configs/security-engineer.ts — Security Engineer, gpt-4o/claude-3.5-sonnet, validation+planning skills, calculator+http_request+file_reader tools
+    92→    92→- Updated src/lib/agent-configs/index.ts — Added all 8 new imports, AGENT_CONFIGS now includes all 11 agents
+    93→    93→- Updated src/lib/types/agents.ts — Added SECURITY_ENGINEER to AgentRoles, added to server_room in ZoneDefaultAgents
+    94→    94→- Updated src/lib/agent-core/types.ts — Added 'security_engineer' to AgentRole type union
+    95→    95→
+    96→    96→Stage Summary:
+    97→    97→- 8 new agent config files created (analyst, architect, designer, backend-engineer, data-engineer, qa-engineer, devops-engineer, security-engineer)
+    98→    98→- Updated index.ts to include all 11 agents in AGENT_CONFIGS array
+    99→    99→- Updated agents.ts types: added SECURITY_ENGINEER to AgentRoles and ZoneDefaultAgents
+   100→   100→- Updated agent-core/types.ts: added 'security_engineer' to AgentRole type
+   101→   101→- Dev server confirmed loading all 11 agent configs successfully
+   102→   102→
+   103→   103→---
+   104→   104→Task ID: 2
+   105→   105→Agent: orchestrator-engine-builder
+   106→   106→Task: Build orchestrator delegation engine and hiring service
+   107→   107→
+   108→   108→Work Log:
+   109→   109→- Read existing orchestrator code (OrchestratorEngine, PlanningEngine, TaskDecompositionEngine, etc.)
+   110→   110→- Read agent-core code (runtime.ts, registry.ts, types.ts) to understand execute() API
+   111→   111→- Read AI provider code (types.ts, provider-registry.ts) to understand completion API
+   112→   112→- Read skills/registry.ts and tools/registry.ts to understand lookup APIs
+   113→   113→- Created src/lib/orchestrator/OrchestratorChatEngine.ts — full delegation engine with:
+   114→   114→  - chat() entry point accepting OrchestratorChatInput
+   115→   115→  - AI-powered delegation analysis (structured prompt with agent catalog)
+   116→   116→  - JSON response parsing with fallback handling
+   117→   117→  - Real agent execution via agentRuntime.execute() in parallel
+   118→   118→  - AI-powered response synthesis from agent results
+   119→   119→  - Manual mode support (user-specified agent IDs)
+   120→   120→  - Direct handling fallback when no agents are selected
+   121→   121→  - Provider availability check (graceful error without API key)
+   122→   122→  - Event emission for orchestrator lifecycle tracking
+   123→   123→- Created src/lib/orchestrator/AgentHiringService.ts — dynamic agent creation with:
+   124→   124→  - hire() method: validates request, generates AgentConfig, selects skills/tools, registers agent
+   125→   125→  - fire() method: unregisters temporary agents
+   126→   126→  - Skill selection from SkillRegistry via capability mapping + partial match
+   127→   127→  - Tool selection from ToolRegistry via capability mapping + partial match
+   128→   128→  - Model assignment by role category (engineer, analyst, designer, etc.)
+   129→   129→  - Visual profile and professional style auto-assignment
+   130→   130→  - Temporary agent limit enforcement (max 10)
+   131→   131→  - Duplicate role prevention
+   132→   132→  - Auto-generated system prompts, agent names, and IDs
+   133→   133→- Updated src/lib/orchestrator/index.ts — added exports for orchestratorChatEngine, agentHiringService, and all new types (DelegationStep, OrchestratorChatResponse, OrchestratorChatInput, AgentHireRequest, AgentHireResult)
+   134→   134→- Lint passed cleanly
+   135→   135→
+   136→   136→Stage Summary:
+   137→   137→- OrchestratorChatEngine handles full delegation flow: user message → AI analysis → agent selection → parallel execution → AI synthesis → unified response
+   138→   138→- AgentHiringService handles dynamic agent creation: validate → generate config → select skills/tools → assign model → register
+   139→   139→- Both use existing runtime and provider infrastructure (agentRuntime, agentRegistry, providerRegistry, skillRegistry, toolRegistry)
+   140→   140→- Singleton pattern consistent with existing engines
+   141→   141→- No OPENROUTER_API_KEY required for graceful error handling
+   142→   142→
+   143→   143→---
+   144→   144→Task ID: 4
+   145→   145→Agent: api-endpoint-builder
+   146→   146→Task: Create orchestrator chat and hiring API endpoints
+   147→   147→
+   148→   148→Work Log:
+   149→   149→- Created /api/orchestrator/chat/route.ts
+   150→   150→- Created /api/orchestrator/hire/route.ts
+   151→   151→- Created /api/orchestrator/hire/[agentId]/route.ts
+   152→   152→- Verified runtime/status loads all 11 agents
+   153→   153→
+   154→   154→Stage Summary:
+   155→   155→- 3 new API endpoints created
+   156→   156→- Orchestrator chat endpoint handles delegation flow
+   157→   157→- Hiring endpoints handle agent creation and deletion
+   158→   158→
+   159→   159→---
+   160→   160→Task ID: 5
+   161→   161→Agent: frontend-rebuilder
+   162→   162→Task: Rebuild page.tsx with orchestrator-first chat, 11 agents, delegation flow
+   163→   163→
+   164→   164→Work Log:
+   165→   165→- Read existing page.tsx (950+ lines, stage 3 dashboard with per-agent chat model)
+   166→   166→- Read existing API routes: /api/runtime/status, /api/ai/status, /api/orchestrator/chat, /api/orchestrator/hire, /api/orchestrator/hire/[agentId]
+   167→   167→- Read agent-configs/index.ts to confirm all 11 agent roles
+   168→   168→- Checked available shadcn/ui components (Sheet, Dialog, Badge, Card, Button, Input, Textarea, Label, Separator)
+   169→   169→- Completely rewrote page.tsx with orchestrator-first architecture
+   170→   170→- Added full ROLE_COLORS for all 11 agent roles (orchestrator, analyst, architect, designer, frontend_engineer, backend_engineer, data_engineer, qa_engineer, devops_engineer, researcher, security_engineer, custom)
+   171→   171→- Added SKILL_COLORS and TOOL_COLORS for better pill styling
+   172→   172→- Implemented OrchestratorChatPanel with delegation flow visualization
+   173→   173→- Implemented DelegationReport component showing agent task status inline in chat
+   174→   174→- Implemented OrchestratorCard with prominent purple glow styling and crown badge
+   175→   175→- Implemented AgentCard for the agent grid with role-specific color theming
+   176→   176→- Implemented AgentDetailSheet for viewing agent details via Sheet component
+   177→   177→- Implemented HireAgentDialog with role/task/capabilities form via Dialog component
+   178→   178→- Added sticky header with "Agent OS" branding, stats badges, AI status indicator, refresh button
+   179→   179→- Added sticky footer with "Hire Agent" button and agent count
+   180→   180→- Two-column layout: chat (60%) + agent panel (40%) on desktop, stacked on mobile
+   181→   181→- Added custom scrollbar styling in globals.css (.custom-scrollbar class)
+   182→   182→- Cleaned up unused imports
+   183→   183→- Fixed syntax error in template literal (w-[40%] bracket placement)
+   184→   184→- Fixed bg-purple-500/8 to bg-purple-500/[0.08] for Tailwind compatibility
+   185→   185→- Lint passes cleanly, dev server compiles successfully
+   186→   186→
+   187→   187→Stage Summary:
+   188→   188→- Complete page.tsx with orchestrator-first workflow
+   189→   189→- All 11 agents displayed with proper visual hierarchy and role-specific colors
+   190→   190→- Delegation flow visible in chat (DelegationReport component with expandable task list)
+   191→   191→- Hiring panel functional with Dialog component (role, task, capabilities multi-select)
+   192→   192→- Agent detail view with Sheet component (skills, tools, hooks, execution config)
+   193→   193→- Responsive layout with mobile support (useIsMobile hook)
+   194→   194→- Sticky footer at bottom when content is short (min-h-screen flex flex-col + mt-auto)
+   195→   195→- Dark theme with bg-[#0a0a1a] and bg-[#12122a] backgrounds
+   196→   196→- Graceful handling when OPENROUTER_API_KEY not configured
+   197→   197→---
+   198→   198→Task ID: 4
+   199→   199→Agent: main
+   200→   200→Task: Add Browser Operator Module as standalone module to Agent OS
+   201→   201→
+   202→   202→Work Log:
+   203→   203→- Audited existing architecture: Tool Hub (src/lib/tools/ + src/lib/tool-hub/), Orchestrator (src/lib/orchestrator/), Agent Configs (src/lib/agent-configs/), DB Schema (prisma/schema.prisma), API Routes (42 endpoints under src/app/api/)
+   204→   204→- Created src/lib/browser-operator/BrowserOperatorTypes.ts — 13 types: BrowserTaskStatus, BrowserTaskMode, BrowserTaskPriority, BrowserTaskInput, BrowserTaskOutput, BrowserLogEntry, BrowserTask, BrowserProviderConfig, IBrowserProviderAdapter, BrowserQueueEvent, BrowserQueueEventHandler, BrowserTaskApiResponse, BrowserProvidersApiResponse
+   205→   205→- Created src/lib/browser-operator/BrowserOperatorQueue.ts — Priority queue with events, retry, cleanup
+   206→   206→- Created src/lib/browser-operator/BrowserOperatorProviderRegistry.ts — Provider adapter registry with URL allow/block lists
+   207→   207→- Created src/lib/browser-operator/config/providers.config.json — 2 default providers: custom (headful) + playwright (headless)
+   208→   208→- Created src/lib/browser-operator/playwright/BrowserSessionManager.ts — Playwright session lifecycle, needs_human detection (login/captcha/2FA patterns)
+   209→   209→- Created src/lib/browser-operator/playwright/ScreenshotService.ts — Screenshot capture, storage, cleanup
+   210→   210→- Created src/lib/browser-operator/adapters/BaseBrowserProviderAdapter.ts — Abstract base with common lifecycle
+   211→   211→- Created src/lib/browser-operator/adapters/CustomAdapter.ts — Headful browser with 4 modes: navigate, extract, interact, automate
+   212→   212→- Created src/lib/browser-operator/BrowserOperatorService.ts — Main service with queue processing, task management, singleton
+   213→   213→- Created src/lib/browser-operator/index.ts — Barrel export
+   214→   214→- Added 5 API routes: POST/GET /api/browser-operator/tasks, GET /api/browser-operator/tasks/:id, POST retry/resume/screenshot, GET /api/browser-operator/providers
+   215→   215→- Added browser_operator tool to Stage 3 tool registry (permission: write)
+   216→   216→- Fixed Playwright import issue: used lazy dynamic import in browser-operator-tool.ts to avoid pulling playwright into the build graph
+   217→   217→- All API endpoints tested and working with graceful degradation when Playwright not installed
+   218→   218→
+   219→   219→Stage Summary:
+   220→   220→- Browser Operator Module fully implemented as standalone module
+   221→   221→- No changes to UI/UX, agents, or orchestrator
+   222→   222→- 4 tools now registered (calculator, http_request, file_reader, browser_operator)
+   223→   223→- Lint clean, dev server running, all endpoints verified
+   224→   224→---
+   225→   225→Task ID: 5
+   226→   226→Agent: main
+   227→   227→Task: Integrate Browser Operator with Tool Hub, agents, and orchestrator
+   228→   228→
+   229→   229→Work Log:
+   230→   230→- Audited both tool systems: src/lib/tools/ (in-memory, Stage 3) and src/lib/tool-hub/ (DB-backed, permission-gated)
+   231→   231→- Added browser_ai_provider to Tool Hub defaults (defaults.ts): key=browser_ai_provider, category=browser, riskLevel=high, requiresApproval=false (configurable)
+   232→   232→- Added browserAiProviderAdapter to Tool Hub adapters (adapters/index.ts): real adapter that delegates to BrowserOperatorService, polls for async result, handles needs_human as success with metadata
+   233→   233→- Added browser_ai_provider to ADAPTER_MAP registry
+   234→   234→- Added optional aiProviderMode ('api'|'browser_operator') and browserProvider ('chatgpt'|'claude'|'gemini'|'zai'|'custom') to AgentConfig types with backward compatibility
+   235→   235→- Created BrowserOperatorToolBridge: syncs BrowserOperatorTask status with ToolExecution records (completed→success, failed→failed, needs_human→success with metadata, cancelled→failed)
+   236→   236→- Attached bridge to BrowserOperatorService.initialize() and detached on shutdown()
+   237→   237→- Updated OrchestratorChatEngine: added 'needs_human' to DelegationStep status, needs_human detection in result content, fallback provider on agent failure, needs_human icon (🖐️) in synthesis, updated synthesis guidelines
+   238→   238→- Added 4 Prisma models: BrowserOperatorTask, BrowserOperatorLog, BrowserOperatorScreenshot, BrowserOperatorProviderConfig
+   239→   239→- Pushed schema to DB successfully
+   240→   240→- Lint clean, dev server running, all endpoints verified
+   241→   241→
+   242→   242→Stage Summary:
+   243→   243→- Browser Operator now integrated with both tool layers (in-memory + DB-backed)
+   244→   244→- ToolExecution ↔ BrowserOperatorTask sync via bridge
+   245→   245→- Orchestrator handles needs_human as non-failure, has fallback provider
+   246→   246→- DB models for persistent browser operator data
+   247→   247→- Agent config has optional browser operator fields (backward compatible)
+   248→   248→
+   249→   249→---
+   250→   250→Task ID: 1
+   251→   251→Agent: main
+   252→   252→Task: Implement Browser Operator Part 3 — DB Persistence, Provider Adapters, Persistent Profiles
+   253→   253→
+   254→   254→Work Log:
+   255→   255→- Created src/lib/browser-operator/BrowserOperatorDbService.ts — DB persistence layer with:
+   256→   256→  - Lazy import of Prisma db with try/catch for graceful fallback
+   257→   257→  - createTask() — creates BrowserOperatorTask record in DB
+   258→   258→  - updateTaskStatus() — updates status, result, error, needsHumanReason, finalUrl, links toolExecutionId/agentId/workspaceId
+   259→   259→  - addLog() / addLogs() — creates BrowserOperatorLog records
+   260→   260→  - addScreenshot() — creates BrowserOperatorScreenshot records
+   261→   261→  - getTask() — gets task with logs and screenshots
+   262→   262→  - listTasks() — lists tasks with optional status/provider filter
+   263→   263→  - getProviderConfigs() — gets all BrowserOperatorProviderConfig records
+   264→   264→  - seedProviderConfigs() — seeds provider configs from JSON if not already in DB
+   265→   265→  - All methods wrapped in try/catch, returns null/empty gracefully
+   266→   266→  - Private dbAvailable flag set on first successful DB call
+   267→   267→  - Export singleton browserOperatorDbService
+   268→   268→- Created src/lib/browser-operator/adapters/adapter-utils.ts — Shared utility for provider adapters:
+   269→   269→  - findInput(page, selectors) — try each selector until one works
+   270→   270→  - fillPrompt(page, selectors, prompt) — clipboard fill (navigator.clipboard + document.execCommand) with fallback to page.fill and keyboard.type
+   271→   271→  - submitPrompt(page, strategy) — Enter or Ctrl+Enter based on config
+   272→   272→  - waitForResponse(page, selectors, timeout) — wait for new response to appear with polling
+   273→   273→  - extractLastResponse(page, selectors) — get the last assistant message text
+   274→   274→  - executeProviderInteraction() — complete flow: navigate → check human → fill → submit → wait → extract
+   275→   275→  - AdapterHelperConfig type for reusable configuration
+   276→   276→- Created src/lib/browser-operator/adapters/ChatGPTAdapter.ts — ChatGPT via chatgpt.com:
+   277→   277→  - Input selectors: textarea → [contenteditable='true'] → [role='textbox']
+   278→   278→  - Response selectors: [data-message-author-role='assistant'] → .markdown → main
+   279→   279→  - Submit: Enter key
+   280→   280→  - Custom resume() — re-checks needs_human, takes screenshot after human resolves
+   281→   281→- Created src/lib/browser-operator/adapters/ClaudeAdapter.ts — Claude via claude.ai:
+   282→   282→  - Input selectors: textarea → [contenteditable='true'] → div.ProseMirror → [role='textbox']
+   283→   283→  - Response selectors: .font-claude-message → [data-testid='assistant-message'] → main
+   284→   284→  - Submit: Enter key
+   285→   285→- Created src/lib/browser-operator/adapters/GeminiAdapter.ts — Gemini via gemini.google.com:
+   286→   286→  - Input selectors: textarea → [contenteditable='true'] → div.ql-editor → [role='textbox']
+   287→   287→  - Response selectors: model-response → message-content → main
+   288→   288→  - Submit: Enter key
+   289→   289→- Created src/lib/browser-operator/adapters/ZaiAdapter.ts — Z.AI via chat.z.ai:
+   290→   290→  - Input selectors: textarea → [contenteditable='true'] → [role='textbox']
+   291→   291→  - Response selectors: [data-message-role='assistant'] → .assistant-message → main
+   292→   292→  - Submit: Enter key
+   293→   293→- Updated src/lib/browser-operator/config/providers.config.json — 5 provider configs:
+   294→   294→  - chatgpt (chatgpt.com, headless: false, allowedDomains: chatgpt.com, chat.openai.com)
+   295→   295→  - claude (claude.ai, headless: false, allowedDomains: claude.ai)
+   296→   296→  - gemini (gemini.google.com, headless: false, allowedDomains: gemini.google.com)
+   297→   297→  - zai (chat.z.ai, headless: false, allowedDomains: chat.z.ai, z.ai)
+   298→   298→  - custom (headless: false, all domains allowed, defaultMode: navigate)
+   299→   299→  - Each includes url, enabled, defaultMode, submitStrategy, inputSelectors, responseSelectors
+   300→   300→- Updated src/lib/browser-operator/playwright/BrowserSessionManager.ts — Persistent profiles:
+   301→   301→  - getSession() now uses launchPersistentContext when profileDir is configured
+   302→   302→  - Profile directory at .storage/browser-operator/profiles/{profileDir}
+   303→   303→  - Creates profile directory if it doesn't exist
+   304→   304→  - BrowserSession now tracks persistentContext flag
+   305→   305→  - When persistentContext is used, browser === context (same object)
+   306→   306→  - Kept existing launch + newContext path as fallback for providers without profileDir
+   307→   307→  - headless defaults to false (headful mode)
+   308→   308→  - Updated isSessionActive() and closeSession() to handle persistent context
+   309→   309→- Updated src/lib/browser-operator/BrowserOperatorService.ts — DB integration + new adapters:
+   310→   310→  - Imports browserOperatorDbService from ./BrowserOperatorDbService
+   311→   311→  - initialize(): registers 5 adapters (custom, chatgpt, claude, gemini, zai), seeds provider configs to DB
+   312→   312→  - submitTask(): after queue.enqueue, also calls browserOperatorDbService.createTask()
+   313→   313→  - processQueue(): after each status update, calls browserOperatorDbService.updateTaskStatus(), syncs logs and screenshots
+   314→   314→  - resumeTask(): after updating status, also updates DB and syncs logs
+   315→   315→  - retryTask(): updates DB status to queued
+   316→   316→  - takeScreenshot(): after capturing, calls browserOperatorDbService.addScreenshot()
+   317→   317→  - ALL DB calls wrapped in try/catch — DB failures never break in-memory flow
+   318→   318→- Updated src/lib/browser-operator/BrowserOperatorTypes.ts — Extended BrowserProviderConfig:
+   319→   319→  - Added optional url, enabled, defaultMode, submitStrategy, inputSelectors, responseSelectors fields
+   320→   320→- Updated src/lib/browser-operator/index.ts — Barrel exports:
+   321→   321→  - Added ChatGPTAdapter, ClaudeAdapter, GeminiAdapter, ZaiAdapter
+   322→   322→  - Added adapter-utils exports (findInput, fillPrompt, submitPrompt, waitForResponse, extractLastResponse, AdapterHelperConfig)
+   323→   323→  - Added BrowserOperatorDbService and browserOperatorDbService
+   324→   324→- Created src/app/api/browser-operator/screenshots/[filename]/route.ts — Screenshot serving:
+   325→   325→  - GET handler serves screenshot files from /tmp/browser-operator/screenshots
+   326→   326→  - Validates filename: no path traversal (no .., no leading /), only .png, no directory separators
+   327→   327→  - Returns file with Content-Type: image/png, Cache-Control: public, max-age=3600
+   328→   328→  - Returns 404 if file doesn't exist, 400 for invalid filenames
+   329→   329→  - Requires BROWSER_OPERATOR_API_KEY if configured
+   330→   330→- Lint clean, dev server running, no compilation errors
+   331→   331→
+   332→   332→Stage Summary:
+   333→   333→- Browser Operator DB persistence layer fully implemented with graceful fallback
+   334→   334→- 4 new AI provider adapters (ChatGPT, Claude, Gemini, ZAI) with resilient selector chains
+   335→   335→- Shared adapter-utils with common interaction patterns (findInput, fillPrompt, submitPrompt, waitForResponse, extractLastResponse)
+   336→   336→- 5 provider configs in providers.config.json with domain restrictions and provider-specific selectors
+   337→   337→- Persistent browser profiles via launchPersistentContext for manual login sessions
+   338→   338→- Screenshot serving API route with security validation
+   339→   339→- All DB operations non-blocking — in-memory flow never breaks on DB failure
+   340→   340→- BrowserProviderConfig type extended with url, enabled, defaultMode, submitStrategy, inputSelectors, responseSelectors
+   341→   341→---
+   342→   342→Task ID: 4
+   343→   343→Agent: ui-builder
+   344→   344→Task: Create Browser Operator admin panel UI
+   345→   345→
+   346→   346→Work Log:
+   347→   347→- Read worklog.md and existing project architecture (page.tsx 1714 lines, pixel office + orchestrator chat)
+   348→   348→- Studied Browser Operator API endpoints: tasks (GET/POST), providers (GET), retry/resume/screenshot (POST), screenshots/[filename] (GET)
+   349→   349→- Studied BrowserOperatorTypes.ts for data structures: BrowserTask, BrowserTaskOutput, BrowserProviderConfig, etc.
+   350→   350→- Created src/components/browser-operator/BrowserOperatorPanel.tsx — Full admin panel with:
+   351→   351→  - Sheet-based overlay matching existing project style (bg-[#0f0f1a], slate colors)
+   352→   352→  - Task List section with TaskCard component showing: ID (truncated + copy), status badge (color-coded), provider badge, agent ID badge, prompt preview (100 chars), result preview (200 chars + copy), error (red), needsHumanReason (amber + warning icon), screenshots count (clickable), collapsible logs, relative timestamps, action buttons (Retry/Resume/Screenshot)
+   353→   353→  - Providers section with ProviderCard showing: name, ID, active status, current URL, session count
+   354→   354→  - Manual Takeover section (shown when needs_human tasks exist): warning banner, reason text, screenshot thumbnail, instructions, Resume button
+   355→   355→  - New Task form (collapsible): provider dropdown, mode dropdown (navigate/extract/interact/automate), URL input, priority dropdown, prompt textarea, submit button
+   356→   356→  - Screenshot viewer overlay with image navigation
+   357→   357→  - Auto-refresh every 5 seconds when panel is open
+   358→   358→  - Stats bar showing counts by status
+   359→   359→  - Error banner with dismiss
+   360→   360→- Modified src/app/page.tsx — Minimal changes:
+   361→   361→  - Added Globe import from lucide-react
+   362→   362→  - Added BrowserOperatorPanel import
+   363→   363→  - Added browserOpOpen state
+   364→   364→  - Added "Browser Op" button with Globe icon in bottom toolbar (between chat button and stats)
+   365→   365→  - Added BrowserOperatorPanel Sheet component after AgentDetailSheet
+   366→   366→- Fixed lint error: moved setLoading out of useEffect body into fetchData callback with showLoading parameter
+   367→   367→- Lint passes cleanly, dev server compiles successfully
+   368→   368→
+   369→   369→Stage Summary:
+   370→   370→- Browser Operator admin panel fully implemented as Sheet overlay
+   371→   371→- No changes to pixel office UI or existing agents
+   372→   372→- All 7 API endpoints integrated (tasks, providers, retry, resume, screenshot, screenshots)
+   373→   373→- Dark theme consistent with existing project (bg-[#0f0f1a], slate-700 borders, slate-300/400 text)
+   374→   374→- Compact, information-dense admin/ops panel with collapsible sections
+   375→   375→- Responsive design via Sheet component
+   376→   376→- Auto-refresh with 5-second interval when panel is open
+   377→   377→
+   378→   378→---
+   379→   379→Task ID: 4
+   380→   380→Agent: main
+   381→   381→Task: Browser Operator Part 3 — DB persistence, provider adapters, persistent profiles, UI panel, documentation
+   382→   382→
+   383→   383→Work Log:
+   384→   384→- Created BrowserOperatorDbService.ts with Prisma persistence (graceful fallback to in-memory)
+   385→   385→- Updated BrowserOperatorService.ts to integrate DB service throughout lifecycle
+   386→   386→- Updated providers.config.json with 5 providers (chatgpt, claude, gemini, zai, custom)
+   387→   387→- Created adapter-utils.ts with shared utilities (findInput, fillPrompt, submitPrompt, waitForResponse, extractLastResponse)
+   388→   388→- Created ChatGPTAdapter.ts, ClaudeAdapter.ts, GeminiAdapter.ts, ZaiAdapter.ts
+   389→   389→- Updated BrowserSessionManager.ts for persistent profiles via launchPersistentContext
+   390→   390→- Updated BrowserOperatorTypes.ts with extended BrowserProviderConfig fields
+   391→   391→- Updated index.ts barrel exports for all new modules
+   392→   392→- Added screenshot serving API route at /api/browser-operator/screenshots/[filename]
+   393→   393→- Fixed providers route to call initialize() before listing
+   394→   394→- Created BrowserOperatorPanel.tsx component with tasks, providers, manual takeover, new task form
+   395→   395→- Added "Browser Op" button to page.tsx toolbar
+   396→   396→- Fixed TaskStats type mismatch (API returns flat fields, not byStatus)
+   397→   397→- Created docs/browser-operator.md with comprehensive documentation
+   398→   398→- All lint checks pass
+   399→   399→- Agent Browser verification: panel opens, shows 2 tasks, 5 providers, new task form works
+   400→   400→- Pixel office UI unchanged
+   401→   401→
+   402→   402→Stage Summary:
+   403→   403→- Browser Operator now has full DB persistence layer
+   404→   404→- 5 provider adapters with resilient selector chains
+   405→   405→- Persistent browser profiles at .storage/browser-operator/profiles/
+   406→   406→- Admin UI panel accessible via "Browser Op" button in toolbar
+   407→   407→- Complete documentation at docs/browser-operator.md
+   408→   408→- Graceful degradation: works without Playwright, works without DB
+   409→   409→---
+   410→   410→Task ID: 1
+   411→   411→Agent: Main Agent
+   412→   412→Task: Final hardening and end-to-end verification of Browser Operator Module
+   413→   413→
+   414→   414→Work Log:
+   415→   415→- Audited all 24 browser operator files comprehensively
+   416→   416→- Fixed BUG: processQueue() finally block was dequeueing next task and losing it from queue array — now re-enters processQueue() instead
+   417→   417→- Fixed BUG: Removed duplicate resume() methods from ChatGPT/Claude/Gemini/Zai adapters (base class handles it)
+   418→   418→- Fixed BUG: ChatGPTAdapter had convoluted URL logic (ternary with allowedDomains check) — simplified to input.url ?? config.url ?? fallback
+   419→   419→- Fixed BUG: All 4 AI adapters now use config.url as fallback instead of hardcoded URLs
+   420→   420→- Fixed BUG: ToolBridge emitted TOOL_EXECUTION_SUCCEEDED for all events including failed tasks — now uses TOOL_EXECUTION_FAILED for task:failed/task:cancelled
+   421→   421→- Fixed BUG: DB addLogs() was inserting sequentially — now uses createMany() for batch insert
+   422→   422→- Fixed BUG: browser-operator-tool.ts was calling submitTask on Promise (missing await) — added await
+   423→   423→- Fixed BUG: browser-operator-tool.ts was missing functionName in ToolExecutionResult — added 'browser_operator'
+   424→   424→- Fixed BUG: context.args types were unknown — added proper String()/Number() casts and BrowserTaskMode/BrowserTaskPriority type imports
+   425→   425→- Fixed BUG: BrowserOperatorProviderRegistry.listAll() was missing description field — now pulls from config
+   426→   426→- Fixed BUG: Singletons were lost across HMR boundaries in Next.js dev mode — switched to globalThis persistence
+   427→   427→- Fixed TS error: Added declare for __non_webpack_require__ in BrowserSessionManager
+   428→   428→- Fixed TS error: ToolBridge event payload now properly typed with conditional payload for succeeded/failed
+   429→   429→- Added browser:install and browser:smoke scripts to package.json
+   430→   430→- Created scripts/smoke-browser-operator.ts with 25 test cases
+   431→   431→- Created docs/browser-operator.md with full documentation
+   432→   432→- Documented naming convention: browser_operator (tool ID) vs browser_ai_provider (Tool Hub key)
+   433→   433→
+   434→   434→Stage Summary:
+   435→   435→- All 6 identified bugs fixed
+   436→   436→- All browser-operator TypeScript errors resolved
+   437→   437→- ESLint clean (0 errors)
+   438→   438→- 25/25 smoke tests passing
+   439→   439→- Graceful degradation confirmed (clear Playwright error without crash)
+   440→   440→- API validation working (400 for missing fields, 400 for invalid mode, 500 for unknown provider)
+   441→   441→- Path traversal protection confirmed (400 for ../etc/passwd)
+   442→   442→- Singleton consistency fixed via globalThis
+   443→   443→
+   444→   444→---
+   445→   445→Task ID: 1b
+   446→   446→Agent: skill-registry-builder
+   447→   447→Task: Create Skill Registry Service and Default Skill Definitions
+   448→   448→
+   449→   449→Work Log:
+   450→   450→- Read existing worklog, Prisma schema (SkillDefinition, AgentSkillLink, SkillUsageLog models), db.ts, existing in-memory skill system (src/lib/skills/)
+   451→   451→- Reviewed ToolRegistryService singleton pattern for consistency
+   452→   452→- Created src/lib/skill-registry/defaults.ts — 47 default skill definitions across 8 categories:
+   453→   453→  - analysis (7): research, deep_research, web_search, fact_checking, data_analysis, summarization, ocr
+   454→   454→  - creation (11): coding, debugging, refactoring, architecture_design, database_design, ui_design, ux_design, content_creation, image_generation, video_generation, voice_generation
+   455→   455→  - communication (6): translation, email_management, social_media_management, marketing, sales, seo
+   456→   456→  - automation (6): browser_automation, computer_use, automation, agent_creation, agent_training, task_delegation
+   457→   457→  - management (4): project_management, lead_qualification, crm_management, calendar_management
+   458→   458→  - technical (6): legal_analysis, legal_drafting, contract_review, rag_search, embedding_management, document_processing
+   459→   459→  - media (3): image_editing, video_editing, audio_processing
+   460→   460→  - specialized (4): prompt_engineering, security_audit, compliance_check, financial_analysis
+   461→   461→- Created src/lib/skill-registry/SkillRegistryService.ts — DB-backed singleton service with:
+   462→   462→  - listSkills(filters?) — filter by category, status, tags
+   463→   463→  - getSkill(key) — find by unique key
+   464→   464→  - installSkill(agentId, skillKey, score?) — create AgentSkillLink with install count increment
+   465→   465→  - uninstallSkill(agentId, skillKey) — remove AgentSkillLink with install count decrement
+   466→   466→  - enableSkill(agentId, skillKey) / disableSkill(agentId, skillKey) — toggle enabled flag
+   467→   467→  - getAgentSkills(agentId) — list all skills for an agent with skill definitions
+   468→   468→  - getSkillAgents(skillKey) — list all agents with a given skill
+   469→   469→  - seedDefaults() — upsert all 47 default skills into DB
+   470→   470→  - logUsage(skillKey, agentId?, action, success?, durationMs?) — create SkillUsageLog
+   471→   471→  - getCategoryCounts() / getSkillCount() — utility methods
+   472→   472→- Created src/lib/skill-registry/index.ts — barrel export
+   473→   473→- Verified: lint passes cleanly (zero errors)
+   474→   474→
+   475→   475→---
+   476→   476→Task ID: 1j
+   477→   477→Agent: analytics-workflow-builder
+   478→   478→Task: Create Analytics Service and Workflow Template Service
+   479→   479→
+   480→   480→Work Log:
+   481→   481→- Read worklog, Prisma schema (SkillUsageLog, ToolUsageLog, CostLog, AgentCapabilityScore, WorkflowTemplate, EventLog models), db.ts, existing singleton patterns (CostTracker, SkillRegistryService)
+   482→   482→- Created src/lib/analytics/AnalyticsService.ts — Analytics & insights singleton service with:
+   483→   483→  - getSkillUsageStats() — groups SkillUsageLog by skill, computes usage counts, success rates, avg duration
+   484→   484→  - getToolUsageStats() — groups ToolUsageLog by tool, computes usage counts, success rates, avg duration
+   485→   485→  - getAgentEffectiveness(workspaceId) — ranks agents by composite score (success rate * 40 + capability score * 30 + cost efficiency * 30)
+   486→   486→  - getCapabilityGaps() — identifies weak capability areas from AgentCapabilityScore averages, classifies gaps as critical/moderate/minor
+   487→   487→  - getSystemOverview() — parallel count queries for agents, skills, tools, packs, marketplace items, workflows, cost logs, event logs
+   488→   488→  - getTrendingSkills() — compares last 7 days vs prior 7 days, computes growth rate, classifies rising/stable/declining
+   489→   489→  - getTrendingTools() — same trending analysis for tools
+   490→   490→  - getInstallationTrends(days?) — daily install counts for skills & tools over configurable period (default 30 days)
+   491→   491→  - getAgentSkillMatrix(workspaceId) — agent x skill matrix with proficiency scores from AgentSkillLink
+   492→   492→  - Exported types: SkillUsageStat, ToolUsageStat, AgentEffectivenessEntry, CapabilityGap, SystemOverview, TrendingItem, InstallationTrend, AgentSkillMatrixEntry
+   493→   493→- Created src/lib/analytics/index.ts — barrel export for service and all types
+   494→   494→- Created src/lib/workflows/WorkflowService.ts — Workflow template management singleton service with:
+   495→   495→  - listTemplates(category?) — list workflow templates, optional category filter
+   496→   496→  - getTemplate(id) — get template by ID with parsed JSON steps
+   497→   497→  - createTemplate(data) — create new template from CreateWorkflowInput
+   498→   498→  - executeTemplate(templateId, input) — placeholder for future execution engine
+   499→   499→  - seedDefaults() — seed 5 default workflow templates (idempotent, checks by name):
+   500→   500→    - "Feature Development" (architect → frontend/backend → qa) — 4 steps
+   501→   501→    - "Bug Investigation" (analyst → developer → qa) — 3 steps
+   502→   502→    - "Research Report" (researcher → analyst → designer) — 3 steps
+   503→   503→    - "Code Review" (developer → security → qa) — 3 steps
+   504→   504→    - "Deployment Pipeline" (developer → devops → security) — 3 steps
+   505→   505→  - Private parseTemplate() helper — safely parses JSON steps and metadata
+   506→   506→  - Exported types: WorkflowStep, CreateWorkflowInput, WorkflowTemplateWithSteps, ExecutionResult
+   507→   507→- Created src/lib/workflows/index.ts — barrel export for service and all types
+   508→   508→- Verified: lint passes cleanly (zero errors), dev server running without issues
+   509→   509→
+   510→   510→---
+   511→   511→Task ID: 1d
+   512→   512→Agent: pack-service
+   513→   513→Task: Create Skill Packs and Tool Packs services for Agent OS
+   514→   514→
+   515→   515→Work Log:
+   516→   516→- Explored existing project structure: Prisma schema (SkillPack, SkillPackItem, ToolPack, ToolPackItem, AgentSkillLink, AgentToolLink, SkillDefinition, Tool models), db client, event bus, tool-hub services
+   517→   517→- Found no existing SkillRegistryService (DB-backed) — needed to create one as a dependency for SkillPackService
+   518→   518→- Created src/lib/packs/defaults.ts — Default pack definitions:
+   519→   519→  - 10 skill packs: Legal (⚖️), Research (🔬), Coding (💻), Marketing (📢), Sales (💰), CRM (👥), Content (✍️), Media (🎬), Automation (🤖), RAG (📚)
+   520→   520→  - 6 tool packs: AI Providers (🧠), Dev Tools (🛠️), Data Tools (📊), Media Tools (🎬), Deploy Tools (🚀), Full Stack (⚡)
+   521→   521→  - 40+ default skill definitions covering all unique skill keys across packs
+   522→   522→  - Exported types: DefaultSkillPackDef, DefaultToolPackDef, DefaultSkillDef
+   523→   523→- Created src/lib/skills/SkillRegistryService.ts — DB-backed skill registry service:
+   524→   524→  - Singleton pattern matching project conventions
+   525→   525→  - listDefinitions(), getDefinitionByKey(), getDefinitionById(), createDefinition()
+   526→   526→  - installSkill(skillKey, agentId) — creates AgentSkillLink, increments installCount
+   527→   527→  - uninstallSkill(skillKey, agentId) — removes AgentSkillLink
+   528→   528→  - getAgentSkills(agentId), isSkillInstalled(skillKey, agentId)
+   529→   529→  - seedDefaults() — seeds all DEFAULT_SKILL_DEFINITIONS idempotently
+   530→   530→- Created src/lib/packs/SkillPackService.ts — Skill Pack service:
+   531→   531→  - Singleton pattern
+   532→   532→  - listPacks() — list all with item counts
+   533→   533→  - getPack(key) — get pack with items + skill definitions
+   534→   534→  - installPack(packKey, agentId) — installs each skill via SkillRegistryService.installSkill (dynamic import to avoid circular deps)
+   535→   535→  - uninstallPack(packKey, agentId) — uninstalls each skill via SkillRegistryService.uninstallSkill
+   536→   536→  - seedDefaults() — seeds packs + items, calls skillRegistryService.seedDefaults() first
+   537→   537→- Created src/lib/packs/ToolPackService.ts — Tool Pack service:
+   538→   538→  - Singleton pattern
+   539→   539→  - listPacks() — list all with item counts
+   540→   540→  - getPack(key) — get pack with items + tool definitions
+   541→   541→  - installPack(packKey, agentId) — creates AgentToolLink for each tool in pack
+   542→   542→  - uninstallPack(packKey, agentId) — removes AgentToolLink records
+   543→   543→  - seedDefaults() — seeds packs + items (requires tools already seeded by ToolRegistryService)
+   544→   544→- Created src/lib/packs/index.ts — barrel export for services, defaults, and types
+   545→   545→- Updated src/lib/skills/index.ts — added SkillRegistryService export
+   546→   546→- Verified: lint passes (zero errors), TypeScript compiles without errors in new files, dev server running normally
+   547→   547→
+   548→   548→Stage Summary:
+   549→   549→- Complete Skill Packs + Tool Packs service layer implemented
+   550→   550→- 10 curated skill packs with 40+ unique skill definitions
+   551→   551→- 6 curated tool packs covering all 16 default tools
+   552→   552→- DB-backed install/uninstall with AgentSkillLink and AgentToolLink management
+   553→   553→- Idempotent seeding for all packs, items, and skill definitions
+   554→   554→- Dynamic imports used in SkillPackService to avoid circular dependency with SkillRegistryService
+   555→   555→
+   556→   556→---
+   557→   557→Task ID: 1e, 1f, 1g, 1h
+   558→   558→Agent: main
+   559→   559→Task: Create 4 service files — Capability Score Service, Discovery Service, Installation Service, Marketplace Service
+   560→   560→
+   561→   561→Work Log:
+   562→   562→- Created src/lib/capability/CapabilityScoreService.ts — Singleton with 10 score categories (coding, research, design, communication, automation, management, legal, analysis, media, security), default role-based scores for all 11 agent roles, auto-assessment algorithm (base + skill_bonus + tool_bonus + usage_bonus), system gap detection, leaderboard ranking, evidence tracking
+   563→   563→- Created src/lib/discovery/DiscoveryService.ts — Singleton with keyword-matching discovery across skills, tools, and agents, relevance scoring (partial + exact match weighted), workspace gap-based installation recommendations, new agent recommendations for uncovered capabilities, unified search
+   564→   564→- Created src/lib/installation/InstallationService.ts — Singleton with skill/tool install/uninstall, enable/disable, AgentSkillLink/AgentToolLink management, pack installation (skill packs + tool packs), install count increment, action logging via SkillUsageLog/ToolUsageLog, re-install support for disabled items
+   565→   565→- Created src/lib/marketplace/MarketplaceService.ts — Singleton with browse/filter/search, publish, install from marketplace (delegates to InstallationService), rating system (1-5 stars with average calculation), featured items, seed defaults (10 skill packs + 6 tool packs matching packs system), agent_template/workflow_template placeholder support
+   566→   566→- Created barrel exports: src/lib/capability/index.ts, src/lib/discovery/index.ts, src/lib/installation/index.ts, src/lib/marketplace/index.ts
+   567→   567→- Used lazy imports (dynamic import()) in DiscoveryService and MarketplaceService to avoid circular dependencies with CapabilityScoreService and InstallationService
+   568→   568→- Fixed TypeScript error: typed the results array in assessAgent() to avoid `never[]` assignment error
+   569→   569→- Verified: lint passes (zero errors), TypeScript compiles without errors in new files, dev server running normally
+   570→   570→
+   571→   571→Stage Summary:
+   572→   572→- 4 complete service modules with singleton pattern and barrel exports
+   573→   573→- Capability Score Service: 0-100 scoring, 10 categories, 11 role profiles, auto-assessment, gap detection, leaderboard
+   574→   574→- Discovery Service: keyword-based search across skills/tools/agents, gap-based recommendations, new agent recommendations
+   575→   575→- Installation Service: full install/uninstall/enable/disable lifecycle, pack support, action logging
+   576→   576→- Marketplace Service: browse/publish/rate/install flow, 16 default items, featured curation
+   577→   577→- Cross-service dependencies resolved via lazy imports to prevent circular deps
+   578→   578→

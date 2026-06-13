@@ -171,7 +171,7 @@ export const updateModelConfigSchema = z.array(z.object({
 
 export const updateRuntimeSchema = z.object({
   status: z.enum(['idle', 'thinking', 'working', 'waiting_api', 'reviewing', 'waiting_approval', 'done', 'error', 'offline']).optional(),
-  locationZone: z.enum(['command_area', 'situation_room', 'development_area', 'design_area', 'research_area', 'server_room', 'meeting_room', 'lounge_area']).optional(),
+  locationZone: z.enum(['command_area', 'situation_room', 'development_area', 'design_area', 'research_area', 'server_room', 'meeting_room', 'lounge_area', 'marketing_area', 'content_studio', 'growth_lab']).optional(),
   activeTaskId: z.string().nullable().optional(),
   currentActivity: z.string().max(500).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
@@ -212,7 +212,7 @@ export const createTemporaryAgentSchema = z.object({
     risks: z.array(z.string()),
     estimatedUseCases: z.array(z.string()),
     systemPrompt: z.string().max(10000).optional(),
-    locationZone: z.enum(['command_area', 'situation_room', 'development_area', 'design_area', 'research_area', 'server_room', 'meeting_room', 'lounge_area']).optional(),
+    locationZone: z.enum(['command_area', 'situation_room', 'development_area', 'design_area', 'research_area', 'server_room', 'meeting_room', 'lounge_area', 'marketing_area', 'content_studio', 'growth_lab']).optional(),
     visualProfile: z.object({
       color: z.string(),
       icon: z.string(),

@@ -95,6 +95,36 @@ export const ZONE_VISUAL_MAP: Record<OfficeZone, ZoneVisual> = {
     description: 'Idle and available agents',
     gridArea: 'lounge',
   },
+  marketing_area: {
+    key: 'marketing_area',
+    label: 'Marketing HQ',
+    icon: 'Megaphone',
+    emoji: '📢',
+    color: 'bg-fuchsia-50',
+    borderColor: 'border-fuchsia-200',
+    description: 'Marketing strategy, GTM planning, and market research',
+    gridArea: 'marketing',
+  },
+  content_studio: {
+    key: 'content_studio',
+    label: 'Content Studio',
+    icon: 'PenTool',
+    emoji: '✍️',
+    color: 'bg-amber-50',
+    borderColor: 'border-amber-200',
+    description: 'Messaging, content creation, and copywriting',
+    gridArea: 'content',
+  },
+  growth_lab: {
+    key: 'growth_lab',
+    label: 'Growth Lab',
+    icon: 'TrendingUp',
+    emoji: '📈',
+    color: 'bg-cyan-50',
+    borderColor: 'border-cyan-200',
+    description: 'Growth experiments, campaigns, and analytics',
+    gridArea: 'growth',
+  },
 };
 
 export const ZONE_LIST = Object.values(ZONE_VISUAL_MAP);

@@ -1,0 +1,1058 @@
+     1→     1→// ─── Agent OS — AgentOffice V3 (Pixel Agents Style) ────────────────
+     2→     2→// Main Agent Office component — pixel-art office with real sprites.
+     3→     3→// Adapted from pixel-agents (MIT) architecture.
+     4→     4→// Office is the PRIMARY and ONLY view. Management panels are overlays.
+     5→     5→
+     6→     6→'use client';
+     7→     7→
+     8→     8→import { useState, useCallback, useEffect, useRef } from 'react';
+     9→     9→import { useOfficeData } from '@/hooks/useOfficeData';
+    10→    10→import { useEventStream } from '@/hooks/useEventStream';
+    11→    11→import { PixelOfficeCanvas } from '@/components/pixel-office/PixelOfficeCanvas';
+    12→    12→import { TaskBoard } from '@/components/office/TaskBoard';
+    13→    13→import { SituationRoom } from '@/components/office/SituationRoom';
+    14→    14→import { OrchestratorPanel } from '@/components/office/OrchestratorPanel';
+    15→    15→import { ApprovalQueue } from '@/components/office/ApprovalQueue';
+    16→    16→import { EventTimeline } from '@/components/office/EventTimeline';
+    17→    17→import { AgentDetailsDrawer } from '@/components/office/AgentDetailsDrawer';
+    18→    18→import { PreviewPanel } from '@/components/office/PreviewPanel';
+    19→    19→import { Button } from '@/components/ui/button';
+    20→    20→import { Badge } from '@/components/ui/badge';
+    21→    21→import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+    22→    22→import {
+    23→    23→  ListChecks, BarChart3, Crown,
+    24→    24→  AlertTriangle, Radio, Loader2, RefreshCw,
+    25→    25→  Building2,
+    26→    26→} from 'lucide-react';
+    27→    27→import type { OfficeAgent } from '@/hooks/useOfficeData';
+    28→    28→import { OfficeState, ROLE_SEAT_MAP } from '@/lib/pixel-office/engine/officeState';
+    29→    29→import { BehaviorState } from '@/lib/pixel-office/types';
+    30→    30→import { loadAllAssets } from '@/lib/pixel-office/assetLoader';
+    31→    31→import type { ZoneDestination, ZoneLabel, TileType as TileTypeVal } from '@/lib/pixel-office/types';
+    32→    32→import { useIsMobile } from '@/hooks/use-mobile';
+    33→    33→
+    34→    34→// Agent OS status → pixel-agents character state mapping
+    35→    35→function mapAgentStatusToActive(status: string): boolean {
+    36→    36→  const s = status?.toLowerCase() ?? 'idle';
+    37→    37→  return !['offline', 'idle', 'done'].includes(s);
+    38→    38→}
+    39→    39→
+    40→    40→function mapAgentStatusToTool(status: string): string | null {
+    41→    41→  const s = status?.toLowerCase() ?? '';
+    42→    42→  if (s.includes('thinking') || s.includes('working')) return 'Write';
+    43→    43→  if (s.includes('review') || s.includes('reading') || s.includes('waiting_api')) return 'Read';
+    44→    44→  if (s.includes('waiting_approval')) return null;
+    45→    45→  return null;
+    46→    46→}
+    47→    47→
+    48→    48→function mapAgentStatusToBubble(status: string): 'permission' | 'waiting' | null {
+    49→    49→  const s = status?.toLowerCase() ?? '';
+    50→    50→  if (s.includes('waiting_approval')) return 'permission';
+    51→    51→  if (s.includes('waiting_api')) return 'waiting';
+    52→    52→  return null;
+    53→    53→}
+    54→    54→
+    55→    55→// Map agent status to behavior state
+    56→    56→function mapAgentStatusToBehavior(status: string): BehaviorState {
+    57→    57→  const s = status?.toLowerCase() ?? 'idle';
+    58→    58→  if (s.includes('working') || s.includes('thinking')) return BehaviorState.WORKING;
+    59→    59→  if (s.includes('reviewing')) return BehaviorState.MEETING;
+    60→    60→  if (s.includes('waiting_approval')) return BehaviorState.MEETING;
+    61→    61→  if (s.includes('waiting_api')) return BehaviorState.RESEARCH;
+    62→    62→  if (s.includes('done')) return BehaviorState.IDLE;
+    63→    63→  return BehaviorState.IDLE;
+    64→    64→}
+    65→    65→
+    66→    66→// Panel types for the management overlay
+    67→    67→type ManagementPanel = 'tasks' | 'situation' | 'orchestrator' | 'approvals' | 'events';
+    68→    68→
+    69→    69→interface AgentOfficeProps {
+    70→    70→  workspaceId: string | null;
+    71→    71→  onSeed?: () => void;
+    72→    72→}
+    73→    73→
+    74→    74→const PANEL_CONFIG: Record<ManagementPanel, {
+    75→    75→  label: string;
+    76→    76→  icon: React.ComponentType<{ className?: string }>;
+    77→    77→  color: string;
+    78→    78→}> = {
+    79→    79→  tasks: { label: 'Tasks', icon: ListChecks, color: 'text-blue-500' },
+    80→    80→  situation: { label: 'Situation', icon: BarChart3, color: 'text-emerald-500' },
+    81→    81→  orchestrator: { label: 'Orchestrator', icon: Crown, color: 'text-violet-500' },
+    82→    82→  approvals: { label: 'Approvals', icon: AlertTriangle, color: 'text-orange-500' },
+    83→    83→  events: { label: 'Events', icon: Radio, color: 'text-sky-500' },
+    84→    84→};
+    85→    85→
+    86→    86→// ─── New Dense Office Layout (40×36) ────────────────────────
+    87→    87→// 8 rooms + 1 workshop + 1 lounge, internal walls with doors, dense furniture
+    88→    88→
+    89→    89→const COLS = 40;
+    90→    90→const ROWS = 36;
+    91→    91→
+    92→    92→function buildTiles(): TileTypeVal[] {
+    93→    93→  const W = 0 as TileTypeVal; // WALL
+    94→    94→  const F1 = 1 as TileTypeVal; // Command Center
+    95→    95→  const F2 = 2 as TileTypeVal; // Meeting Room
+    96→    96→  const F3 = 3 as TileTypeVal; // Design Area
+    97→    97→  const F4 = 4 as TileTypeVal; // Development Area
+    98→    98→  const F5 = 5 as TileTypeVal; // Server Room
+    99→    99→  const F6 = 6 as TileTypeVal; // Research Area
+   100→   100→  const F7 = 7 as TileTypeVal; // Lounge
+   101→   101→  const F8 = 8 as TileTypeVal; // Door/transition
+   102→   102→  const F9 = 9 as TileTypeVal; // QA Lab
+   103→   103→  const F10 = 10 as TileTypeVal; // Operations Center
+   104→   104→
+   105→   105→  const tiles: TileTypeVal[] = [];
+   106→   106→  for (let r = 0; r < ROWS; r++) {
+   107→   107→    for (let c = 0; c < COLS; c++) {
+   108→   108→      // Outer walls
+   109→   109→      if (r === 0 || r === ROWS - 1 || c === 0 || c === COLS - 1) {
+   110→   110→        tiles.push(W);
+   111→   111→        continue;
+   112→   112→      }
+   113→   113→
+   114→   114→      // Horizontal divider row 10 (between upper and middle rooms)
+   115→   115→      if (r === 10) {
+   116→   116→        if ((c >= 5 && c <= 6) || (c >= 18 && c <= 19) || (c >= 31 && c <= 32)) {
+   117→   117→          tiles.push(F8); // door openings
+   118→   118→        } else {
+   119→   119→          tiles.push(W);
+   120→   120→        }
+   121→   121→        continue;
+   122→   122→      }
+   123→   123→
+   124→   124→      // Horizontal divider row 20 (between middle and lower rooms)
+   125→   125→      if (r === 20) {
+   126→   126→        if ((c >= 5 && c <= 6) || (c >= 18 && c <= 19) || (c >= 31 && c <= 32)) {
+   127→   127→          tiles.push(F8); // door openings
+   128→   128→        } else {
+   129→   129→          tiles.push(W);
+   130→   130→        }
+   131→   131→        continue;
+   132→   132→      }
+   133→   133→
+   134→   134→      // Horizontal divider row 30 (between lower rooms and lounge)
+   135→   135→      if (r === 30) {
+   136→   136→        if ((c >= 8 && c <= 9) || (c >= 28 && c <= 29)) {
+   137→   137→          tiles.push(F8); // door openings
+   138→   138→        } else {
+   139→   139→          tiles.push(W);
+   140→   140→        }
+   141→   141→        continue;
+   142→   142→      }
+   143→   143→
+   144→   144→      // Upper section (rows 1-9)
+   145→   145→      if (r >= 1 && r <= 9) {
+   146→   146→        // Vertical wall col 13
+   147→   147→        if (c === 13) {
+   148→   148→          if (r >= 4 && r <= 5) tiles.push(F8); // door
+   149→   149→          else tiles.push(W);
+   150→   150→          continue;
+   151→   151→        }
+   152→   152→        // Vertical wall col 25
+   153→   153→        if (c === 25) {
+   154→   154→          if (r >= 4 && r <= 5) tiles.push(F8); // door
+   155→   155→          else tiles.push(W);
+   156→   156→          continue;
+   157→   157→        }
+   158→   158→        if (c >= 1 && c <= 12) tiles.push(F1);    // Command Center
+   159→   159→        else if (c >= 14 && c <= 24) tiles.push(F2); // Meeting Room
+   160→   160→        else if (c >= 26 && c <= 38) tiles.push(F3); // Design Area
+   161→   161→        else tiles.push(W);
+   162→   162→        continue;
+   163→   163→      }
+   164→   164→
+   165→   165→      // Middle section (rows 11-19)
+   166→   166→      if (r >= 11 && r <= 19) {
+   167→   167→        // Vertical wall col 13
+   168→   168→        if (c === 13) {
+   169→   169→          if (r >= 14 && r <= 15) tiles.push(F8); // door
+   170→   170→          else tiles.push(W);
+   171→   171→          continue;
+   172→   172→        }
+   173→   173→        // Vertical wall col 25
+   174→   174→        if (c === 25) {
+   175→   175→          if (r >= 14 && r <= 15) tiles.push(F8); // door
+   176→   176→          else tiles.push(W);
+   177→   177→          continue;
+   178→   178→        }
+   179→   179→        if (c >= 1 && c <= 12) tiles.push(F4);    // Development Area
+   180→   180→        else if (c >= 14 && c <= 24) tiles.push(F5); // Server Room
+   181→   181→        else if (c >= 26 && c <= 38) tiles.push(F6); // Research Area
+   182→   182→        else tiles.push(W);
+   183→   183→        continue;
+   184→   184→      }
+   185→   185→
+   186→   186→      // Lower section (rows 21-29)
+   187→   187→      if (r >= 21 && r <= 29) {
+   188→   188→        // Vertical wall col 13
+   189→   189→        if (c === 13) {
+   190→   190→          if (r >= 24 && r <= 25) tiles.push(F8); // door
+   191→   191→          else tiles.push(W);
+   192→   192→          continue;
+   193→   193→        }
+   194→   194→        // Vertical wall col 25
+   195→   195→        if (c === 25) {
+   196→   196→          if (r >= 24 && r <= 25) tiles.push(F8); // door
+   197→   197→          else tiles.push(W);
+   198→   198→          continue;
+   199→   199→        }
+   200→   200→        if (c >= 1 && c <= 12) tiles.push(F9);    // QA Lab
+   201→   201→        else if (c >= 14 && c <= 24) tiles.push(F10); // Operations Center
+   202→   202→        else if (c >= 26 && c <= 38) tiles.push(F7); // Workshop (reuses lounge floor type)
+   203→   203→        else tiles.push(W);
+   204→   204→        continue;
+   205→   205→      }
+   206→   206→
+   207→   207→      // Lounge (rows 31-34)
+   208→   208→      tiles.push(F7);
+   209→   209→    }
+   210→   210→  }
+   211→   211→  return tiles;
+   212→   212→}
+   213→   213→
+   214→   214→function buildTileColors(): Array<{ h: number; s: number; b: number; c: number } | null> {
+   215→   215→  const wallColor = { h: 214, s: 30, b: -100, c: -55 };
+   216→   216→  const cmdColor = { h: 30, s: 50, b: -43, c: -88 };       // warm wood
+   217→   217→  const meetColor = { h: 210, s: 35, b: -30, c: -75 };     // blue-gray business
+   218→   218→  const designColor = { h: 330, s: 40, b: -35, c: -80 };   // creative pink
+   219→   219→  const devColor = { h: 150, s: 40, b: -40, c: -82 };      // tech green-gray
+   220→   220→  const serverColor = { h: 200, s: 45, b: -50, c: -70 };   // cool blue
+   221→   221→  const researchColor = { h: 35, s: 55, b: -38, c: -85 };  // library amber
+   222→   222→  const loungeColor = { h: 20, s: 60, b: -35, c: -85 };    // cozy warm
+   223→   223→  const doorColor = { h: 35, s: 25, b: 10, c: 0 };
+   224→   224→  const qaColor = { h: 345, s: 40, b: -40, c: -82 };       // rose/crimson for testing
+   225→   225→  const opsColor = { h: 25, s: 50, b: -38, c: -80 };       // warm orange for ops
+   226→   226→
+   227→   227→  const tiles = buildTiles();
+   228→   228→  const colors: Array<{ h: number; s: number; b: number; c: number } | null> = [];
+   229→   229→
+   230→   230→  for (let i = 0; i < tiles.length; i++) {
+   231→   231→    const tile = tiles[i];
+   232→   232→    const W = 0;
+   233→   233→    if (tile === W) { colors.push(wallColor); continue; }
+   234→   234→    if (tile === 8) { colors.push(doorColor); continue; }
+   235→   235→    if (tile === 1) { colors.push(cmdColor); continue; }
+   236→   236→    if (tile === 2) { colors.push(meetColor); continue; }
+   237→   237→    if (tile === 3) { colors.push(designColor); continue; }
+   238→   238→    if (tile === 4) { colors.push(devColor); continue; }
+   239→   239→    if (tile === 5) { colors.push(serverColor); continue; }
+   240→   240→    if (tile === 6) { colors.push(researchColor); continue; }
+   241→   241→    if (tile === 7) { colors.push(loungeColor); continue; }
+   242→   242→    if (tile === 9) { colors.push(qaColor); continue; }
+   243→   243→    if (tile === 10) { colors.push(opsColor); continue; }
+   244→   244→    colors.push(wallColor);
+   245→   245→  }
+   246→   246→  return colors;
+   247→   247→}
+   248→   248→
+   249→   249→const DEFAULT_AGENT_OS_LAYOUT = {
+   250→   250→  version: 1 as const,
+   251→   251→  cols: COLS,
+   252→   252→  rows: ROWS,
+   253→   253→  layoutRevision: 4,
+   254→   254→  tiles: buildTiles(),
+   255→   255→  tileColors: buildTileColors(),
+   256→   256→  furniture: [
+   257→   257→    // ═══════════════════════════════════════════════════════════
+   258→   258→    // COMMAND CENTER (cols 1-12, rows 1-9)
+   259→   259→    // ═══════════════════════════════════════════════════════════
+   260→   260→
+   261→   261→    // ── Wall decorations ──
+   262→   262→    { uid: 'cmd-shelf1', type: 'DOUBLE_BOOKSHELF', col: 1, row: 0 },
+   263→   263→    { uid: 'cmd-clock', type: 'CLOCK', col: 5, row: 0 },
+   264→   264→    { uid: 'cmd-wb', type: 'WHITEBOARD', col: 7, row: 0 },
+   265→   265→    { uid: 'cmd-paint1', type: 'SMALL_PAINTING', col: 10, row: 0 },
+   266→   266→    { uid: 'cmd-paint2', type: 'SMALL_PAINTING_2', col: 11, row: 0 },
+   267→   267→
+   268→   268→    // ── Orchestrator workstation ──
+   269→   269→    { uid: 'desk-orc', type: 'DESK_FRONT', col: 2, row: 2 },
+   270→   270→    { uid: 'pc-orc', type: 'PC_FRONT_OFF', col: 3, row: 2 },
+   271→   271→    { uid: 'chair-orc', type: 'WOODEN_CHAIR_BACK', col: 3, row: 4 },
+   272→   272→
+   273→   273→    // ── Architect workstation ──
+   274→   274→    { uid: 'desk-arch', type: 'DESK_FRONT', col: 7, row: 2 },
+   275→   275→    { uid: 'pc-arch', type: 'PC_FRONT_OFF', col: 8, row: 2 },
+   276→   276→    { uid: 'chair-arch', type: 'WOODEN_CHAIR_BACK', col: 8, row: 4 },
+   277→   277→
+   278→   278→    // ── Analyst workstation ──
+   279→   279→    { uid: 'desk-anl', type: 'DESK_FRONT', col: 2, row: 6 },
+   280→   280→    { uid: 'pc-anl', type: 'PC_FRONT_OFF', col: 3, row: 6 },
+   281→   281→    { uid: 'chair-anl', type: 'WOODEN_CHAIR_BACK', col: 3, row: 8 },
+   282→   282→
+   283→   283→    // ── Decorations ──
+   284→   284→    { uid: 'cmd-plant1', type: 'LARGE_PLANT', col: 1, row: 1 },
+   285→   285→    { uid: 'cmd-plant2', type: 'PLANT', col: 11, row: 5 },
+   286→   286→    { uid: 'cmd-cactus', type: 'CACTUS', col: 12, row: 1 },
+   287→   287→    { uid: 'cmd-bin', type: 'BIN', col: 12, row: 9 },
+   288→   288→
+   289→   289→    // ═══════════════════════════════════════════════════════════
+   290→   290→    // MEETING ROOM (cols 14-24, rows 1-9)
+   291→   291→    // ═══════════════════════════════════════════════════════════
+   292→   292→
+   293→   293→    // ── Wall decorations ──
+   294→   294→    { uid: 'meet-clock', type: 'CLOCK', col: 15, row: 0 },
+   295→   295→    { uid: 'meet-wb', type: 'WHITEBOARD', col: 18, row: 0 },
+   296→   296→    { uid: 'meet-paint', type: 'LARGE_PAINTING', col: 22, row: 0 },
+   297→   297→
+   298→   298→    // ── Meeting table with chairs ──
+   299→   299→    { uid: 'meet-table', type: 'TABLE_FRONT', col: 18, row: 4 },
+   300→   300→    { uid: 'meet-bench1', type: 'CUSHIONED_BENCH', col: 17, row: 5 },
+   301→   301→    { uid: 'meet-bench2', type: 'CUSHIONED_BENCH', col: 21, row: 5 },
+   302→   302→    { uid: 'meet-chair1', type: 'CUSHIONED_CHAIR_FRONT', col: 18, row: 3 },
+   303→   303→    { uid: 'meet-chair2', type: 'CUSHIONED_CHAIR_BACK', col: 18, row: 6 },
+   304→   304→    { uid: 'meet-chair3', type: 'CUSHIONED_CHAIR_FRONT', col: 20, row: 3 },
+   305→   305→    { uid: 'meet-chair4', type: 'CUSHIONED_CHAIR_BACK', col: 20, row: 6 },
+   306→   306→
+   307→   307→    // ── Decorations ──
+   308→   308→    { uid: 'meet-plant1', type: 'PLANT_2', col: 14, row: 1 },
+   309→   309→    { uid: 'meet-plant2', type: 'LARGE_PLANT', col: 23, row: 8 },
+   310→   310→    { uid: 'meet-shelf', type: 'BOOKSHELF', col: 14, row: 0 },
+   311→   311→
+   312→   312→    // ═══════════════════════════════════════════════════════════
+   313→   313→    // DESIGN AREA (cols 26-38, rows 1-9)
+   314→   314→    // ═══════════════════════════════════════════════════════════
+   315→   315→
+   316→   316→    // ── Wall decorations ──
+   317→   317→    { uid: 'des-shelf', type: 'DOUBLE_BOOKSHELF', col: 26, row: 0 },
+   318→   318→    { uid: 'des-hplant', type: 'HANGING_PLANT', col: 30, row: 0 },
+   319→   319→    { uid: 'des-paint1', type: 'SMALL_PAINTING', col: 34, row: 0 },
+   320→   320→    { uid: 'des-paint2', type: 'SMALL_PAINTING_2', col: 37, row: 0 },
+   321→   321→
+   322→   322→    // ── Designer workstation ──
+   323→   323→    { uid: 'desk-des', type: 'DESK_FRONT', col: 29, row: 2 },
+   324→   324→    { uid: 'pc-des', type: 'PC_FRONT_OFF', col: 30, row: 2 },
+   325→   325→    { uid: 'chair-des', type: 'WOODEN_CHAIR_BACK', col: 30, row: 4 },
+   326→   326→
+   327→   327→    // ── Extra design workspace ──
+   328→   328→    { uid: 'des-table', type: 'COFFEE_TABLE', col: 29, row: 7 },
+   329→   329→    { uid: 'des-bench', type: 'CUSHIONED_BENCH', col: 28, row: 8 },
+   330→   330→    { uid: 'des-bench2', type: 'CUSHIONED_BENCH', col: 31, row: 8 },
+   331→   331→
+   332→   332→    // ── Decorations ──
+   333→   333→    { uid: 'des-plant1', type: 'PLANT', col: 37, row: 1 },
+   334→   334→    { uid: 'des-cactus', type: 'CACTUS', col: 26, row: 6 },
+   335→   335→    { uid: 'des-bin', type: 'BIN', col: 37, row: 9 },
+   336→   336→
+   337→   337→    // ═══════════════════════════════════════════════════════════
+   338→   338→    // DEVELOPMENT AREA (cols 1-12, rows 11-19)
+   339→   339→    // ═══════════════════════════════════════════════════════════
+   340→   340→
+   341→   341→    // ── Wall decorations ──
+   342→   342→    { uid: 'dev-shelf', type: 'BOOKSHELF', col: 1, row: 10 },
+   343→   343→    { uid: 'dev-wb', type: 'WHITEBOARD', col: 7, row: 10 },
+   344→   344→    { uid: 'dev-clock', type: 'CLOCK', col: 11, row: 10 },
+   345→   345→
+   346→   346→    // ── Frontend workstation ──
+   347→   347→    { uid: 'desk-fe', type: 'DESK_FRONT', col: 2, row: 12 },
+   348→   348→    { uid: 'pc-fe', type: 'PC_FRONT_OFF', col: 3, row: 12 },
+   349→   349→    { uid: 'chair-fe', type: 'WOODEN_CHAIR_BACK', col: 3, row: 14 },
+   350→   350→
+   351→   351→    // ── Backend workstation ──
+   352→   352→    { uid: 'desk-be', type: 'DESK_FRONT', col: 7, row: 12 },
+   353→   353→    { uid: 'pc-be', type: 'PC_FRONT_OFF', col: 8, row: 12 },
+   354→   354→    { uid: 'chair-be', type: 'WOODEN_CHAIR_BACK', col: 8, row: 14 },
+   355→   355→
+   356→   356→    // ── Decorations ──
+   357→   357→    { uid: 'dev-plant1', type: 'LARGE_PLANT', col: 1, row: 11 },
+   358→   358→    { uid: 'dev-plant2', type: 'PLANT', col: 11, row: 13 },
+   359→   359→    { uid: 'dev-cactus', type: 'CACTUS', col: 12, row: 17 },
+   360→   360→    { uid: 'dev-bin', type: 'BIN', col: 12, row: 19 },
+   361→   361→
+   362→   362→    // ═══════════════════════════════════════════════════════════
+   363→   363→    // SERVER ROOM (cols 14-24, rows 11-19)
+   364→   364→    // ═══════════════════════════════════════════════════════════
+   365→   365→
+   366→   366→    // ── Wall decorations ──
+   367→   367→    { uid: 'srv-shelf', type: 'DOUBLE_BOOKSHELF', col: 14, row: 10 },
+   368→   368→    { uid: 'srv-clock', type: 'CLOCK', col: 17, row: 10 },
+   369→   369→    { uid: 'srv-paint', type: 'LARGE_PAINTING', col: 23, row: 10 },
+   370→   370→
+   371→   371→    // ── Data Engineer workstation ──
+   372→   372→    { uid: 'desk-data', type: 'DESK_FRONT', col: 16, row: 12 },
+   373→   373→    { uid: 'pc-data', type: 'PC_FRONT_OFF', col: 17, row: 12 },
+   374→   374→    { uid: 'chair-data', type: 'WOODEN_CHAIR_BACK', col: 17, row: 14 },
+   375→   375→
+   376→   376→    // ── Server racks (using desks as proxy) ──
+   377→   377→    { uid: 'srv-rack1', type: 'DESK_SIDE', col: 21, row: 12 },
+   378→   378→    { uid: 'srv-rack2', type: 'DESK_SIDE', col: 21, row: 16 },
+   379→   379→
+   380→   380→    // ── Monitor wall ──
+   381→   381→    { uid: 'srv-pc1', type: 'PC_FRONT_OFF', col: 23, row: 11 },
+   382→   382→    { uid: 'srv-pc2', type: 'PC_FRONT_OFF', col: 24, row: 11 },
+   383→   383→
+   384→   384→    // ── Decorations ──
+   385→   385→    { uid: 'srv-plant1', type: 'PLANT_2', col: 14, row: 17 },
+   386→   386→    { uid: 'srv-bin', type: 'BIN', col: 23, row: 19 },
+   387→   387→    { uid: 'srv-pot', type: 'POT', col: 15, row: 18 },
+   388→   388→
+   389→   389→    // ═══════════════════════════════════════════════════════════
+   390→   390→    // RESEARCH AREA (cols 26-38, rows 11-19)
+   391→   391→    // ═══════════════════════════════════════════════════════════
+   392→   392→
+   393→   393→    // ── Wall decorations ──
+   394→   394→    { uid: 'res-wb', type: 'WHITEBOARD', col: 30, row: 10 },
+   395→   395→    { uid: 'res-shelf1', type: 'DOUBLE_BOOKSHELF', col: 26, row: 10 },
+   396→   396→    { uid: 'res-shelf2', type: 'BOOKSHELF', col: 36, row: 10 },
+   397→   397→
+   398→   398→    // ── Researcher workstation ──
+   399→   399→    { uid: 'desk-res', type: 'DESK_FRONT', col: 29, row: 12 },
+   400→   400→    { uid: 'pc-res', type: 'PC_FRONT_OFF', col: 30, row: 12 },
+   401→   401→    { uid: 'chair-res', type: 'WOODEN_CHAIR_BACK', col: 30, row: 14 },
+   402→   402→
+   403→   403→    // ── Research library ──
+   404→   404→    { uid: 'res-htable', type: 'SMALL_TABLE', col: 33, row: 15 },
+   405→   405→    { uid: 'res-hchair1', type: 'WOODEN_CHAIR_FRONT', col: 32, row: 16 },
+   406→   406→    { uid: 'res-hchair2', type: 'WOODEN_CHAIR_FRONT', col: 35, row: 16 },
+   407→   407→
+   408→   408→    // ── Decorations ──
+   409→   409→    { uid: 'res-plant1', type: 'LARGE_PLANT', col: 26, row: 11 },
+   410→   410→    { uid: 'res-cactus', type: 'CACTUS', col: 37, row: 17 },
+   411→   411→    { uid: 'res-plant2', type: 'PLANT', col: 37, row: 11 },
+   412→   412→    { uid: 'res-bin', type: 'BIN', col: 37, row: 19 },
+   413→   413→
+   414→   414→    // ═══════════════════════════════════════════════════════════
+   415→   415→    // QA LAB (cols 1-12, rows 21-29)
+   416→   416→    // ═══════════════════════════════════════════════════════════
+   417→   417→
+   418→   418→    // ── Wall decorations ──
+   419→   419→    { uid: 'qa-shelf', type: 'DOUBLE_BOOKSHELF', col: 1, row: 20 },
+   420→   420→    { uid: 'qa-wb', type: 'WHITEBOARD', col: 5, row: 20 },
+   421→   421→    { uid: 'qa-clock', type: 'CLOCK', col: 9, row: 20 },
+   422→   422→
+   423→   423→    // ── QA workstation (primary) ──
+   424→   424→    { uid: 'desk-qa2', type: 'DESK_FRONT', col: 2, row: 23 },
+   425→   425→    { uid: 'pc-qa2', type: 'PC_FRONT_OFF', col: 3, row: 23 },
+   426→   426→    { uid: 'chair-qa2', type: 'WOODEN_CHAIR_BACK', col: 3, row: 25 },
+   427→   427→
+   428→   428→    // ── QA secondary workstation ──
+   429→   429→    { uid: 'desk-qa3', type: 'DESK_FRONT', col: 7, row: 23 },
+   430→   430→    { uid: 'pc-qa3', type: 'PC_FRONT_OFF', col: 8, row: 23 },
+   431→   431→    { uid: 'chair-qa3', type: 'WOODEN_CHAIR_BACK', col: 8, row: 25 },
+   432→   432→
+   433→   433→    // ── Testing monitor wall ──
+   434→   434→    { uid: 'qa-pc1', type: 'PC_FRONT_OFF', col: 10, row: 21 },
+   435→   435→    { uid: 'qa-pc2', type: 'PC_FRONT_OFF', col: 11, row: 21 },
+   436→   436→
+   437→   437→    // ── Decorations ──
+   438→   438→    { uid: 'qa-plant1', type: 'LARGE_PLANT', col: 1, row: 21 },
+   439→   439→    { uid: 'qa-cactus', type: 'CACTUS', col: 12, row: 27 },
+   440→   440→    { uid: 'qa-bin', type: 'BIN', col: 12, row: 29 },
+   441→   441→
+   442→   442→    // ═══════════════════════════════════════════════════════════
+   443→   443→    // OPERATIONS CENTER (cols 14-24, rows 21-29)
+   444→   444→    // ═══════════════════════════════════════════════════════════
+   445→   445→
+   446→   446→    // ── Wall decorations ──
+   447→   447→    { uid: 'ops-shelf', type: 'DOUBLE_BOOKSHELF', col: 14, row: 20 },
+   448→   448→    { uid: 'ops-wb', type: 'WHITEBOARD', col: 18, row: 20 },
+   449→   449→    { uid: 'ops-paint', type: 'LARGE_PAINTING', col: 22, row: 20 },
+   450→   450→
+   451→   451→    // ── DevOps workstation ──
+   452→   452→    { uid: 'desk-ops', type: 'DESK_FRONT', col: 16, row: 23 },
+   453→   453→    { uid: 'pc-ops', type: 'PC_FRONT_OFF', col: 17, row: 23 },
+   454→   454→    { uid: 'chair-ops', type: 'WOODEN_CHAIR_BACK', col: 17, row: 25 },
+   455→   455→
+   456→   456→    // ── Operations monitoring station ──
+   457→   457→    { uid: 'desk-ops2', type: 'DESK_FRONT', col: 21, row: 23 },
+   458→   458→    { uid: 'pc-ops2', type: 'PC_FRONT_OFF', col: 22, row: 23 },
+   459→   459→    { uid: 'chair-ops2', type: 'WOODEN_CHAIR_BACK', col: 22, row: 25 },
+   460→   460→
+   461→   461→    // ── Monitor wall ──
+   462→   462→    { uid: 'ops-pc1', type: 'PC_FRONT_OFF', col: 14, row: 21 },
+   463→   463→    { uid: 'ops-pc2', type: 'PC_FRONT_OFF', col: 15, row: 21 },
+   464→   464→    { uid: 'ops-pc3', type: 'PC_FRONT_OFF', col: 23, row: 21 },
+   465→   465→
+   466→   466→    // ── Decorations ──
+   467→   467→    { uid: 'ops-plant1', type: 'PLANT_2', col: 24, row: 27 },
+   468→   468→    { uid: 'ops-pot', type: 'POT', col: 15, row: 28 },
+   469→   469→    { uid: 'ops-bin', type: 'BIN', col: 23, row: 29 },
+   470→   470→
+   471→   471→    // ═══════════════════════════════════════════════════════════
+   472→   472→    // WORKSHOP (cols 26-38, rows 21-29)
+   473→   473→    // ═══════════════════════════════════════════════════════════
+   474→   474→
+   475→   475→    // ── Wall decorations ──
+   476→   476→    { uid: 'ws-shelf', type: 'BOOKSHELF', col: 26, row: 20 },
+   477→   477→    { uid: 'ws-hplant', type: 'HANGING_PLANT', col: 32, row: 20 },
+   478→   478→    { uid: 'ws-paint', type: 'SMALL_PAINTING', col: 36, row: 20 },
+   479→   479→
+   480→   480→    // ── Workshop table ──
+   481→   481→    { uid: 'ws-table', type: 'TABLE_FRONT', col: 30, row: 24 },
+   482→   482→    { uid: 'ws-bench1', type: 'CUSHIONED_BENCH', col: 29, row: 25 },
+   483→   483→    { uid: 'ws-bench2', type: 'CUSHIONED_BENCH', col: 32, row: 25 },
+   484→   484→
+   485→   485→    // ── Whiteboard for brainstorming ──
+   486→   486→    { uid: 'ws-wb', type: 'WHITEBOARD', col: 35, row: 20 },
+   487→   487→
+   488→   488→    // ── Decorations ──
+   489→   489→    { uid: 'ws-plant1', type: 'LARGE_PLANT', col: 26, row: 21 },
+   490→   490→    { uid: 'ws-cactus', type: 'CACTUS', col: 37, row: 27 },
+   491→   491→    { uid: 'ws-bin', type: 'BIN', col: 37, row: 29 },
+   492→   492→
+   493→   493→    // ═══════════════════════════════════════════════════════════
+   494→   494→    // LOUNGE (cols 1-38, rows 31-34)
+   495→   495→    // ═══════════════════════════════════════════════════════════
+   496→   496→
+   497→   497→    // ── Wall decorations ──
+   498→   498→    { uid: 'lng-paint1', type: 'LARGE_PAINTING', col: 12, row: 30 },
+   499→   499→    { uid: 'lng-paint2', type: 'SMALL_PAINTING', col: 28, row: 30 },
+   500→   500→    { uid: 'lng-clock', type: 'CLOCK', col: 20, row: 30 },
+   501→   501→    { uid: 'lng-hplant1', type: 'HANGING_PLANT', col: 6, row: 30 },
+   502→   502→    { uid: 'lng-hplant2', type: 'HANGING_PLANT', col: 35, row: 30 },
+   503→   503→
+   504→   504→    // ── Sofa area ──
+   505→   505→    { uid: 'lng-sofa1', type: 'SOFA_FRONT', col: 2, row: 32 },
+   506→   506→    { uid: 'lng-sofa2', type: 'SOFA_FRONT', col: 5, row: 32 },
+   507→   507→    { uid: 'lng-ctable', type: 'COFFEE_TABLE', col: 3, row: 31 },
+   508→   508→
+   509→   509→    // ── Coffee / kitchen area ──
+   510→   510→    { uid: 'lng-coffee', type: 'COFFEE', col: 9, row: 31 },
+   511→   511→    { uid: 'lng-pot', type: 'POT', col: 10, row: 31 },  // water cooler proxy
+   512→   512→
+   513→   513→    // ── Dining area ──
+   514→   514→    { uid: 'lng-table', type: 'TABLE_FRONT', col: 16, row: 32 },
+   515→   515→    { uid: 'lng-bench1', type: 'CUSHIONED_BENCH', col: 15, row: 33 },
+   516→   516→    { uid: 'lng-bench2', type: 'CUSHIONED_BENCH', col: 18, row: 33 },
+   517→   517→
+   518→   518→    // ── Reading corner ──
+   519→   519→    { uid: 'lng-rtable', type: 'SMALL_TABLE', col: 24, row: 32 },
+   520→   520→    { uid: 'lng-rchair1', type: 'CUSHIONED_CHAIR_FRONT', col: 23, row: 33 },
+   521→   521→    { uid: 'lng-rchair2', type: 'CUSHIONED_CHAIR_FRONT', col: 26, row: 33 },
+   522→   522→    { uid: 'lng-rchair3', type: 'WOODEN_CHAIR_FRONT', col: 24, row: 31 },
+   523→   523→
+   524→   524→    // ── TV area ──
+   525→   525→    { uid: 'lng-tv', type: 'PC_FRONT_OFF', col: 32, row: 30 },  // TV proxy
+   526→   526→    { uid: 'lng-sofa3', type: 'SOFA_BACK', col: 31, row: 33 },
+   527→   527→    { uid: 'lng-sofa4', type: 'SOFA_BACK', col: 34, row: 33 },
+   528→   528→
+   529→   529→    // ── Decorations ──
+   530→   530→    { uid: 'lng-plant1', type: 'LARGE_PLANT', col: 1, row: 31 },
+   531→   531→    { uid: 'lng-plant2', type: 'PLANT', col: 14, row: 31 },
+   532→   532→    { uid: 'lng-plant3', type: 'PLANT_2', col: 29, row: 31 },
+   533→   533→    { uid: 'lng-plant4', type: 'CACTUS', col: 37, row: 32 },
+   534→   534→    { uid: 'lng-bin1', type: 'BIN', col: 12, row: 34 },
+   535→   535→    { uid: 'lng-bin2', type: 'BIN', col: 37, row: 34 },
+   536→   536→    { uid: 'lng-shelf', type: 'BOOKSHELF', col: 1, row: 30 },
+   537→   537→  ],
+   538→   538→};
+   539→   539→
+   540→   540→// Zone destinations for agent behavior (meeting, break, research)
+   541→   541→const ZONE_DESTINATIONS: Record<string, ZoneDestination[]> = {
+   542→   542→  [BehaviorState.MEETING]: [
+   543→   543→    { col: 17, row: 5 }, { col: 18, row: 5 }, { col: 19, row: 5 }, { col: 20, row: 5 },
+   544→   544→    { col: 18, row: 7 }, { col: 19, row: 7 },
+   545→   545→  ],
+   546→   546→  [BehaviorState.BREAK]: [
+   547→   547→    { col: 3, row: 33 }, { col: 6, row: 33 }, { col: 4, row: 31 },
+   548→   548→    { col: 15, row: 32 }, { col: 19, row: 32 },
+   549→   549→    { col: 25, row: 32 }, { col: 32, row: 32 }, { col: 35, row: 32 },
+   550→   550→  ],
+   551→   551→  [BehaviorState.RESEARCH]: [
+   552→   552→    { col: 29, row: 11 }, { col: 30, row: 11 }, { col: 31, row: 11 },
+   553→   553→    { col: 34, row: 14 }, { col: 27, row: 14 },
+   554→   554→    { col: 30, row: 26 }, { col: 31, row: 26 },
+   555→   555→  ],
+   556→   556→};
+   557→   557→
+   558→   558→// Zone labels for rendering
+   559→   559→const ZONE_LABELS: ZoneLabel[] = [
+   560→   560→  { text: '⚙ COMMAND CENTER', col: 6, row: 1, color: '#C4B5FD' },
+   561→   561→  { text: '🤝 MEETING ROOM', col: 19, row: 1, color: '#93C5FD' },
+   562→   562→  { text: '🎨 DESIGN', col: 32, row: 1, color: '#F9A8D4' },
+   563→   563→  { text: '💻 DEVELOPMENT', col: 6, row: 11, color: '#6EE7B7' },
+   564→   564→  { text: '🖥 SERVER ROOM', col: 19, row: 11, color: '#67E8F9' },
+   565→   565→  { text: '📚 RESEARCH', col: 32, row: 11, color: '#FCD34D' },
+   566→   566→  { text: '🛡️ QA LAB', col: 6, row: 21, color: '#FDA4AF' },
+   567→   567→  { text: '🚀 OPS CENTER', col: 19, row: 21, color: '#FDBA74' },
+   568→   568→  { text: '🔧 WORKSHOP', col: 32, row: 21, color: '#D8B4FE' },
+   569→   569→  { text: '☕ LOUNGE', col: 19, row: 31, color: '#FED7AA' },
+   570→   570→];
+   571→   571→
+   572→   572→export function AgentOffice({ workspaceId, onSeed }: AgentOfficeProps) {
+   573→   573→  const { state, loading, error, refetch } = useOfficeData(workspaceId, 5000);
+   574→   574→  const { newEvents, clearNewEvents } = useEventStream(workspaceId, 4000);
+   575→   575→  const [selectedAgent, setSelectedAgent] = useState<OfficeAgent | null>(null);
+   576→   576→  const [drawerOpen, setDrawerOpen] = useState(false);
+   577→   577→  const [activePanel, setActivePanel] = useState<ManagementPanel | null>(null);
+   578→   578→  const [assetsLoaded, setAssetsLoaded] = useState(false);
+   579→   579→  const [zoom, setZoom] = useState(2);
+   580→   580→  const panRef = useRef({ x: 0, y: 0 });
+   581→   581→  const isMobile = useIsMobile();
+   582→   582→  const [previewCollapsed, setPreviewCollapsed] = useState(true); // collapsed by default on mobile
+   583→   583→
+   584→   584→  // Create OfficeState from default layout (stable across renders)
+   585→   585→  const [officeState] = useState(() => {
+   586→   586→    const os = new OfficeState(DEFAULT_AGENT_OS_LAYOUT);
+   587→   587→    os.setZoneDestinations(ZONE_DESTINATIONS);
+   588→   588→    os.setZoneLabels(ZONE_LABELS);
+   589→   589→    return os;
+   590→   590→  });
+   591→   591→
+   592→   592→  // Load assets on mount
+   593→   593→  useEffect(() => {
+   594→   594→    let mounted = true;
+   595→   595→    loadAllAssets().then((success) => {
+   596→   596→      if (mounted && success) {
+   597→   597→        setAssetsLoaded(true);
+   598→   598→        // Rebuild layout after assets are loaded (furniture catalog is now available)
+   599→   599→        const layout = DEFAULT_AGENT_OS_LAYOUT;
+   600→   600→        officeState.rebuildFromLayout(layout);
+   601→   601→        officeState.setZoneDestinations(ZONE_DESTINATIONS);
+   602→   602→        officeState.setZoneLabels(ZONE_LABELS);
+   603→   603→        console.log('✓ Pixel office assets loaded and layout rebuilt');
+   604→   604→      }
+   605→   605→    });
+   606→   606→    return () => { mounted = false; };
+   607→   607→  }, [officeState]);
+   608→   608→
+   609→   609→  useEffect(() => {
+   610→   610→    if (!state?.agents) return;
+   611→   611→
+   612→   612→    const currentAgentIds = new Set(state.agents.map((a) => a.id));
+   613→   613→
+   614→   614→    // Add new agents
+   615→   615→    for (const agent of state.agents) {
+   616→   616→      const numericId = hashAgentId(agent.id);
+   617→   617→      if (!officeState.characters.has(numericId)) {
+   618→   618→        const status = agent.runtimeState?.status ?? agent.status;
+   619→   619→        const preferredSeatId = ROLE_SEAT_MAP[agent.role];
+   620→   620→        officeState.addAgent(numericId, undefined, undefined, preferredSeatId);
+   621→   621→        // Set name and role on the newly created character
+   622→   622→        const ch = officeState.characters.get(numericId);
+   623→   623→        if (ch) {
+   624→   624→          ch.name = agent.name || agent.role;
+   625→   625→          ch.role = agent.role;
+   626→   626→        }
+   627→   627→        officeState.setAgentActive(numericId, mapAgentStatusToActive(status));
+   628→   628→        officeState.setAgentTool(numericId, mapAgentStatusToTool(status));
+   629→   629→
+   630→   630→        // Set initial behavior based on status
+   631→   631→        const behavior = mapAgentStatusToBehavior(status);
+   632→   632→        if (behavior !== BehaviorState.WORKING) {
+   633→   633→          officeState.setAgentBehavior(numericId, behavior);
+   634→   634→        }
+   635→   635→
+   636→   636→        const bubble = mapAgentStatusToBubble(status);
+   637→   637→        if (bubble === 'permission') officeState.showPermissionBubble(numericId);
+   638→   638→        else if (bubble === 'waiting') officeState.showWaitingBubble(numericId);
+   639→   639→      } else {
+   640→   640→        // Update existing agent state
+   641→   641→        const status = agent.runtimeState?.status ?? agent.status;
+   642→   642→        const ch = officeState.characters.get(numericId);
+   643→   643→        if (ch) {
+   644→   644→          const isActive = mapAgentStatusToActive(status);
+   645→   645→          if (ch.isActive !== isActive) {
+   646→   646→            officeState.setAgentActive(numericId, isActive);
+   647→   647→          }
+   648→   648→          officeState.setAgentTool(numericId, mapAgentStatusToTool(status));
+   649→   649→          officeState.setAgentStatus(numericId, status);
+   650→   650→
+   651→   651→          // Update name/role
+   652→   652→          ch.name = agent.name || agent.role;
+   653→   653→          ch.role = agent.role;
+   654→   654→
+   655→   655→          // Handle bubbles
+   656→   656→          const bubble = mapAgentStatusToBubble(status);
+   657→   657→          if (bubble === 'permission' && ch.bubbleType !== 'permission') {
+   658→   658→            officeState.showPermissionBubble(numericId);
+   659→   659→          } else if (bubble === 'waiting' && ch.bubbleType !== 'waiting') {
+   660→   660→            officeState.showWaitingBubble(numericId);
+   661→   661→          } else if (!bubble && ch.bubbleType && ch.bubbleType !== 'done') {
+   662→   662→            officeState.dismissBubble(numericId);
+   663→   663→          }
+   664→   664→        }
+   665→   665→      }
+   666→   666→    }
+   667→   667→
+   668→   668→    // Remove agents that no longer exist
+   669→   669→    for (const [id] of officeState.characters) {
+   670→   670→      const idStr = unhashAgentId(id);
+   671→   671→      if (idStr && !currentAgentIds.has(idStr)) {
+   672→   672→        officeState.removeAgent(id);
+   673→   673→      }
+   674→   674→    }
+   675→   675→
+   676→   676→  }, [state?.agents, officeState]);
+   677→   677→
+   678→   678→  // Handle event-driven visual reactions
+   679→   679→  useEffect(() => {
+   680→   680→    if (!newEvents.length) return;
+   681→   681→    for (const event of newEvents) {
+   682→   682→      if (event.entityType === 'agent' && event.entityId) {
+   683→   683→        const numericId = hashAgentId(event.entityId);
+   684→   684→        const ch = officeState.characters.get(numericId);
+   685→   685→        if (!ch) continue;
+   686→   686→
+   687→   687→        switch (event.eventType) {
+   688→   688→          case 'agent.status_changed':
+   689→   689→            if (event.payload?.newStatus) {
+   690→   690→              const newStatus = event.payload.newStatus as string;
+   691→   691→              officeState.setAgentActive(numericId, mapAgentStatusToActive(newStatus));
+   692→   692→              officeState.setAgentTool(numericId, mapAgentStatusToTool(newStatus));
+   693→   693→              // Set behavior based on new status
+   694→   694→              const behavior = mapAgentStatusToBehavior(newStatus);
+   695→   695→              officeState.setAgentBehavior(numericId, behavior);
+   696→   696→            }
+   697→   697→            break;
+   698→   698→          case 'task.assigned':
+   699→   699→            // Agent sits at computer and starts working
+   700→   700→            officeState.setAgentBehavior(numericId, BehaviorState.WORKING);
+   701→   701→            break;
+   702→   702→          case 'task.started':
+   703→   703→            officeState.setAgentBehavior(numericId, BehaviorState.WORKING);
+   704→   704→            break;
+   705→   705→          case 'task.completed':
+   706→   706→            // Show ✓ Done bubble, then idle briefly
+   707→   707→            officeState.showDoneBubble(numericId);
+   708→   708→            officeState.setAgentBehavior(numericId, BehaviorState.IDLE, 5);
+   709→   709→            break;
+   710→   710→          case 'task.failed':
+   711→   711→            officeState.setAgentBehavior(numericId, BehaviorState.IDLE, 5);
+   712→   712→            break;
+   713→   713→          case 'tool.execution_started':
+   714→   714→            // Agent sits and types
+   715→   715→            officeState.setAgentBehavior(numericId, BehaviorState.WORKING);
+   716→   716→            officeState.setAgentTool(numericId, event.payload?.toolKey as string || 'Write');
+   717→   717→            break;
+   718→   718→          case 'tool.execution_succeeded':
+   719→   719→          case 'tool.execution_failed':
+   720→   720→            officeState.setAgentTool(numericId, null);
+   721→   721→            break;
+   722→   722→          case 'approval.requested':
+   723→   723→            // Agent goes to meeting / orchestrator area
+   724→   724→            officeState.showPermissionBubble(numericId);
+   725→   725→            officeState.setAgentBehavior(numericId, BehaviorState.MEETING, 15);
+   726→   726→            break;
+   727→   727→          case 'approval.approved':
+   728→   728→          case 'approval.rejected':
+   729→   729→            officeState.dismissBubble(numericId);
+   730→   730→            officeState.setAgentBehavior(numericId, BehaviorState.WORKING);
+   731→   731→            break;
+   732→   732→        }
+   733→   733→      }
+   734→   734→    }
+   735→   735→    clearNewEvents();
+   736→   736→  }, [newEvents, clearNewEvents, officeState]);
+   737→   737→
+   738→   738→  const handleAgentClick = useCallback((numericId: number) => {
+   739→   739→    // Find the agent in our state by numeric ID
+   740→   740→    const agent = state?.agents.find((a) => hashAgentId(a.id) === numericId);
+   741→   741→    if (agent) {
+   742→   742→      setSelectedAgent(agent);
+   743→   743→      setDrawerOpen(true);
+   744→   744→    }
+   745→   745→  }, [state?.agents]);
+   746→   746→
+   747→   747→  const handleApprovalAction = useCallback((_approvalId: string, _action: 'approve' | 'reject') => {
+   748→   748→    setTimeout(() => refetch(), 500);
+   749→   749→  }, [refetch]);
+   750→   750→
+   751→   751→  const openPanel = useCallback((panel: ManagementPanel) => {
+   752→   752→    setActivePanel(panel);
+   753→   753→  }, []);
+   754→   754→
+   755→   755→  const closePanel = useCallback(() => {
+   756→   756→    setActivePanel(null);
+   757→   757→  }, []);
+   758→   758→
+   759→   759→  // Loading state
+   760→   760→  if (loading && !state) {
+   761→   761→    return (
+   762→   762→      <div className="h-full flex items-center justify-center bg-[#1a1a2e]">
+   763→   763→        <div className="text-center space-y-3">
+   764→   764→          <Loader2 className="w-8 h-8 animate-spin mx-auto text-violet-400" />
+   765→   765→          <p className="text-sm text-slate-400">Loading Pixel Office...</p>
+   766→   766→        </div>
+   767→   767→      </div>
+   768→   768→    );
+   769→   769→  }
+   770→   770→
+   771→   771→  // Error state
+   772→   772→  if (error && !state) {
+   773→   773→    return (
+   774→   774→      <div className="h-full flex items-center justify-center bg-[#1a1a2e]">
+   775→   775→        <div className="text-center space-y-3">
+   776→   776→          <p className="text-sm text-red-400">Error: {error}</p>
+   777→   777→          <Button variant="outline" onClick={refetch}>
+   778→   778→            <RefreshCw className="w-4 h-4 mr-1" /> Retry
+   779→   779→          </Button>
+   780→   780→        </div>
+   781→   781→      </div>
+   782→   782→    );
+   783→   783→  }
+   784→   784→
+   785→   785→  // No workspace — show seed prompt
+   786→   786→  if (!state || state.agents.length === 0) {
+   787→   787→    return (
+   788→   788→      <div className="h-full flex items-center justify-center bg-[#1a1a2e]">
+   789→   789→        <div className="text-center space-y-4 max-w-md">
+   790→   790→          <div className="text-5xl">🏢</div>
+   791→   791→          <h2 className="text-xl font-bold text-white">Welcome to Agent OS</h2>
+   792→   792→          <p className="text-sm text-slate-400">
+   793→   793→            Initialize your workspace to see the Pixel Agent Office with 10 AI specialists.
+   794→   794→          </p>
+   795→   795→          <Button onClick={onSeed} size="lg" className="bg-violet-600 hover:bg-violet-700">
+   796→   796→            🚀 Initialize System
+   797→   797→          </Button>
+   798→   798→        </div>
+   799→   799→      </div>
+   800→   800→    );
+   801→   801→  }
+   802→   802→
+   803→   803→  const { agents, tasks, approvals, toolExecutions, recentEvents, situation } = state;
+   804→   804→
+   805→   805→  return (
+   806→   806→    <div className="h-full flex flex-col overflow-hidden">
+   807→   807→      {/* ─── Minimal Top Bar (translucent, overlays office) ─── */}
+   808→   808→      <div className="flex items-center justify-between px-2 md:px-3 py-1 bg-black/60 backdrop-blur-md border-b border-white/10 z-30 flex-shrink-0">
+   809→   809→        <div className="flex items-center gap-1.5 md:gap-2">
+   810→   810→          <Building2 className="w-3.5 h-3.5 md:w-4 md:h-4 text-violet-400" />
+   811→   811→          <h1 className="text-xs md:text-sm font-bold text-white">Agent OS</h1>
+   812→   812→          <Badge variant="outline" className="text-[8px] md:text-[9px] h-3.5 md:h-4 px-1 md:px-1.5 border-white/20 text-slate-300">
+   813→   813→            {workspaceId?.slice(-8)}
+   814→   814→          </Badge>
+   815→   815→          <span className="text-[8px] md:text-[9px] text-slate-400 ml-0.5 md:ml-1">
+   816→   816→            {agents.filter(a => {
+   817→   817→              const s = a.runtimeState?.status ?? a.status;
+   818→   818→              return s !== 'offline';
+   819→   819→            }).length}/{agents.length} active
+   820→   820→          </span>
+   821→   821→        </div>
+   822→   822→
+   823→   823→        {/* Situation indicators */}
+   824→   824→        <div className="flex items-center gap-1 md:gap-1.5">
+   825→   825→          {situation.approvalsNeeded > 0 && (
+   826→   826→            <Badge variant="destructive" className="text-[8px] md:text-[9px] h-3.5 md:h-4 px-1 md:px-1.5 cursor-pointer" onClick={() => openPanel('approvals')}>
+   827→   827→              <AlertTriangle className="w-2.5 h-2.5 mr-0.5" />
+   828→   828→              {situation.approvalsNeeded}
+   829→   829→            </Badge>
+   830→   830→          )}
+   831→   831→          {situation.runningTools > 0 && (
+   832→   832→            <Badge variant="outline" className="text-[8px] md:text-[9px] h-3.5 md:h-4 px-1 md:px-1.5 border-white/20 text-slate-300">
+   833→   833→              <Loader2 className="w-2.5 h-2.5 mr-0.5 animate-spin" />
+   834→   834→              {situation.runningTools}
+   835→   835→            </Badge>
+   836→   836→          )}
+   837→   837→          {newEvents.length > 0 && (
+   838→   838→            <Badge variant="secondary" className="text-[8px] md:text-[9px] h-3.5 md:h-4 px-1 md:px-1.5 cursor-pointer" onClick={() => openPanel('events')}>
+   839→   839→              <Radio className="w-2.5 h-2.5 mr-0.5" />
+   840→   840→              {newEvents.length}
+   841→   841→            </Badge>
+   842→   842→          )}
+   843→   843→          <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-slate-400 hover:text-white" onClick={refetch}>
+   844→   844→            <RefreshCw className="w-3 h-3" />
+   845→   845→          </Button>
+   846→   846→        </div>
+   847→   847→      </div>
+   848→   848→
+   849→   849→      {/* ─── Main content area - split screen on desktop, stack on mobile ─── */}
+   850→   850→      <div className="flex-1 min-h-0 flex flex-col md:flex-row">
+   851→   851→        {/* Office canvas */}
+   852→   852→        <div className="flex-1 min-h-0 relative">
+   853→   853→          <PixelOfficeCanvas
+   854→   854→            officeState={officeState}
+   855→   855→            onAgentClick={handleAgentClick}
+   856→   856→            zoom={zoom}
+   857→   857→            onZoomChange={setZoom}
+   858→   858→            panRef={panRef}
+   859→   859→          />
+   860→   860→
+   861→   861→          {/* Asset loading overlay */}
+   862→   862→          {!assetsLoaded && (
+   863→   863→            <div className="absolute inset-0 flex items-center justify-center bg-[#1a1a2e]/80 z-20 pointer-events-none">
+   864→   864→              <div className="text-center space-y-2">
+   865→   865→                <Loader2 className="w-6 h-6 animate-spin mx-auto text-violet-400" />
+   866→   866→                <p className="text-xs text-slate-400">Loading pixel assets...</p>
+   867→   867→              </div>
+   868→   868→            </div>
+   869→   869→          )}
+   870→   870→
+   871→   871→          {/* ─── Floating Management Toolbar ─── */}
+   872→   872→          {!isMobile ? (
+   873→   873→            <div className="absolute right-3 top-3 flex flex-col gap-1.5 z-40">
+   874→   874→              {(Object.entries(PANEL_CONFIG) as [ManagementPanel, typeof PANEL_CONFIG[ManagementPanel]][]).map(
+   875→   875→                ([key, config]) => {
+   876→   876→                  const Icon = config.icon;
+   877→   877→                  const count =
+   878→   878→                    key === 'tasks' ? tasks.length :
+   879→   879→                    key === 'approvals' ? approvals.length :
+   880→   880→                    key === 'events' ? recentEvents.length : 0;
+   881→   881→
+   882→   882→                  return (
+   883→   883→                    <Button
+   884→   884→                      key={key}
+   885→   885→                      variant={activePanel === key ? 'default' : 'outline'}
+   886→   886→                      size="sm"
+   887→   887→                      className={`h-9 w-9 p-0 shadow-lg backdrop-blur-sm relative transition-all ${
+   888→   888→                        activePanel === key
+   889→   889→                          ? 'bg-violet-600 hover:bg-violet-700 text-white border-violet-600'
+   890→   890→                          : 'bg-black/50 hover:bg-black/70 border-white/10 text-white'
+   891→   891→                      }`}
+   892→   892→                      onClick={() => activePanel === key ? closePanel() : openPanel(key)}
+   893→   893→                      title={config.label}
+   894→   894→                    >
+   895→   895→                      <Icon className={`w-4 h-4 ${activePanel === key ? 'text-white' : 'text-slate-300'}`} />
+   896→   896→                      {count > 0 && key !== 'situation' && key !== 'orchestrator' && (
+   897→   897→                        <span className="absolute -top-1 -right-1 text-[7px] font-bold bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center shadow-sm">
+   898→   898→                          {count > 9 ? '9+' : count}
+   899→   899→                        </span>
+   900→   900→                      )}
+   901→   901→                    </Button>
+   902→   902→                  );
+   903→   903→                },
+   904→   904→              )}
+   905→   905→            </div>
+   906→   906→          ) : (
+   907→   907→            /* Mobile: horizontal toolbar at bottom of office area */
+   908→   908→            <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex gap-1 z-40">
+   909→   909→              {(Object.entries(PANEL_CONFIG) as [ManagementPanel, typeof PANEL_CONFIG[ManagementPanel]][]).map(
+   910→   910→                ([key, config]) => {
+   911→   911→                  const Icon = config.icon;
+   912→   912→                  const count =
+   913→   913→                    key === 'tasks' ? tasks.length :
+   914→   914→                    key === 'approvals' ? approvals.length :
+   915→   915→                    key === 'events' ? recentEvents.length : 0;
+   916→   916→
+   917→   917→                  return (
+   918→   918→                    <Button
+   919→   919→                      key={key}
+   920→   920→                      variant={activePanel === key ? 'default' : 'outline'}
+   921→   921→                      size="sm"
+   922→   922→                      className={`h-10 w-10 p-0 shadow-lg backdrop-blur-sm relative transition-all ${
+   923→   923→                        activePanel === key
+   924→   924→                          ? 'bg-violet-600 hover:bg-violet-700 text-white border-violet-600'
+   925→   925→                          : 'bg-black/50 hover:bg-black/70 border-white/10 text-white'
+   926→   926→                      }`}
+   927→   927→                      onClick={() => activePanel === key ? closePanel() : openPanel(key)}
+   928→   928→                      title={config.label}
+   929→   929→                    >
+   930→   930→                      <Icon className={`w-4 h-4 ${activePanel === key ? 'text-white' : 'text-slate-300'}`} />
+   931→   931→                      {count > 0 && key !== 'situation' && key !== 'orchestrator' && (
+   932→   932→                        <span className="absolute -top-1 -right-1 text-[7px] font-bold bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center shadow-sm">
+   933→   933→                          {count > 9 ? '9+' : count}
+   934→   934→                        </span>
+   935→   935→                      )}
+   936→   936→                    </Button>
+   937→   937→                  );
+   938→   938→                },
+   939→   939→              )}
+   940→   940→            </div>
+   941→   941→          )}
+   942→   942→
+   943→   943→          {/* ─── Zoom Controls ─── */}
+   944→   944→          <div className="absolute left-3 bottom-3 flex items-center gap-1 z-40">
+   945→   945→            <Button
+   946→   946→              variant="outline"
+   947→   947→              size="sm"
+   948→   948→              className={`${isMobile ? 'h-9 w-9' : 'h-7 w-7'} p-0 bg-black/50 border-white/10 text-white hover:bg-black/70`}
+   949→   949→              onClick={() => setZoom(Math.max(1, zoom - 1))}
+   950→   950→            >
+   951→   951→              −
+   952→   952→            </Button>
+   953→   953→            <span className="text-[10px] text-slate-400 w-6 text-center">{zoom}x</span>
+   954→   954→            <Button
+   955→   955→              variant="outline"
+   956→   956→              size="sm"
+   957→   957→              className={`${isMobile ? 'h-9 w-9' : 'h-7 w-7'} p-0 bg-black/50 border-white/10 text-white hover:bg-black/70`}
+   958→   958→              onClick={() => setZoom(Math.min(10, zoom + 1))}
+   959→   959→            >
+   960→   960→              +
+   961→   961→            </Button>
+   962→   962→          </div>
+   963→   963→        </div>
+   964→   964→
+   965→   965→        {/* Preview panel - side panel on desktop, bottom panel on mobile */}
+   966→   966→        {!isMobile ? (
+   967→   967→          <div className="w-[340px] lg:w-[380px] border-l border-white/10 flex-shrink-0">
+   968→   968→            <PreviewPanel
+   969→   969→              selectedAgent={selectedAgent}
+   970→   970→              situation={situation}
+   971→   971→              agents={agents}
+   972→   972→              tasks={tasks}
+   973→   973→              recentEvents={recentEvents}
+   974→   974→              toolExecutions={toolExecutions}
+   975→   975→              approvalsCount={approvals.length}
+   976→   976→            />
+   977→   977→          </div>
+   978→   978→        ) : (
+   979→   979→          <div className={`flex-shrink-0 transition-all duration-300 ${previewCollapsed ? 'h-8' : 'h-[45vh]'}`}>
+   980→   980→            <PreviewPanel
+   981→   981→              selectedAgent={selectedAgent}
+   982→   982→              situation={situation}
+   983→   983→              agents={agents}
+   984→   984→              tasks={tasks}
+   985→   985→              recentEvents={recentEvents}
+   986→   986→              toolExecutions={toolExecutions}
+   987→   987→              approvalsCount={approvals.length}
+   988→   988→              isMobile={isMobile}
+   989→   989→              collapsed={previewCollapsed}
+   990→   990→              onToggleCollapse={() => setPreviewCollapsed(!previewCollapsed)}
+   991→   991→            />
+   992→   992→          </div>
+   993→   993→        )}
+   994→   994→      </div>
+   995→   995→
+   996→   996→      {/* ─── Management Panel Slide-over ─── */}
+   997→   997→      <Sheet open={!!activePanel} onOpenChange={(open) => { if (!open) closePanel(); }}>
+   998→   998→        <SheetContent side="right" className="w-[420px] sm:w-[480px] p-0">
+   999→   999→          <SheetHeader className="px-4 py-3 border-b">
+  1000→  1000→            <div className="flex items-center gap-2">
+  1001→  1001→              {activePanel && (() => {
+  1002→  1002→                const config = PANEL_CONFIG[activePanel];
+  1003→  1003→                const Icon = config.icon;
+  1004→  1004→                return (
+  1005→  1005→                  <>
+  1006→  1006→                    <Icon className={`w-4 h-4 ${config.color}`} />
+  1007→  1007→                    <SheetTitle className="text-sm">{config.label}</SheetTitle>
+  1008→  1008→                  </>
+  1009→  1009→                );
+  1010→  1010→              })()}
+  1011→  1011→            </div>
+  1012→  1012→          </SheetHeader>
+  1013→  1013→          <div className="flex-1 overflow-auto p-4">
+  1014→  1014→            {activePanel === 'tasks' && <TaskBoard tasks={tasks} />}
+  1015→  1015→            {activePanel === 'situation' && (
+  1016→  1016→              <SituationRoom situation={situation} agents={agents} recentEvents={recentEvents} />
+  1017→  1017→            )}
+  1018→  1018→            {activePanel === 'orchestrator' && (
+  1019→  1019→              <OrchestratorPanel workspaceId={workspaceId!} agents={agents} />
+  1020→  1020→            )}
+  1021→  1021→            {activePanel === 'approvals' && (
+  1022→  1022→              <ApprovalQueue approvals={approvals} workspaceId={workspaceId!} onAction={handleApprovalAction} />
+  1023→  1023→            )}
+  1024→  1024→            {activePanel === 'events' && <EventTimeline events={recentEvents} />}
+  1025→  1025→          </div>
+  1026→  1026→        </SheetContent>
+  1027→  1027→      </Sheet>
+  1028→  1028→
+  1029→  1029→      {/* ─── Agent Details Drawer ─── */}
+  1030→  1030→      <AgentDetailsDrawer
+  1031→  1031→        agent={selectedAgent}
+  1032→  1032→        open={drawerOpen}
+  1033→  1033→        onClose={() => setDrawerOpen(false)}
+  1034→  1034→        recentEvents={recentEvents}
+  1035→  1035→        toolExecutions={toolExecutions}
+  1036→  1036→      />
+  1037→  1037→    </div>
+  1038→  1038→  );
+  1039→  1039→}
+  1040→  1040→
+  1041→  1041→// Bidirectional mapping between string agent IDs and numeric IDs for the pixel engine
+  1042→  1042→const idToNumeric = new Map<string, number>();
+  1043→  1043→const numericToId = new Map<number, string>();
+  1044→  1044→let nextNumericId = 1;
+  1045→  1045→
+  1046→  1046→function hashAgentId(id: string): number {
+  1047→  1047→  const existing = idToNumeric.get(id);
+  1048→  1048→  if (existing !== undefined) return existing;
+  1049→  1049→  const num = nextNumericId++;
+  1050→  1050→  idToNumeric.set(id, num);
+  1051→  1051→  numericToId.set(num, id);
+  1052→  1052→  return num;
+  1053→  1053→}
+  1054→  1054→
+  1055→  1055→function unhashAgentId(num: number): string | undefined {
+  1056→  1056→  return numericToId.get(num);
+  1057→  1057→}
+  1058→  1058→

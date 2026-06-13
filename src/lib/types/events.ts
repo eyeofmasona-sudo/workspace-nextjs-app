@@ -75,6 +75,15 @@ export const EventTypes = {
   TOOL_EXECUTION_BLOCKED: 'tool.execution_blocked',
   TOOL_APPROVAL_REQUIRED: 'tool.approval_required',
   TOOL_EXECUTION_RESUMED: 'tool.execution_resumed',
+
+  // Cross-department handoff events
+  PRODUCT_CONCEPT_READY: 'handoff.product_concept_ready',
+  MVP_READY_FOR_MARKETING: 'handoff.mvp_ready_for_marketing',
+  RELEASE_CANDIDATE_READY: 'handoff.release_candidate_ready',
+  LAUNCH_APPROVED: 'handoff.launch_approved',
+  CAMPAIGN_LIVE: 'handoff.campaign_live',
+  MARKET_FEEDBACK_COLLECTED: 'handoff.market_feedback_collected',
+  POST_LAUNCH_REVIEW: 'handoff.post_launch_review',
 } as const;
 
 export type EventType = (typeof EventTypes)[keyof typeof EventTypes];
@@ -380,6 +389,71 @@ export interface ToolExecutionResumedPayload extends BaseEventPayload {
   correlationId?: string;
 }
 
+// ─── Cross-Department Handoff Event Payloads ────────────────
+
+export interface ProductConceptReadyPayload extends BaseEventPayload {
+  workspaceId: string;
+  projectId: string;
+  productBrief: string;
+  targetUserHypothesis: string;
+  knownConstraints: string[];
+  emittedBy: string; // agent ID that emitted
+}
+
+export interface MvpReadyForMarketingPayload extends BaseEventPayload {
+  workspaceId: string;
+  projectId: string;
+  prd: string;
+  changelog: string;
+  demoUrl?: string;
+  screenshots?: string[];
+  emittedBy: string;
+}
+
+export interface ReleaseCandidateReadyPayload extends BaseEventPayload {
+  workspaceId: string;
+  projectId: string;
+  releaseNotes: string;
+  version: string;
+  features: string[];
+  knownIssues: string[];
+  emittedBy: string;
+}
+
+export interface LaunchApprovedPayload extends BaseEventPayload {
+  workspaceId: string;
+  projectId: string;
+  launchPlan: string;
+  targetDate: string;
+  approvedBy: string;
+}
+
+export interface CampaignLivePayload extends BaseEventPayload {
+  workspaceId: string;
+  projectId: string;
+  campaignId: string;
+  channel: string;
+  liveUrl?: string;
+  emittedBy: string;
+}
+
+export interface MarketFeedbackCollectedPayload extends BaseEventPayload {
+  workspaceId: string;
+  projectId: string;
+  feedbackType: string; // sentiment | conversion | retention | nps | review
+  summary: string;
+  dataPoints: number;
+  emittedBy: string;
+}
+
+export interface PostLaunchReviewPayload extends BaseEventPayload {
+  workspaceId: string;
+  projectId: string;
+  kpiResults: Record<string, unknown>;
+  recommendations: string[];
+  devFeedbackItems: string[];
+}
+
 // ─── Event Map (for type-safe subscriptions) ─────────────────
 
 export interface EventMap {
@@ -427,6 +501,13 @@ export interface EventMap {
   [EventTypes.TOOL_EXECUTION_BLOCKED]: ToolExecutionBlockedPayload;
   [EventTypes.TOOL_APPROVAL_REQUIRED]: ToolApprovalRequiredPayload;
   [EventTypes.TOOL_EXECUTION_RESUMED]: ToolExecutionResumedPayload;
+  [EventTypes.PRODUCT_CONCEPT_READY]: ProductConceptReadyPayload;
+  [EventTypes.MVP_READY_FOR_MARKETING]: MvpReadyForMarketingPayload;
+  [EventTypes.RELEASE_CANDIDATE_READY]: ReleaseCandidateReadyPayload;
+  [EventTypes.LAUNCH_APPROVED]: LaunchApprovedPayload;
+  [EventTypes.CAMPAIGN_LIVE]: CampaignLivePayload;
+  [EventTypes.MARKET_FEEDBACK_COLLECTED]: MarketFeedbackCollectedPayload;
+  [EventTypes.POST_LAUNCH_REVIEW]: PostLaunchReviewPayload;
 }
 
 // ─── Event Handler Types ─────────────────────────────────────

@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (zone) {
-      const agents = await agentRegistry.getAgentsByZone(zone as 'command_area' | 'situation_room' | 'development_area' | 'design_area' | 'research_area' | 'server_room' | 'meeting_room' | 'lounge_area', workspaceId ?? undefined);
+      const agents = await agentRegistry.getAgentsByZone(zone as 'command_area' | 'situation_room' | 'development_area' | 'design_area' | 'research_area' | 'server_room' | 'meeting_room' | 'lounge_area' | 'marketing_area' | 'content_studio' | 'growth_lab', workspaceId ?? undefined);
       return NextResponse.json({ agents });
     }
 

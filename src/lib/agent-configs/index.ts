@@ -14,6 +14,11 @@ import { dataEngineerConfig } from './data-engineer';
 import { qaEngineerConfig } from './qa-engineer';
 import { devopsEngineerConfig } from './devops-engineer';
 import { securityEngineerConfig } from './security-engineer';
+import { marketingLeadConfig } from './marketing-lead';
+import { marketResearcherConfig } from './market-researcher';
+import { contentStrategistConfig } from './content-strategist';
+import { growthManagerConfig } from './growth-manager';
+import { marketingAnalystConfig } from './marketing-analyst';
 
 /**
  * All built-in agent config definitions.
@@ -31,6 +36,11 @@ export const AGENT_CONFIGS: AgentConfig[] = [
   qaEngineerConfig,
   devopsEngineerConfig,
   securityEngineerConfig,
+  marketingLeadConfig,
+  marketResearcherConfig,
+  contentStrategistConfig,
+  growthManagerConfig,
+  marketingAnalystConfig,
 ];
 
 /**

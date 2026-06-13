@@ -12,7 +12,7 @@ import {
   AlertTriangle, CheckCircle2, XCircle, Loader2, Sparkles,
   Crown, Wrench, ChevronDown, ChevronUp, UserPlus, Trash2,
   ListChecks, BarChart3, Radio, Building2, MessageSquare,
-  PanelLeftClose, PanelLeftOpen, Globe,
+  PanelLeftClose, PanelLeftOpen, Globe, Sparkle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -53,6 +53,9 @@ import type { OfficeAgent } from '@/hooks/useOfficeData';
 
 // ─── Browser Operator ─────────────────────────────────────────
 import { BrowserOperatorPanel } from '@/components/browser-operator/BrowserOperatorPanel';
+
+// ─── Ecosystem Panel ───────────────────────────────────────────
+import { EcosystemPanel } from '@/components/ecosystem';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -256,55 +259,71 @@ const CAPABILITY_OPTIONS = [
   'code_review', 'deployment', 'monitoring', 'documentation',
 ];
 
-// ─── Pixel Office Layout (40×36) ─────────────────────────────
+// ─── Pixel Office Layout (40×31, 9 rooms in 3×3 grid) ────────
 const COLS = 40;
-const ROWS = 36;
+const ROWS = 31;
 
 function buildTiles(): TileTypeVal[] {
   const W = 0 as TileTypeVal;
-  const F1 = 1 as TileTypeVal;
-  const F2 = 2 as TileTypeVal;
-  const F3 = 3 as TileTypeVal;
-  const F4 = 4 as TileTypeVal;
-  const F5 = 5 as TileTypeVal;
-  const F6 = 6 as TileTypeVal;
-  const F7 = 7 as TileTypeVal;
-  const F8 = 8 as TileTypeVal;
-  const F9 = 9 as TileTypeVal;
-  const F10 = 10 as TileTypeVal;
+  const F1 = 1 as TileTypeVal; // Command Center
+  const F2 = 2 as TileTypeVal; // Meeting Room
+  const F3 = 3 as TileTypeVal; // Design Studio
+  const F4 = 4 as TileTypeVal; // Development
+  const F5 = 5 as TileTypeVal; // Server Room
+  const F6 = 6 as TileTypeVal; // Research Lab
+  const F7 = 7 as TileTypeVal; // Marketing Area
+  const F9 = 9 as TileTypeVal; // Content Studio
+  const F10 = 10 as TileTypeVal; // Growth Lab
+  const D = 8 as TileTypeVal;  // Doorway
 
   const tiles: TileTypeVal[] = [];
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
+      // Outer walls
       if (r === 0 || r === ROWS - 1 || c === 0 || c === COLS - 1) { tiles.push(W); continue; }
-      if (r === 10) { tiles.push((c >= 5 && c <= 6) || (c >= 18 && c <= 19) || (c >= 31 && c <= 32) ? F8 : W); continue; }
-      if (r === 20) { tiles.push((c >= 5 && c <= 6) || (c >= 18 && c <= 19) || (c >= 31 && c <= 32) ? F8 : W); continue; }
-      if (r === 30) { tiles.push((c >= 8 && c <= 9) || (c >= 28 && c <= 29) ? F8 : W); continue; }
-      if (r >= 1 && r <= 9) {
-        if (c === 13) { tiles.push(r >= 4 && r <= 5 ? F8 : W); continue; }
-        if (c === 25) { tiles.push(r >= 4 && r <= 5 ? F8 : W); continue; }
-        if (c >= 1 && c <= 12) { tiles.push(F1); continue; }
-        if (c >= 14 && c <= 24) { tiles.push(F2); continue; }
-        if (c >= 26 && c <= 38) { tiles.push(F3); continue; }
-        tiles.push(W); continue;
+      // Horizontal interior wall (row 10) with doorways
+      if (r === 10) {
+        tiles.push(
+          (c >= 5 && c <= 6) || (c >= 18 && c <= 19) || (c >= 31 && c <= 32) ? D : W
+        );
+        continue;
       }
-      if (r >= 11 && r <= 19) {
-        if (c === 13) { tiles.push(r >= 14 && r <= 15 ? F8 : W); continue; }
-        if (c === 25) { tiles.push(r >= 14 && r <= 15 ? F8 : W); continue; }
-        if (c >= 1 && c <= 12) { tiles.push(F4); continue; }
-        if (c >= 14 && c <= 24) { tiles.push(F5); continue; }
-        if (c >= 26 && c <= 38) { tiles.push(F6); continue; }
-        tiles.push(W); continue;
+      // Horizontal interior wall (row 20) with doorways
+      if (r === 20) {
+        tiles.push(
+          (c >= 5 && c <= 6) || (c >= 18 && c <= 19) || (c >= 31 && c <= 32) ? D : W
+        );
+        continue;
       }
-      if (r >= 21 && r <= 29) {
-        if (c === 13) { tiles.push(r >= 24 && r <= 25 ? F8 : W); continue; }
-        if (c === 25) { tiles.push(r >= 24 && r <= 25 ? F8 : W); continue; }
-        if (c >= 1 && c <= 12) { tiles.push(F9); continue; }
-        if (c >= 14 && c <= 24) { tiles.push(F10); continue; }
-        if (c >= 26 && c <= 38) { tiles.push(F7); continue; }
-        tiles.push(W); continue;
+      // Vertical interior wall (col 13) with doorways
+      if (c === 13) {
+        tiles.push((r >= 4 && r <= 5) || (r >= 14 && r <= 15) || (r >= 24 && r <= 25) ? D : W);
+        continue;
       }
-      tiles.push(F7);
+      // Vertical interior wall (col 26) with doorways
+      if (c === 26) {
+        tiles.push((r >= 4 && r <= 5) || (r >= 14 && r <= 15) || (r >= 24 && r <= 25) ? D : W);
+        continue;
+      }
+      // Room 1: Command Center (cols 1-12, rows 1-9)
+      if (r >= 1 && r <= 9 && c >= 1 && c <= 12) { tiles.push(F1); continue; }
+      // Room 2: Meeting Room (cols 14-25, rows 1-9)
+      if (r >= 1 && r <= 9 && c >= 14 && c <= 25) { tiles.push(F2); continue; }
+      // Room 3: Design Studio (cols 27-38, rows 1-9)
+      if (r >= 1 && r <= 9 && c >= 27 && c <= 38) { tiles.push(F3); continue; }
+      // Room 4: Development (cols 1-12, rows 11-19)
+      if (r >= 11 && r <= 19 && c >= 1 && c <= 12) { tiles.push(F4); continue; }
+      // Room 5: Server Room (cols 14-25, rows 11-19)
+      if (r >= 11 && r <= 19 && c >= 14 && c <= 25) { tiles.push(F5); continue; }
+      // Room 6: Research Lab (cols 27-38, rows 11-19)
+      if (r >= 11 && r <= 19 && c >= 27 && c <= 38) { tiles.push(F6); continue; }
+      // Room 7: Marketing Area (cols 1-12, rows 21-29)
+      if (r >= 21 && r <= 29 && c >= 1 && c <= 12) { tiles.push(F7); continue; }
+      // Room 8: Content Studio (cols 14-25, rows 21-29)
+      if (r >= 21 && r <= 29 && c >= 14 && c <= 25) { tiles.push(F9); continue; }
+      // Room 9: Growth Lab (cols 27-38, rows 21-29)
+      if (r >= 21 && r <= 29 && c >= 27 && c <= 38) { tiles.push(F10); continue; }
+      tiles.push(W);
     }
   }
   return tiles;
@@ -312,16 +331,16 @@ function buildTiles(): TileTypeVal[] {
 
 function buildTileColors(): Array<{ h: number; s: number; b: number; c: number } | null> {
   const wallColor = { h: 214, s: 30, b: -100, c: -55 };
-  const cmdColor = { h: 30, s: 50, b: -43, c: -88 };
-  const meetColor = { h: 210, s: 35, b: -30, c: -75 };
-  const designColor = { h: 330, s: 40, b: -35, c: -80 };
-  const devColor = { h: 150, s: 40, b: -40, c: -82 };
-  const serverColor = { h: 200, s: 45, b: -50, c: -70 };
-  const researchColor = { h: 35, s: 55, b: -38, c: -85 };
-  const loungeColor = { h: 20, s: 60, b: -35, c: -85 };
+  const cmdColor = { h: 30, s: 50, b: -43, c: -88 };     // warm beige
+  const meetColor = { h: 210, s: 35, b: -30, c: -75 };    // cool blue-gray
+  const designColor = { h: 330, s: 40, b: -35, c: -80 };  // pink-tinted
+  const devColor = { h: 150, s: 40, b: -40, c: -82 };     // green-tinted
+  const serverColor = { h: 200, s: 45, b: -50, c: -70 };  // steel blue
+  const researchColor = { h: 35, s: 55, b: -38, c: -85 }; // warm amber
+  const marketingColor = { h: 300, s: 45, b: -40, c: -82 }; // fuchsia-tinted
+  const contentColor = { h: 40, s: 55, b: -38, c: -85 };   // amber-tinted
+  const growthColor = { h: 190, s: 50, b: -40, c: -80 };   // cyan-tinted
   const doorColor = { h: 35, s: 25, b: 10, c: 0 };
-  const qaColor = { h: 345, s: 40, b: -40, c: -82 };
-  const opsColor = { h: 25, s: 50, b: -38, c: -80 };
   const tiles = buildTiles();
   const colors: Array<{ h: number; s: number; b: number; c: number } | null> = [];
   for (let i = 0; i < tiles.length; i++) {
@@ -334,9 +353,9 @@ function buildTileColors(): Array<{ h: number; s: number; b: number; c: number }
     if (tile === 4) { colors.push(devColor); continue; }
     if (tile === 5) { colors.push(serverColor); continue; }
     if (tile === 6) { colors.push(researchColor); continue; }
-    if (tile === 7) { colors.push(loungeColor); continue; }
-    if (tile === 9) { colors.push(qaColor); continue; }
-    if (tile === 10) { colors.push(opsColor); continue; }
+    if (tile === 7) { colors.push(marketingColor); continue; }
+    if (tile === 9) { colors.push(contentColor); continue; }
+    if (tile === 10) { colors.push(growthColor); continue; }
     colors.push(wallColor);
   }
   return colors;
@@ -346,200 +365,275 @@ const DEFAULT_AGENT_OS_LAYOUT = {
   version: 1 as const,
   cols: COLS,
   rows: ROWS,
-  layoutRevision: 4,
+  layoutRevision: 6,
   tiles: buildTiles(),
   tileColors: buildTileColors(),
   furniture: [
-    // ═══ COMMAND CENTER (cols 1-12, rows 1-9) ═══
+    // ═══════════════════════════════════════════════════════════════
+    // ROOM 1: COMMAND CENTER (cols 1-12, rows 1-9)
+    // Orchestrator, Architect, Analyst
+    // ═══════════════════════════════════════════════════════════════
+    // Wall decorations (row 0)
     { uid: 'cmd-shelf1', type: 'DOUBLE_BOOKSHELF', col: 1, row: 0 },
     { uid: 'cmd-clock', type: 'CLOCK', col: 5, row: 0 },
     { uid: 'cmd-wb', type: 'WHITEBOARD', col: 7, row: 0 },
     { uid: 'cmd-paint1', type: 'SMALL_PAINTING', col: 10, row: 0 },
     { uid: 'cmd-paint2', type: 'SMALL_PAINTING_2', col: 11, row: 0 },
+    // Orchestrator workstation (desk+PC on row 2, chair on row 4)
     { uid: 'desk-orc', type: 'DESK_FRONT', col: 2, row: 2 },
     { uid: 'pc-orc', type: 'PC_FRONT_OFF', col: 3, row: 2 },
     { uid: 'chair-orc', type: 'WOODEN_CHAIR_BACK', col: 3, row: 4 },
+    // Architect workstation
     { uid: 'desk-arch', type: 'DESK_FRONT', col: 7, row: 2 },
     { uid: 'pc-arch', type: 'PC_FRONT_OFF', col: 8, row: 2 },
     { uid: 'chair-arch', type: 'WOODEN_CHAIR_BACK', col: 8, row: 4 },
+    // Analyst workstation
     { uid: 'desk-anl', type: 'DESK_FRONT', col: 2, row: 6 },
     { uid: 'pc-anl', type: 'PC_FRONT_OFF', col: 3, row: 6 },
     { uid: 'chair-anl', type: 'WOODEN_CHAIR_BACK', col: 3, row: 8 },
+    // Decor
     { uid: 'cmd-plant1', type: 'LARGE_PLANT', col: 1, row: 1 },
     { uid: 'cmd-plant2', type: 'PLANT', col: 11, row: 5 },
     { uid: 'cmd-cactus', type: 'CACTUS', col: 12, row: 1 },
+    { uid: 'cmd-coffee', type: 'COFFEE', col: 10, row: 3 },
     { uid: 'cmd-bin', type: 'BIN', col: 12, row: 9 },
-    // ═══ MEETING ROOM (cols 14-24, rows 1-9) ═══
-    { uid: 'meet-clock', type: 'CLOCK', col: 15, row: 0 },
-    { uid: 'meet-wb', type: 'WHITEBOARD', col: 18, row: 0 },
-    { uid: 'meet-paint', type: 'LARGE_PAINTING', col: 22, row: 0 },
+
+    // ═══════════════════════════════════════════════════════════════
+    // ROOM 2: MEETING ROOM (cols 14-25, rows 1-9)
+    // Group meetings, collaboration space
+    // ═══════════════════════════════════════════════════════════════
+    // Wall decorations
+    { uid: 'meet-shelf', type: 'BOOKSHELF', col: 14, row: 0 },
+    { uid: 'meet-clock', type: 'CLOCK', col: 17, row: 0 },
+    { uid: 'meet-wb', type: 'WHITEBOARD', col: 19, row: 0 },
+    { uid: 'meet-paint', type: 'LARGE_PAINTING', col: 23, row: 0 },
+    // Meeting table with chairs
     { uid: 'meet-table', type: 'TABLE_FRONT', col: 18, row: 4 },
+    { uid: 'meet-chair1', type: 'CUSHIONED_CHAIR_FRONT', col: 18, row: 3 },
+    { uid: 'meet-chair2', type: 'CUSHIONED_CHAIR_FRONT', col: 20, row: 3 },
     { uid: 'meet-bench1', type: 'CUSHIONED_BENCH', col: 17, row: 5 },
     { uid: 'meet-bench2', type: 'CUSHIONED_BENCH', col: 21, row: 5 },
-    { uid: 'meet-chair1', type: 'CUSHIONED_CHAIR_FRONT', col: 18, row: 3 },
-    { uid: 'meet-chair2', type: 'CUSHIONED_CHAIR_BACK', col: 18, row: 6 },
-    { uid: 'meet-chair3', type: 'CUSHIONED_CHAIR_FRONT', col: 20, row: 3 },
+    { uid: 'meet-chair3', type: 'CUSHIONED_CHAIR_BACK', col: 18, row: 6 },
     { uid: 'meet-chair4', type: 'CUSHIONED_CHAIR_BACK', col: 20, row: 6 },
+    // Side table with coffee
+    { uid: 'meet-ctable', type: 'COFFEE_TABLE', col: 15, row: 7 },
+    { uid: 'meet-coffee', type: 'COFFEE', col: 16, row: 7 },
+    // Decor
     { uid: 'meet-plant1', type: 'PLANT_2', col: 14, row: 1 },
-    { uid: 'meet-plant2', type: 'LARGE_PLANT', col: 23, row: 8 },
-    { uid: 'meet-shelf', type: 'BOOKSHELF', col: 14, row: 0 },
-    // ═══ DESIGN AREA (cols 26-38, rows 1-9) ═══
-    { uid: 'des-shelf', type: 'DOUBLE_BOOKSHELF', col: 26, row: 0 },
-    { uid: 'des-hplant', type: 'HANGING_PLANT', col: 30, row: 0 },
+    { uid: 'meet-plant2', type: 'LARGE_PLANT', col: 24, row: 8 },
+    { uid: 'meet-hplant', type: 'HANGING_PLANT', col: 22, row: 0 },
+    { uid: 'meet-bin', type: 'BIN', col: 24, row: 9 },
+
+    // ═══════════════════════════════════════════════════════════════
+    // ROOM 3: DESIGN STUDIO (cols 27-38, rows 1-9)
+    // Designer + collaboration area
+    // ═══════════════════════════════════════════════════════════════
+    // Wall decorations
+    { uid: 'des-shelf', type: 'DOUBLE_BOOKSHELF', col: 27, row: 0 },
+    { uid: 'des-hplant', type: 'HANGING_PLANT', col: 31, row: 0 },
     { uid: 'des-paint1', type: 'SMALL_PAINTING', col: 34, row: 0 },
     { uid: 'des-paint2', type: 'SMALL_PAINTING_2', col: 37, row: 0 },
+    // Designer workstation
     { uid: 'desk-des', type: 'DESK_FRONT', col: 29, row: 2 },
     { uid: 'pc-des', type: 'PC_FRONT_OFF', col: 30, row: 2 },
     { uid: 'chair-des', type: 'WOODEN_CHAIR_BACK', col: 30, row: 4 },
-    { uid: 'des-table', type: 'COFFEE_TABLE', col: 29, row: 7 },
+    // Review/collaboration area
+    { uid: 'des-ctable', type: 'COFFEE_TABLE', col: 29, row: 7 },
     { uid: 'des-bench', type: 'CUSHIONED_BENCH', col: 28, row: 8 },
     { uid: 'des-bench2', type: 'CUSHIONED_BENCH', col: 31, row: 8 },
+    // Decor
     { uid: 'des-plant1', type: 'PLANT', col: 37, row: 1 },
-    { uid: 'des-cactus', type: 'CACTUS', col: 26, row: 6 },
+    { uid: 'des-cactus', type: 'CACTUS', col: 27, row: 6 },
+    { uid: 'des-plant2', type: 'PLANT_2', col: 35, row: 5 },
     { uid: 'des-bin', type: 'BIN', col: 37, row: 9 },
-    // ═══ DEVELOPMENT AREA (cols 1-12, rows 11-19) ═══
+
+    // ═══════════════════════════════════════════════════════════════
+    // ROOM 4: DEVELOPMENT (cols 1-12, rows 11-19)
+    // Frontend, Backend, QA engineers
+    // ═══════════════════════════════════════════════════════════════
+    // Wall decorations (row 10)
     { uid: 'dev-shelf', type: 'BOOKSHELF', col: 1, row: 10 },
     { uid: 'dev-wb', type: 'WHITEBOARD', col: 7, row: 10 },
     { uid: 'dev-clock', type: 'CLOCK', col: 11, row: 10 },
+    // Frontend workstation
     { uid: 'desk-fe', type: 'DESK_FRONT', col: 2, row: 12 },
     { uid: 'pc-fe', type: 'PC_FRONT_OFF', col: 3, row: 12 },
     { uid: 'chair-fe', type: 'WOODEN_CHAIR_BACK', col: 3, row: 14 },
+    // Backend workstation
     { uid: 'desk-be', type: 'DESK_FRONT', col: 7, row: 12 },
     { uid: 'pc-be', type: 'PC_FRONT_OFF', col: 8, row: 12 },
     { uid: 'chair-be', type: 'WOODEN_CHAIR_BACK', col: 8, row: 14 },
+    // QA workstation
+    { uid: 'desk-qa', type: 'DESK_FRONT', col: 2, row: 16 },
+    { uid: 'pc-qa', type: 'PC_FRONT_OFF', col: 3, row: 16 },
+    { uid: 'chair-qa', type: 'WOODEN_CHAIR_BACK', col: 3, row: 18 },
+    // Decor
     { uid: 'dev-plant1', type: 'LARGE_PLANT', col: 1, row: 11 },
     { uid: 'dev-plant2', type: 'PLANT', col: 11, row: 13 },
     { uid: 'dev-cactus', type: 'CACTUS', col: 12, row: 17 },
+    { uid: 'dev-coffee', type: 'COFFEE', col: 10, row: 13 },
     { uid: 'dev-bin', type: 'BIN', col: 12, row: 19 },
-    // ═══ SERVER ROOM (cols 14-24, rows 11-19) ═══
+
+    // ═══════════════════════════════════════════════════════════════
+    // ROOM 5: SERVER ROOM (cols 14-25, rows 11-19)
+    // Data Engineer, DevOps + server racks
+    // ═══════════════════════════════════════════════════════════════
+    // Wall decorations (row 10)
     { uid: 'srv-shelf', type: 'DOUBLE_BOOKSHELF', col: 14, row: 10 },
     { uid: 'srv-clock', type: 'CLOCK', col: 17, row: 10 },
     { uid: 'srv-paint', type: 'LARGE_PAINTING', col: 23, row: 10 },
-    { uid: 'desk-data', type: 'DESK_FRONT', col: 16, row: 12 },
-    { uid: 'pc-data', type: 'PC_FRONT_OFF', col: 17, row: 12 },
-    { uid: 'chair-data', type: 'WOODEN_CHAIR_BACK', col: 17, row: 14 },
-    { uid: 'srv-rack1', type: 'DESK_SIDE', col: 21, row: 12 },
-    { uid: 'srv-rack2', type: 'DESK_SIDE', col: 21, row: 16 },
-    { uid: 'srv-pc1', type: 'PC_FRONT_OFF', col: 23, row: 11 },
+    // Data Engineer workstation
+    { uid: 'desk-data', type: 'DESK_FRONT', col: 15, row: 12 },
+    { uid: 'pc-data', type: 'PC_FRONT_OFF', col: 16, row: 12 },
+    { uid: 'chair-data', type: 'WOODEN_CHAIR_BACK', col: 16, row: 14 },
+    // DevOps workstation
+    { uid: 'desk-ops', type: 'DESK_FRONT', col: 15, row: 16 },
+    { uid: 'pc-ops', type: 'PC_FRONT_OFF', col: 16, row: 16 },
+    { uid: 'chair-ops', type: 'WOODEN_CHAIR_BACK', col: 16, row: 18 },
+    // Server racks (using DESK_SIDE as rack props)
+    { uid: 'srv-rack1', type: 'DESK_SIDE', col: 20, row: 12 },
+    { uid: 'srv-rack2', type: 'DESK_SIDE', col: 20, row: 15 },
+    { uid: 'srv-rack3', type: 'DESK_SIDE', col: 23, row: 12 },
+    { uid: 'srv-rack4', type: 'DESK_SIDE', col: 23, row: 15 },
+    // Monitoring displays
+    { uid: 'srv-pc1', type: 'PC_FRONT_OFF', col: 21, row: 11 },
     { uid: 'srv-pc2', type: 'PC_FRONT_OFF', col: 24, row: 11 },
+    // Decor
     { uid: 'srv-plant1', type: 'PLANT_2', col: 14, row: 17 },
-    { uid: 'srv-bin', type: 'BIN', col: 23, row: 19 },
-    { uid: 'srv-pot', type: 'POT', col: 15, row: 18 },
-    // ═══ RESEARCH AREA (cols 26-38, rows 11-19) ═══
-    { uid: 'res-wb', type: 'WHITEBOARD', col: 30, row: 10 },
-    { uid: 'res-shelf1', type: 'DOUBLE_BOOKSHELF', col: 26, row: 10 },
+    { uid: 'srv-pot', type: 'POT', col: 15, row: 19 },
+    { uid: 'srv-bin', type: 'BIN', col: 24, row: 19 },
+
+    // ═══════════════════════════════════════════════════════════════
+    // ROOM 6: RESEARCH LAB (cols 27-38, rows 11-19)
+    // Researcher + library/reading area
+    // ═══════════════════════════════════════════════════════════════
+    // Wall decorations (row 10)
+    { uid: 'res-shelf1', type: 'DOUBLE_BOOKSHELF', col: 27, row: 10 },
+    { uid: 'res-wb', type: 'WHITEBOARD', col: 31, row: 10 },
     { uid: 'res-shelf2', type: 'BOOKSHELF', col: 36, row: 10 },
+    // Researcher workstation
     { uid: 'desk-res', type: 'DESK_FRONT', col: 29, row: 12 },
     { uid: 'pc-res', type: 'PC_FRONT_OFF', col: 30, row: 12 },
     { uid: 'chair-res', type: 'WOODEN_CHAIR_BACK', col: 30, row: 14 },
-    { uid: 'res-htable', type: 'SMALL_TABLE', col: 33, row: 15 },
-    { uid: 'res-hchair1', type: 'WOODEN_CHAIR_FRONT', col: 32, row: 16 },
-    { uid: 'res-hchair2', type: 'WOODEN_CHAIR_FRONT', col: 35, row: 16 },
-    { uid: 'res-plant1', type: 'LARGE_PLANT', col: 26, row: 11 },
-    { uid: 'res-cactus', type: 'CACTUS', col: 37, row: 17 },
+    // Reading table
+    { uid: 'res-table', type: 'SMALL_TABLE', col: 33, row: 15 },
+    { uid: 'res-rchair1', type: 'WOODEN_CHAIR_FRONT', col: 32, row: 16 },
+    { uid: 'res-rchair2', type: 'WOODEN_CHAIR_FRONT', col: 35, row: 16 },
+    // Decor
+    { uid: 'res-plant1', type: 'LARGE_PLANT', col: 27, row: 11 },
     { uid: 'res-plant2', type: 'PLANT', col: 37, row: 11 },
+    { uid: 'res-cactus', type: 'CACTUS', col: 37, row: 17 },
+    { uid: 'res-coffee', type: 'COFFEE', col: 34, row: 14 },
     { uid: 'res-bin', type: 'BIN', col: 37, row: 19 },
-    // ═══ QA LAB (cols 1-12, rows 21-29) ═══
-    { uid: 'qa-shelf', type: 'DOUBLE_BOOKSHELF', col: 1, row: 20 },
-    { uid: 'qa-wb', type: 'WHITEBOARD', col: 5, row: 20 },
-    { uid: 'qa-clock', type: 'CLOCK', col: 9, row: 20 },
-    { uid: 'desk-qa2', type: 'DESK_FRONT', col: 2, row: 23 },
-    { uid: 'pc-qa2', type: 'PC_FRONT_OFF', col: 3, row: 23 },
-    { uid: 'chair-qa2', type: 'WOODEN_CHAIR_BACK', col: 3, row: 25 },
-    { uid: 'desk-qa3', type: 'DESK_FRONT', col: 7, row: 23 },
-    { uid: 'pc-qa3', type: 'PC_FRONT_OFF', col: 8, row: 23 },
-    { uid: 'chair-qa3', type: 'WOODEN_CHAIR_BACK', col: 8, row: 25 },
-    { uid: 'qa-pc1', type: 'PC_FRONT_OFF', col: 10, row: 21 },
-    { uid: 'qa-pc2', type: 'PC_FRONT_OFF', col: 11, row: 21 },
-    { uid: 'qa-plant1', type: 'LARGE_PLANT', col: 1, row: 21 },
-    { uid: 'qa-cactus', type: 'CACTUS', col: 12, row: 27 },
-    { uid: 'qa-bin', type: 'BIN', col: 12, row: 29 },
-    // ═══ OPERATIONS CENTER (cols 14-24, rows 21-29) ═══
-    { uid: 'ops-shelf', type: 'DOUBLE_BOOKSHELF', col: 14, row: 20 },
-    { uid: 'ops-wb', type: 'WHITEBOARD', col: 18, row: 20 },
-    { uid: 'ops-paint', type: 'LARGE_PAINTING', col: 22, row: 20 },
-    { uid: 'desk-ops', type: 'DESK_FRONT', col: 16, row: 23 },
-    { uid: 'pc-ops', type: 'PC_FRONT_OFF', col: 17, row: 23 },
-    { uid: 'chair-ops', type: 'WOODEN_CHAIR_BACK', col: 17, row: 25 },
-    { uid: 'desk-ops2', type: 'DESK_FRONT', col: 21, row: 23 },
-    { uid: 'pc-ops2', type: 'PC_FRONT_OFF', col: 22, row: 23 },
-    { uid: 'chair-ops2', type: 'WOODEN_CHAIR_BACK', col: 22, row: 25 },
-    { uid: 'ops-pc1', type: 'PC_FRONT_OFF', col: 14, row: 21 },
-    { uid: 'ops-pc2', type: 'PC_FRONT_OFF', col: 15, row: 21 },
-    { uid: 'ops-pc3', type: 'PC_FRONT_OFF', col: 23, row: 21 },
-    { uid: 'ops-plant1', type: 'PLANT_2', col: 24, row: 27 },
-    { uid: 'ops-pot', type: 'POT', col: 15, row: 28 },
-    { uid: 'ops-bin', type: 'BIN', col: 23, row: 29 },
-    // ═══ WORKSHOP (cols 26-38, rows 21-29) ═══
-    { uid: 'ws-shelf', type: 'BOOKSHELF', col: 26, row: 20 },
-    { uid: 'ws-hplant', type: 'HANGING_PLANT', col: 32, row: 20 },
-    { uid: 'ws-paint', type: 'SMALL_PAINTING', col: 36, row: 20 },
-    { uid: 'ws-table', type: 'TABLE_FRONT', col: 30, row: 24 },
-    { uid: 'ws-bench1', type: 'CUSHIONED_BENCH', col: 29, row: 25 },
-    { uid: 'ws-bench2', type: 'CUSHIONED_BENCH', col: 32, row: 25 },
-    { uid: 'ws-wb', type: 'WHITEBOARD', col: 35, row: 20 },
-    { uid: 'ws-plant1', type: 'LARGE_PLANT', col: 26, row: 21 },
-    { uid: 'ws-cactus', type: 'CACTUS', col: 37, row: 27 },
-    { uid: 'ws-bin', type: 'BIN', col: 37, row: 29 },
-    // ═══ LOUNGE (cols 1-38, rows 31-34) ═══
-    { uid: 'lng-paint1', type: 'LARGE_PAINTING', col: 12, row: 30 },
-    { uid: 'lng-paint2', type: 'SMALL_PAINTING', col: 28, row: 30 },
-    { uid: 'lng-clock', type: 'CLOCK', col: 20, row: 30 },
-    { uid: 'lng-hplant1', type: 'HANGING_PLANT', col: 6, row: 30 },
-    { uid: 'lng-hplant2', type: 'HANGING_PLANT', col: 35, row: 30 },
-    { uid: 'lng-sofa1', type: 'SOFA_FRONT', col: 2, row: 32 },
-    { uid: 'lng-sofa2', type: 'SOFA_FRONT', col: 5, row: 32 },
-    { uid: 'lng-ctable', type: 'COFFEE_TABLE', col: 3, row: 31 },
-    { uid: 'lng-coffee', type: 'COFFEE', col: 9, row: 31 },
-    { uid: 'lng-pot', type: 'POT', col: 10, row: 31 },
-    { uid: 'lng-table', type: 'TABLE_FRONT', col: 16, row: 32 },
-    { uid: 'lng-bench1', type: 'CUSHIONED_BENCH', col: 15, row: 33 },
-    { uid: 'lng-bench2', type: 'CUSHIONED_BENCH', col: 18, row: 33 },
-    { uid: 'lng-rtable', type: 'SMALL_TABLE', col: 24, row: 32 },
-    { uid: 'lng-rchair1', type: 'CUSHIONED_CHAIR_FRONT', col: 23, row: 33 },
-    { uid: 'lng-rchair2', type: 'CUSHIONED_CHAIR_FRONT', col: 26, row: 33 },
-    { uid: 'lng-rchair3', type: 'WOODEN_CHAIR_FRONT', col: 24, row: 31 },
-    { uid: 'lng-tv', type: 'PC_FRONT_OFF', col: 32, row: 30 },
-    { uid: 'lng-sofa3', type: 'SOFA_BACK', col: 31, row: 33 },
-    { uid: 'lng-sofa4', type: 'SOFA_BACK', col: 34, row: 33 },
-    { uid: 'lng-plant1', type: 'LARGE_PLANT', col: 1, row: 31 },
-    { uid: 'lng-plant2', type: 'PLANT', col: 14, row: 31 },
-    { uid: 'lng-plant3', type: 'PLANT_2', col: 29, row: 31 },
-    { uid: 'lng-plant4', type: 'CACTUS', col: 37, row: 32 },
-    { uid: 'lng-bin1', type: 'BIN', col: 12, row: 34 },
-    { uid: 'lng-bin2', type: 'BIN', col: 37, row: 34 },
-    { uid: 'lng-shelf', type: 'BOOKSHELF', col: 1, row: 30 },
+
+    // ═══════════════════════════════════════════════════════════════
+    // ROOM 7: MARKETING AREA (cols 1-12, rows 21-29)
+    // Marketing Lead, Market Researcher
+    // ═══════════════════════════════════════════════════════════════
+    // Wall decorations (row 20)
+    { uid: 'mkt-shelf', type: 'DOUBLE_BOOKSHELF', col: 1, row: 20 },
+    { uid: 'mkt-wb', type: 'WHITEBOARD', col: 5, row: 20 },
+    { uid: 'mkt-clock', type: 'CLOCK', col: 9, row: 20 },
+    // Marketing Lead workstation
+    { uid: 'desk-mktl', type: 'DESK_FRONT', col: 2, row: 22 },
+    { uid: 'pc-mktl', type: 'PC_FRONT_OFF', col: 3, row: 22 },
+    { uid: 'chair-mktl', type: 'WOODEN_CHAIR_BACK', col: 3, row: 24 },
+    // Market Researcher workstation
+    { uid: 'desk-mktr', type: 'DESK_FRONT', col: 7, row: 22 },
+    { uid: 'pc-mktr', type: 'PC_FRONT_OFF', col: 8, row: 22 },
+    { uid: 'chair-mktr', type: 'WOODEN_CHAIR_BACK', col: 8, row: 24 },
+    // Collaboration area
+    { uid: 'mkt-table', type: 'COFFEE_TABLE', col: 5, row: 27 },
+    { uid: 'mkt-bench1', type: 'CUSHIONED_BENCH', col: 4, row: 28 },
+    { uid: 'mkt-bench2', type: 'CUSHIONED_BENCH', col: 7, row: 28 },
+    // Decor
+    { uid: 'mkt-plant1', type: 'LARGE_PLANT', col: 1, row: 21 },
+    { uid: 'mkt-cactus', type: 'CACTUS', col: 12, row: 27 },
+    { uid: 'mkt-bin', type: 'BIN', col: 12, row: 29 },
+
+    // ═══════════════════════════════════════════════════════════════
+    // ROOM 8: CONTENT STUDIO (cols 14-25, rows 21-29)
+    // Content Strategist
+    // ═══════════════════════════════════════════════════════════════
+    // Wall decorations (row 20)
+    { uid: 'cnt-shelf', type: 'BOOKSHELF', col: 14, row: 20 },
+    { uid: 'cnt-wb', type: 'WHITEBOARD', col: 18, row: 20 },
+    { uid: 'cnt-paint', type: 'LARGE_PAINTING', col: 23, row: 20 },
+    // Content Strategist workstation
+    { uid: 'desk-cnts', type: 'DESK_FRONT', col: 17, row: 22 },
+    { uid: 'pc-cnts', type: 'PC_FRONT_OFF', col: 18, row: 22 },
+    { uid: 'chair-cnts', type: 'WOODEN_CHAIR_BACK', col: 18, row: 24 },
+    // Content review area
+    { uid: 'cnt-table', type: 'TABLE_FRONT', col: 19, row: 27 },
+    { uid: 'cnt-bench1', type: 'CUSHIONED_BENCH', col: 18, row: 28 },
+    { uid: 'cnt-bench2', type: 'CUSHIONED_BENCH', col: 21, row: 28 },
+    // Decor
+    { uid: 'cnt-plant1', type: 'PLANT_2', col: 14, row: 21 },
+    { uid: 'cnt-plant2', type: 'PLANT', col: 24, row: 25 },
+    { uid: 'cnt-bin', type: 'BIN', col: 24, row: 29 },
+
+    // ═══════════════════════════════════════════════════════════════
+    // ROOM 9: GROWTH LAB (cols 27-38, rows 21-29)
+    // Growth Manager, Marketing Analyst
+    // ═══════════════════════════════════════════════════════════════
+    // Wall decorations (row 20)
+    { uid: 'grw-shelf', type: 'DOUBLE_BOOKSHELF', col: 27, row: 20 },
+    { uid: 'grw-hplant', type: 'HANGING_PLANT', col: 32, row: 20 },
+    { uid: 'grw-paint', type: 'SMALL_PAINTING', col: 36, row: 20 },
+    // Growth Manager workstation
+    { uid: 'desk-grwm', type: 'DESK_FRONT', col: 29, row: 22 },
+    { uid: 'pc-grwm', type: 'PC_FRONT_OFF', col: 30, row: 22 },
+    { uid: 'chair-grwm', type: 'WOODEN_CHAIR_BACK', col: 30, row: 24 },
+    // Marketing Analyst workstation
+    { uid: 'desk-mkta', type: 'DESK_FRONT', col: 34, row: 22 },
+    { uid: 'pc-mkta', type: 'PC_FRONT_OFF', col: 35, row: 22 },
+    { uid: 'chair-mkta', type: 'WOODEN_CHAIR_BACK', col: 35, row: 24 },
+    // Analytics displays
+    { uid: 'grw-pc1', type: 'PC_FRONT_OFF', col: 28, row: 21 },
+    { uid: 'grw-pc2', type: 'PC_FRONT_OFF', col: 37, row: 21 },
+    // Decor
+    { uid: 'grw-plant1', type: 'LARGE_PLANT', col: 27, row: 21 },
+    { uid: 'grw-plant2', type: 'PLANT', col: 38, row: 25 },
+    { uid: 'grw-cactus', type: 'CACTUS', col: 37, row: 27 },
+    { uid: 'grw-bin', type: 'BIN', col: 37, row: 29 },
   ],
 };
 
 const ZONE_DESTINATIONS: Record<string, ZoneDestination[]> = {
   [BehaviorState.MEETING]: [
-    { col: 17, row: 5 }, { col: 18, row: 5 }, { col: 19, row: 5 }, { col: 20, row: 5 },
-    { col: 18, row: 7 }, { col: 19, row: 7 },
+    // Meeting room benches and chairs
+    { col: 17, row: 5 }, { col: 18, row: 5 }, { col: 19, row: 5 }, { col: 20, row: 5 }, { col: 21, row: 5 },
+    { col: 18, row: 7 }, { col: 19, row: 7 }, { col: 20, row: 7 },
+    // Marketing area collaboration
+    { col: 4, row: 28 }, { col: 5, row: 28 }, { col: 6, row: 28 }, { col: 7, row: 28 },
   ],
   [BehaviorState.BREAK]: [
-    { col: 3, row: 33 }, { col: 6, row: 33 }, { col: 4, row: 31 },
-    { col: 15, row: 32 }, { col: 19, row: 32 },
-    { col: 25, row: 32 }, { col: 32, row: 32 }, { col: 35, row: 32 },
+    // Design studio collaboration area
+    { col: 28, row: 8 }, { col: 29, row: 8 }, { col: 30, row: 8 }, { col: 31, row: 8 },
+    // Meeting room side
+    { col: 15, row: 7 }, { col: 16, row: 7 },
+    // Content studio review area
+    { col: 18, row: 28 }, { col: 19, row: 28 }, { col: 20, row: 28 },
   ],
   [BehaviorState.RESEARCH]: [
-    { col: 29, row: 11 }, { col: 30, row: 11 }, { col: 31, row: 11 },
-    { col: 34, row: 14 }, { col: 27, row: 14 },
-    { col: 30, row: 26 }, { col: 31, row: 26 },
+    // Research lab reading area
+    { col: 32, row: 16 }, { col: 33, row: 16 }, { col: 34, row: 16 }, { col: 35, row: 16 },
+    { col: 30, row: 15 }, { col: 31, row: 15 },
+    // Growth Lab analytics displays
+    { col: 28, row: 21 }, { col: 29, row: 21 }, { col: 34, row: 21 }, { col: 35, row: 21 },
   ],
 };
 
 const ZONE_LABELS: ZoneLabel[] = [
-  { text: '⚙ COMMAND CENTER', col: 6, row: 1, color: '#C4B5FD' },
-  { text: '🤝 MEETING ROOM', col: 19, row: 1, color: '#93C5FD' },
-  { text: '🎨 DESIGN', col: 32, row: 1, color: '#F9A8D4' },
-  { text: '💻 DEVELOPMENT', col: 6, row: 11, color: '#6EE7B7' },
-  { text: '🖥 SERVER ROOM', col: 19, row: 11, color: '#67E8F9' },
-  { text: '📚 RESEARCH', col: 32, row: 11, color: '#FCD34D' },
-  { text: '🛡️ QA LAB', col: 6, row: 21, color: '#FDA4AF' },
-  { text: '🚀 OPS CENTER', col: 19, row: 21, color: '#FDBA74' },
-  { text: '🔧 WORKSHOP', col: 32, row: 21, color: '#D8B4FE' },
-  { text: '☕ LOUNGE', col: 19, row: 31, color: '#FED7AA' },
+  { text: '⚙ COMMAND', col: 5, row: 1, color: '#C4B5FD' },
+  { text: '🤝 MEETING', col: 18, row: 1, color: '#93C5FD' },
+  { text: '🎨 DESIGN', col: 31, row: 1, color: '#F9A8D4' },
+  { text: '💻 DEVELOPMENT', col: 5, row: 11, color: '#6EE7B7' },
+  { text: '🖥 SERVER', col: 18, row: 11, color: '#67E8F9' },
+  { text: '📚 RESEARCH', col: 31, row: 11, color: '#FCD34D' },
+  { text: '📢 MARKETING', col: 5, row: 21, color: '#E879F9' },
+  { text: '✍️ CONTENT', col: 18, row: 21, color: '#FCD34D' },
+  { text: '📈 GROWTH', col: 31, row: 21, color: '#22D3EE' },
 ];
 
 // ─── Pixel Office Status Mapping ──────────────────────────────
@@ -1079,14 +1173,13 @@ export default function Home() {
   const [chatPanelOpen, setChatPanelOpen] = useState(false);
   const [chatSheetOpen, setChatSheetOpen] = useState(false);
   const [browserOpOpen, setBrowserOpOpen] = useState(false);
+  const [ecosystemOpen, setEcosystemOpen] = useState(false);
 
   const orchestrator = agents.find((a) => a.role === 'orchestrator') || null;
   const hiredAgentIds = new Set(hiredAgents.map((h) => h.id));
 
   // ─── Pixel Office State ───
   const [assetsLoaded, setAssetsLoaded] = useState(false);
-  const [zoom, setZoom] = useState(2);
-  const panRef = useRef({ x: 0, y: 0 });
 
   const [officeState] = useState(() => {
     const os = new OfficeState(DEFAULT_AGENT_OS_LAYOUT);
@@ -1547,9 +1640,6 @@ export default function Home() {
           <PixelOfficeCanvas
             officeState={officeState}
             onAgentClick={handlePixelAgentClick}
-            zoom={zoom}
-            onZoomChange={setZoom}
-            panRef={panRef}
           />
 
           {/* Asset loading overlay */}
@@ -1578,21 +1668,7 @@ export default function Home() {
             </button>
           )}
 
-          {/* ─── Zoom Controls (pixel-art safe) ─── */}
-          {isMobileOrTablet && (
-            <div className="absolute bottom-3 left-3 z-10 flex flex-col gap-1">
-              <button
-                onClick={() => setZoom(Math.min(10, zoom + 1))}
-                className="w-9 h-9 rounded-lg bg-black/60 backdrop-blur-sm text-white/70 hover:text-white flex items-center justify-center text-lg font-bold border border-white/10 transition-colors touch-manipulation"
-                aria-label="Zoom in"
-              >+</button>
-              <button
-                onClick={() => setZoom(Math.max(1, zoom - 1))}
-                className="w-9 h-9 rounded-lg bg-black/60 backdrop-blur-sm text-white/70 hover:text-white flex items-center justify-center text-lg font-bold border border-white/10 transition-colors touch-manipulation"
-                aria-label="Zoom out"
-              >−</button>
-            </div>
-          )}
+
         </div>
 
         {/* ─── Desktop: Inline Chat Panel ─── */}
@@ -1693,6 +1769,15 @@ export default function Home() {
               <Globe className="w-3.5 h-3.5" />
               <span className="text-[10px]">Browser Op</span>
             </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setEcosystemOpen(true)}
+              className="text-emerald-400 hover:text-emerald-200 gap-1"
+            >
+              <Sparkle className="w-3.5 h-3.5" />
+              <span className="text-[10px]">Ecosystem</span>
+            </Button>
             <Separator orientation="vertical" className="h-4 bg-slate-700/50" />
             {/* Quick agent count — compact on mobile */}
             <div className="flex items-center gap-1 md:gap-1.5 text-[10px] text-slate-500">
@@ -1724,6 +1809,9 @@ export default function Home() {
 
       {/* ─── Browser Operator Panel ─── */}
       <BrowserOperatorPanel open={browserOpOpen} onOpenChange={setBrowserOpOpen} />
+
+      {/* ─── Ecosystem Panel ─── */}
+      <EcosystemPanel open={ecosystemOpen} onOpenChange={setEcosystemOpen} />
     </div>
   );
 }

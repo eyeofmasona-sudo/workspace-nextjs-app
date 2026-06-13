@@ -1,0 +1,1020 @@
+     1→// ─── Agent OS — Office Scene V2 ──────────────────────────────
+     2→// A flat top-down office simulation with 3D-looking furniture and walls.
+     3→// NOT a dashboard. NOT cards. NOT a grid. A living office.
+     4→// Single unified scene: floor, walls, furniture, agents, effects.
+     5→// The 2.5D feel comes from volumetric walls and 3D-ish furniture, NOT from floor rotation.
+     6→
+     7→'use client';
+     8→
+     9→import { useMemo } from 'react';
+    10→import { motion, AnimatePresence } from 'framer-motion';
+    11→import { getAgentVisual } from '@/lib/office/agentDefaults';
+    12→import { getStatusVisual } from '@/lib/office/statusMapping';
+    13→import type { OfficeAgent, OfficeTask } from '@/hooks/useOfficeData';
+    14→import type { AgentAnimationState, ZoneAnimationState } from '@/hooks/useOfficeAnimations';
+    15→
+    16→// ─── Runtime-first helpers ──────────────────────────────────────
+    17→function getRuntimeStatus(agent: OfficeAgent): string {
+    18→  return agent.runtimeState?.status ?? agent.status;
+    19→}
+    20→function getRuntimeZone(agent: OfficeAgent): string {
+    21→  return agent.runtimeState?.locationZone ?? agent.locationZone;
+    22→}
+    23→
+    24→// ─── Color helpers ──────────────────────────────────────────────
+    25→function hexToRgb(hex: string) {
+    26→  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    27→  return m ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) } : { r: 100, g: 100, b: 100 };
+    28→}
+    29→function lighten(hex: string, pct: number): string {
+    30→  const { r, g, b } = hexToRgb(hex);
+    31→  const f = pct / 100;
+    32→  return `rgb(${Math.min(255, Math.round(r + (255 - r) * f))},${Math.min(255, Math.round(g + (255 - g) * f))},${Math.min(255, Math.round(b + (255 - b) * f))})`;
+    33→}
+    34→function darken(hex: string, pct: number): string {
+    35→  const { r, g, b } = hexToRgb(hex);
+    36→  const f = 1 - pct / 100;
+    37→  return `rgb(${Math.round(r * f)},${Math.round(g * f)},${Math.round(b * f)})`;
+    38→}
+    39→function withAlpha(hex: string, a: number): string {
+    40→  const { r, g, b } = hexToRgb(hex);
+    41→  return `rgba(${r},${g},${b},${a})`;
+    42→}
+    43→
+    44→// ─── Scene Configuration ────────────────────────────────────────
+    45→// The floor is 960×350 in scene units — fits in a 1280×800 viewport with top bar.
+    46→// Flat top-down view. The 2.5D feel comes from 3D-looking furniture and walls,
+    47→// NOT from rotating the floor plane.
+    48→
+    49→const FLOOR_W = 960;
+    50→const FLOOR_H = 350;
+    51→
+    52→// ─── Zone definitions (areas within the single office floor) ────
+    53→// 4 columns × 2 rows. Each zone is approximately 233×112 pixels.
+    54→interface ZoneDef {
+    55→  key: string;
+    56→  label: string;
+    57→  emoji: string;
+    58→  x: number;
+    59→  y: number;
+    60→  w: number;
+    61→  h: number;
+    62→  floorColor: string;
+    63→  wallColor: string;
+    64→}
+    65→
+    66→const ZONES: ZoneDef[] = [
+    67→  { key: 'command_area', label: 'Command', emoji: '👑',
+    68→    x: 4, y: 4, w: 233, h: 112,
+    69→    floorColor: '#f5f3ff', wallColor: '#8B5CF6' },
+    70→  { key: 'meeting_room', label: 'Meeting', emoji: '🤝',
+    71→    x: 243, y: 4, w: 233, h: 112,
+    72→    floorColor: '#fffbeb', wallColor: '#F59E0B' },
+    73→  { key: 'situation_room', label: 'Situation', emoji: '📊',
+    74→    x: 482, y: 4, w: 233, h: 112,
+    75→    floorColor: '#eff6ff', wallColor: '#3B82F6' },
+    76→  { key: 'development_area', label: 'Dev Floor', emoji: '💻',
+    77→    x: 721, y: 4, w: 235, h: 112,
+    78→    floorColor: '#ecfdf5', wallColor: '#10B981' },
+    79→  { key: 'design_area', label: 'Design', emoji: '🎨',
+    80→    x: 4, y: 122, w: 233, h: 112,
+    81→    floorColor: '#fdf2f8', wallColor: '#EC4899' },
+    82→  { key: 'server_room', label: 'Server', emoji: '🖥️',
+    83→    x: 243, y: 122, w: 233, h: 112,
+    84→    floorColor: '#f0fdfa', wallColor: '#14B8A6' },
+    85→  { key: 'research_area', label: 'Research', emoji: '📚',
+    86→    x: 482, y: 122, w: 233, h: 112,
+    87→    floorColor: '#faf5ff', wallColor: '#A855F7' },
+    88→  { key: 'lounge_area', label: 'Lounge', emoji: '☕',
+    89→    x: 721, y: 122, w: 235, h: 112,
+    90→    floorColor: '#fafaf9', wallColor: '#78716C' },
+    91→];
+    92→
+    93→// ─── Furniture placements per zone ──────────────────────────────
+    94→// type: furniture component type, x/y: position relative to zone origin
+    95→// All positions fit within 233×112 zone boundaries.
+    96→type FurnitureType = 'desk' | 'chair' | 'monitor' | 'keyboard' | 'meeting_table'
+    97→  | 'server_rack' | 'whiteboard' | 'sofa' | 'coffee_machine' | 'command_screen'
+    98→  | 'bookshelf' | 'plant';
+    99→
+   100→interface FurnitureItem {
+   101→  type: FurnitureType;
+   102→  x: number;
+   103→  y: number;
+   104→  props?: Record<string, unknown>;
+   105→}
+   106→
+   107→const ZONE_FURNITURE: Record<string, FurnitureItem[]> = {
+   108→  command_area: [
+   109→    { type: 'command_screen', x: 30, y: 5 },
+   110→    { type: 'desk', x: 45, y: 48, props: { wide: true, color: '#8B5CF6' } },
+   111→    { type: 'monitor', x: 80, y: 45 },
+   112→    { type: 'monitor', x: 115, y: 45 },
+   113→    { type: 'keyboard', x: 90, y: 66 },
+   114→    { type: 'chair', x: 90, y: 82 },
+   115→    { type: 'plant', x: 190, y: 10 },
+   116→  ],
+   117→  meeting_room: [
+   118→    { type: 'meeting_table', x: 30, y: 18 },
+   119→    { type: 'chair', x: 50, y: 10 },
+   120→    { type: 'chair', x: 95, y: 10 },
+   121→    { type: 'chair', x: 50, y: 86 },
+   122→    { type: 'chair', x: 95, y: 86 },
+   123→    { type: 'plant', x: 8, y: 8 },
+   124→  ],
+   125→  situation_room: [
+   126→    { type: 'desk', x: 15, y: 50, props: { color: '#3B82F6' } },
+   127→    { type: 'monitor', x: 38, y: 47 },
+   128→    { type: 'keyboard', x: 32, y: 70 },
+   129→    { type: 'chair', x: 32, y: 84 },
+   130→    { type: 'whiteboard', x: 145, y: 10 },
+   131→    { type: 'desk', x: 120, y: 50, props: { color: '#1e40af' } },
+   132→    { type: 'monitor', x: 143, y: 47 },
+   133→    { type: 'keyboard', x: 138, y: 70 },
+   134→    { type: 'chair', x: 138, y: 84 },
+   135→  ],
+   136→  development_area: [
+   137→    { type: 'desk', x: 12, y: 28, props: { color: '#10B981' } },
+   138→    { type: 'monitor', x: 35, y: 25 },
+   139→    { type: 'keyboard', x: 30, y: 48 },
+   140→    { type: 'chair', x: 30, y: 60 },
+   141→    { type: 'desk', x: 120, y: 28, props: { color: '#6366F1' } },
+   142→    { type: 'monitor', x: 143, y: 25 },
+   143→    { type: 'keyboard', x: 138, y: 48 },
+   144→    { type: 'chair', x: 138, y: 60 },
+   145→  ],
+   146→  design_area: [
+   147→    { type: 'desk', x: 20, y: 28, props: { color: '#EC4899' } },
+   148→    { type: 'monitor', x: 43, y: 25 },
+   149→    { type: 'keyboard', x: 37, y: 48 },
+   150→    { type: 'chair', x: 37, y: 60 },
+   151→    { type: 'whiteboard', x: 130, y: 10 },
+   152→    { type: 'plant', x: 195, y: 8 },
+   153→  ],
+   154→  server_room: [
+   155→    { type: 'server_rack', x: 8, y: 5 },
+   156→    { type: 'server_rack', x: 52, y: 5 },
+   157→    { type: 'desk', x: 130, y: 55, props: { color: '#14B8A6' } },
+   158→    { type: 'monitor', x: 153, y: 52 },
+   159→    { type: 'keyboard', x: 148, y: 72 },
+   160→    { type: 'chair', x: 148, y: 84 },
+   161→  ],
+   162→  research_area: [
+   163→    { type: 'bookshelf', x: 8, y: 5 },
+   164→    { type: 'desk', x: 65, y: 38, props: { color: '#A855F7' } },
+   165→    { type: 'monitor', x: 88, y: 35 },
+   166→    { type: 'keyboard', x: 82, y: 55 },
+   167→    { type: 'chair', x: 82, y: 68 },
+   168→    { type: 'plant', x: 195, y: 8 },
+   169→  ],
+   170→  lounge_area: [
+   171→    { type: 'sofa', x: 12, y: 12 },
+   172→    { type: 'coffee_machine', x: 145, y: 10 },
+   173→    { type: 'plant', x: 195, y: 6 },
+   174→  ],
+   175→};
+   176→
+   177→// ─── Agent seat positions per zone (relative to zone origin) ────
+   178→// Each agent gets an (x,y) seat position within their zone.
+   179→interface AgentSeat {
+   180→  x: number;
+   181→  y: number;
+   182→  sitting: boolean;
+   183→  facing: 'down' | 'up' | 'left' | 'right';
+   184→}
+   185→
+   186→const ZONE_SEATS: Record<string, AgentSeat[]> = {
+   187→  command_area: [
+   188→    { x: 90, y: 76, sitting: true, facing: 'down' },
+   189→  ],
+   190→  meeting_room: [
+   191→    { x: 65, y: 45, sitting: true, facing: 'down' },
+   192→    { x: 110, y: 45, sitting: true, facing: 'down' },
+   193→    { x: 65, y: 80, sitting: true, facing: 'up' },
+   194→    { x: 110, y: 80, sitting: true, facing: 'up' },
+   195→  ],
+   196→  situation_room: [
+   197→    { x: 32, y: 76, sitting: true, facing: 'down' },
+   198→    { x: 138, y: 76, sitting: true, facing: 'down' },
+   199→  ],
+   200→  development_area: [
+   201→    { x: 30, y: 52, sitting: true, facing: 'down' },
+   202→    { x: 138, y: 52, sitting: true, facing: 'down' },
+   203→  ],
+   204→  design_area: [
+   205→    { x: 37, y: 52, sitting: true, facing: 'down' },
+   206→  ],
+   207→  server_room: [
+   208→    { x: 148, y: 76, sitting: true, facing: 'down' },
+   209→    { x: 40, y: 55, sitting: false, facing: 'down' },
+   210→  ],
+   211→  research_area: [
+   212→    { x: 82, y: 60, sitting: true, facing: 'down' },
+   213→  ],
+   214→  lounge_area: [
+   215→    { x: 55, y: 42, sitting: false, facing: 'down' },
+   216→  ],
+   217→};
+   218→
+   219→// ─── Props ──────────────────────────────────────────────────────
+   220→interface OfficeSceneV2Props {
+   221→  agents: OfficeAgent[];
+   222→  tasks: OfficeTask[];
+   223→  onAgentClick?: (agentId: string) => void;
+   224→  agentAnimations?: Record<string, AgentAnimationState>;
+   225→  zoneAnimations?: Record<string, ZoneAnimationState>;
+   226→}
+   227→
+   228→// ═══════════════════════════════════════════════════════════════════
+   229→// FURNITURE RENDERERS — Each is a small CSS-only 3D-ish object
+   230→// ═══════════════════════════════════════════════════════════════════
+   231→
+   232→function FurnitureDesk({ x, y, color = '#94a3b8', wide = false }: { x: number; y: number; color?: string; wide?: boolean }) {
+   233→  const w = wide ? 120 : 70;
+   234→  return (
+   235→    <div className="absolute" style={{ left: x, top: y }}>
+   236→      {/* Shadow */}
+   237→      <div style={{ position: 'absolute', bottom: -3, left: 3, width: w, height: 10, borderRadius: '50%', background: 'rgba(0,0,0,0.08)', filter: 'blur(2px)' }} />
+   238→      {/* Desk surface (top face) */}
+   239→      <div style={{ width: w, height: 30, background: lighten(color, 25), borderRadius: 2, border: `1px solid ${darken(color, 10)}`, position: 'relative', zIndex: 2 }} />
+   240→      {/* Desk front (front face) */}
+   241→      <div style={{ width: w, height: 8, background: darken(color, 8), borderRadius: '0 0 2px 2px', border: `1px solid ${darken(color, 20)}`, borderTop: 'none', position: 'relative', zIndex: 1 }}>
+   242→        {/* Legs */}
+   243→        <div style={{ position: 'absolute', left: 4, bottom: -4, width: 3, height: 5, background: darken(color, 30) }} />
+   244→        <div style={{ position: 'absolute', right: 4, bottom: -4, width: 3, height: 5, background: darken(color, 30) }} />
+   245→      </div>
+   246→    </div>
+   247→  );
+   248→}
+   249→
+   250→function FurnitureChair({ x, y, occupied = false }: { x: number; y: number; occupied?: boolean }) {
+   251→  return (
+   252→    <div className="absolute" style={{ left: x, top: y }}>
+   253→      {/* Shadow */}
+   254→      <div style={{ position: 'absolute', bottom: -2, left: 1, width: 18, height: 7, borderRadius: '50%', background: 'rgba(0,0,0,0.06)', filter: 'blur(1px)' }} />
+   255→      {/* Seat */}
+   256→      <div style={{ width: 18, height: 18, borderRadius: 4, background: occupied ? '#475569' : '#94a3b8', opacity: occupied ? 0.7 : 0.4, border: '1px solid rgba(0,0,0,0.1)', position: 'relative', zIndex: 1 }}>
+   257→        {/* Back rest */}
+   258→        <div style={{ position: 'absolute', top: -6, left: 2, right: 2, height: 6, borderRadius: '2px 2px 0 0', background: occupied ? '#334155' : '#64748b', opacity: occupied ? 0.7 : 0.4 }} />
+   259→      </div>
+   260→    </div>
+   261→  );
+   262→}
+   263→
+   264→function FurnitureMonitor({ x, y, color = '#334155', isActive = false }: { x: number; y: number; color?: string; isActive?: boolean }) {
+   265→  return (
+   266→    <div className="absolute" style={{ left: x, top: y, zIndex: 3 }}>
+   267→      {/* Stand */}
+   268→      <div style={{ width: 3, height: 5, background: '#94a3b8', margin: '0 auto' }} />
+   269→      {/* Screen */}
+   270→      <motion.div
+   271→        style={{ width: 30, height: 20, borderRadius: 2, background: color, border: '1.5px solid rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+   272→        animate={isActive ? { boxShadow: [`0 0 4px ${withAlpha(color, 0.4)}`, `0 0 10px ${withAlpha(color, 0.2)}`, `0 0 4px ${withAlpha(color, 0.4)}`] } : {}}
+   273→        transition={{ duration: 2, repeat: Infinity }}
+   274→      >
+   275→        {/* Screen content lines */}
+   276→        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: 3 }}>
+   277→          <div style={{ width: 14, height: 1.5, borderRadius: 1, background: isActive ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.15)' }} />
+   278→          <div style={{ width: 10, height: 1.5, borderRadius: 1, background: isActive ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.1)' }} />
+   279→          <div style={{ width: 16, height: 1.5, borderRadius: 1, background: isActive ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.08)' }} />
+   280→        </div>
+   281→      </motion.div>
+   282→    </div>
+   283→  );
+   284→}
+   285→
+   286→function FurnitureKeyboard({ x, y }: { x: number; y: number }) {
+   287→  return (
+   288→    <div className="absolute" style={{ left: x, top: y, zIndex: 2 }}>
+   289→      <div style={{ width: 22, height: 7, borderRadius: 1, background: '#e2e8f0', border: '0.5px solid #cbd5e1', opacity: 0.7 }}>
+   290→        {/* Key rows */}
+   291→        <div style={{ display: 'flex', gap: 1, padding: '1px 2px', justifyContent: 'center' }}>
+   292→          {[0, 1, 2, 3, 4, 5, 6].map(i => <div key={i} style={{ width: 2, height: 1.5, borderRadius: 0.5, background: '#cbd5e1' }} />)}
+   293→        </div>
+   294→      </div>
+   295→    </div>
+   296→  );
+   297→}
+   298→
+   299→function FurnitureMeetingTable({ x, y }: { x: number; y: number }) {
+   300→  return (
+   301→    <div className="absolute" style={{ left: x, top: y }}>
+   302→      <div style={{ position: 'absolute', bottom: -5, left: 5, width: 120, height: 18, borderRadius: '50%', background: 'rgba(0,0,0,0.06)', filter: 'blur(2px)' }} />
+   303→      {/* Table top */}
+   304→      <div style={{ width: 130, height: 70, background: lighten('#92400e', 32), borderRadius: 8, border: '1.5px solid #b45309', position: 'relative', zIndex: 2 }}>
+   305→        <span style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', fontSize: 7, color: 'rgba(120,53,15,0.3)', fontWeight: 700, letterSpacing: 2 }}>MEETING</span>
+   306→      </div>
+   307→      {/* Table front */}
+   308→      <div style={{ width: 130, height: 10, background: darken('#92400e', 5), borderRadius: '0 0 8px 8px', border: '1.5px solid #78350f', borderTop: 'none', position: 'relative', zIndex: 1 }} />
+   309→    </div>
+   310→  );
+   311→}
+   312→
+   313→function FurnitureServerRack({ x, y, isActive = false }: { x: number; y: number; isActive?: boolean }) {
+   314→  return (
+   315→    <div className="absolute" style={{ left: x, top: y }}>
+   316→      <div style={{ position: 'absolute', bottom: -3, left: 2, width: 36, height: 10, borderRadius: '50%', background: 'rgba(0,0,0,0.08)', filter: 'blur(2px)' }} />
+   317→      {/* Rack body */}
+   318→      <div style={{ width: 40, height: 65, borderRadius: 2, background: '#1e293b', border: '1px solid #0f172a', position: 'relative', zIndex: 2, overflow: 'hidden' }}>
+   319→        {[0, 1, 2, 3, 4].map(i => (
+   320→          <div key={i} style={{ height: 12, borderBottom: '1px solid rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', padding: '0 4px', gap: 3 }}>
+   321→            <motion.div
+   322→              style={{ width: 4, height: 4, borderRadius: '50%', background: isActive ? '#4ade80' : '#475569' }}
+   323→              animate={isActive ? { opacity: [1, 0.2, 1] } : {}}
+   324→              transition={{ duration: 0.8 + i * 0.15, repeat: Infinity, delay: i * 0.1 }}
+   325→            />
+   326→            <div style={{ width: 10, height: 2.5, borderRadius: 1, background: '#334155' }} />
+   327→            <div style={{ width: 6, height: 2.5, borderRadius: 1, background: '#292524' }} />
+   328→          </div>
+   329→        ))}
+   330→      </div>
+   331→      {/* Side face */}
+   332→      <div style={{ position: 'absolute', top: 0, right: -10, width: 10, height: 65, background: '#0f172a', borderRadius: '0 2px 2px 0', transform: 'skewY(-30deg)', transformOrigin: 'top left', zIndex: 1 }} />
+   333→      {/* Top face */}
+   334→      <div style={{ position: 'absolute', top: -7, right: -10, width: 40, height: 9, background: '#334155', borderRadius: '2px 2px 0 0', transform: 'skewX(-30deg)', transformOrigin: 'bottom left', zIndex: 3 }} />
+   335→    </div>
+   336→  );
+   337→}
+   338→
+   339→function FurnitureWhiteboard({ x, y }: { x: number; y: number }) {
+   340→  return (
+   341→    <div className="absolute" style={{ left: x, top: y }}>
+   342→      <div style={{ width: 3, height: 10, background: '#64748b', margin: '0 auto', position: 'relative', zIndex: 1 }} />
+   343→      <div style={{ width: 55, height: 40, borderRadius: 2, background: '#f8fafc', border: '2px solid #94a3b8', position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', padding: 4, gap: 3 }}>
+   344→        <div style={{ width: 30, height: 2, background: '#94a3b8', borderRadius: 1, opacity: 0.5 }} />
+   345→        <div style={{ width: 40, height: 2, background: '#94a3b8', borderRadius: 1, opacity: 0.4 }} />
+   346→        <div style={{ width: 25, height: 2, background: '#94a3b8', borderRadius: 1, opacity: 0.3 }} />
+   347→        <div style={{ width: 35, height: 2, background: '#94a3b8', borderRadius: 1, opacity: 0.3 }} />
+   348→      </div>
+   349→    </div>
+   350→  );
+   351→}
+   352→
+   353→function FurnitureSofa({ x, y }: { x: number; y: number }) {
+   354→  return (
+   355→    <div className="absolute" style={{ left: x, top: y }}>
+   356→      <div style={{ position: 'absolute', bottom: -4, left: 4, width: 100, height: 14, borderRadius: '50%', background: 'rgba(0,0,0,0.06)', filter: 'blur(2px)' }} />
+   357→      {/* Sofa body */}
+   358→      <div style={{ width: 110, height: 30, borderRadius: 8, background: '#d6d3d1', border: '1.5px solid #a8a29e', position: 'relative', zIndex: 2 }}>
+   359→        {/* Back cushion */}
+   360→        <div style={{ position: 'absolute', top: 0, left: 5, right: 5, height: 14, borderRadius: '5px 5px 0 0', background: '#e7e5e4', border: '1px solid #d6d3d1' }} />
+   361→        {/* Seat cushions */}
+   362→        <div style={{ display: 'flex', gap: 3, marginTop: 6, justifyContent: 'center' }}>
+   363→          {[0, 1, 2].map(i => <div key={i} style={{ width: 28, height: 14, borderRadius: 4, background: '#f5f5f4', border: '1px solid #e7e5e4' }} />)}
+   364→        </div>
+   365→      </div>
+   366→      {/* Front face */}
+   367→      <div style={{ width: 110, height: 8, background: '#a8a29e', borderRadius: '0 0 8px 8px', border: '1px solid #78716c', borderTop: 'none', zIndex: 1 }} />
+   368→      {/* Coffee table */}
+   369→      <div style={{ position: 'absolute', top: 44, left: 30, width: 45, height: 22, borderRadius: 3, background: lighten('#92400e', 28), border: '1px solid #b45309', zIndex: 2 }}>
+   370→        {/* Cup */}
+   371→        <div style={{ position: 'absolute', top: 5, left: 15, width: 7, height: 7, borderRadius: '50%', background: '#78350f', border: '1px solid #451a03' }} />
+   372→      </div>
+   373→    </div>
+   374→  );
+   375→}
+   376→
+   377→function FurnitureCoffeeMachine({ x, y }: { x: number; y: number }) {
+   378→  return (
+   379→    <div className="absolute" style={{ left: x, top: y }}>
+   380→      <div style={{ position: 'absolute', bottom: -2, left: 2, width: 20, height: 6, borderRadius: '50%', background: 'rgba(0,0,0,0.06)', filter: 'blur(1px)' }} />
+   381→      {/* Machine body */}
+   382→      <div style={{ width: 22, height: 30, borderRadius: 2, background: '#374151', border: '1px solid #1f2937', position: 'relative', zIndex: 2 }}>
+   383→        {/* Top */}
+   384→        <div style={{ width: 24, height: 6, borderRadius: '2px 2px 0 0', background: '#4b5563', border: '1px solid #374151', marginLeft: -1 }} />
+   385→        {/* Dispenser */}
+   386→        <div style={{ position: 'absolute', bottom: 4, left: 5, width: 12, height: 3, background: '#1f2937', borderRadius: 1 }} />
+   387→        {/* Light */}
+   388→        <motion.div
+   389→          style={{ position: 'absolute', top: 8, right: 4, width: 4, height: 4, borderRadius: '50%', background: '#22c55e' }}
+   390→          animate={{ opacity: [1, 0.3, 1] }}
+   391→          transition={{ duration: 2, repeat: Infinity }}
+   392→        />
+   393→      </div>
+   394→    </div>
+   395→  );
+   396→}
+   397→
+   398→function FurnitureCommandScreen({ x, y, isActive = false }: { x: number; y: number; isActive?: boolean }) {
+   399→  return (
+   400→    <div className="absolute" style={{ left: x, top: y }}>
+   401→      <div style={{ position: 'absolute', bottom: -3, left: 5, width: 130, height: 12, borderRadius: '50%', background: 'rgba(0,0,0,0.08)', filter: 'blur(2px)' }} />
+   402→      {/* Stand */}
+   403→      <div style={{ width: 4, height: 8, background: '#475569', margin: '0 auto' }} />
+   404→      {/* Screen array */}
+   405→      <div style={{ width: 140, height: 70, borderRadius: 4, background: '#0f172a', border: `2px solid ${isActive ? '#8B5CF6' : '#1e293b'}`, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 3, padding: 5, position: 'relative', zIndex: 2 }}>
+   406→        {[0, 1, 2, 3, 4, 5].map(i => (
+   407→          <motion.div
+   408→            key={i}
+   409→            style={{ borderRadius: 2, background: isActive ? '#1e3a5f' : '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+   410→            animate={isActive ? { opacity: [0.5, 1, 0.5] } : {}}
+   411→            transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.15 }}
+   412→          >
+   413→            <div style={{ width: 6, height: 6, borderRadius: 1, background: isActive ? '#8B5CF6' : '#334155' }} />
+   414→          </motion.div>
+   415→        ))}
+   416→      </div>
+   417→      {/* Crown indicator */}
+   418→      <div style={{ position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)', fontSize: 12, zIndex: 5 }}>👑</div>
+   419→    </div>
+   420→  );
+   421→}
+   422→
+   423→function FurnitureBookshelf({ x, y }: { x: number; y: number }) {
+   424→  return (
+   425→    <div className="absolute" style={{ left: x, top: y }}>
+   426→      <div style={{ position: 'absolute', bottom: -2, left: 2, width: 46, height: 8, borderRadius: '50%', background: 'rgba(0,0,0,0.06)', filter: 'blur(1px)' }} />
+   427→      <div style={{ width: 50, height: 55, borderRadius: 2, background: '#78350f', border: '1px solid #451a03', position: 'relative', zIndex: 2 }}>
+   428→        {[0, 1, 2].map(i => (
+   429→          <div key={i} style={{ height: 17, borderBottom: '2px solid #451a03', display: 'flex', alignItems: 'flex-end', padding: '0 3px 2px', gap: 1 }}>
+   430→            {[0, 1, 2, 3, 4].map(j => (
+   431→              <div key={j} style={{ width: 4 + (j % 2), height: 7 + (j * 2) % 6, borderRadius: '1px 1px 0 0', background: ['#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6'][j], opacity: 0.7 }} />
+   432→            ))}
+   433→          </div>
+   434→        ))}
+   435→      </div>
+   436→      {/* Side face */}
+   437→      <div style={{ position: 'absolute', top: 0, right: -8, width: 8, height: 55, background: '#451a03', borderRadius: '0 2px 2px 0', transform: 'skewY(-30deg)', transformOrigin: 'top left', zIndex: 1 }} />
+   438→    </div>
+   439→  );
+   440→}
+   441→
+   442→function FurniturePlant({ x, y }: { x: number; y: number }) {
+   443→  return (
+   444→    <div className="absolute" style={{ left: x, top: y, zIndex: 4 }}>
+   445→      <div style={{ position: 'absolute', bottom: -2, left: 1, width: 14, height: 5, borderRadius: '50%', background: 'rgba(0,0,0,0.05)', filter: 'blur(1px)' }} />
+   446→      {/* Pot */}
+   447→      <div style={{ width: 14, height: 10, background: '#b45309', borderRadius: '0 0 3px 3px', margin: '0 auto', border: '1px solid #92400e' }}>
+   448→        <div style={{ width: 16, height: 3, background: '#d97706', borderRadius: 2, marginLeft: -1 }} />
+   449→      </div>
+   450→      {/* Leaves */}
+   451→      <div style={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', width: 20, height: 16, display: 'flex', justifyContent: 'center', gap: 1 }}>
+   452→        <div style={{ width: 6, height: 14, borderRadius: '50%', background: '#22c55e', transform: 'rotate(-15deg)' }} />
+   453→        <div style={{ width: 6, height: 16, borderRadius: '50%', background: '#16a34a' }} />
+   454→        <div style={{ width: 6, height: 14, borderRadius: '50%', background: '#22c55e', transform: 'rotate(15deg)' }} />
+   455→      </div>
+   456→    </div>
+   457→  );
+   458→}
+   459→
+   460→// ─── Render furniture by type ───────────────────────────────────
+   461→function renderFurnitureItem(item: FurnitureItem, zoneAgents: OfficeAgent[]) {
+   462→  const hasWorking = zoneAgents.some(a => getRuntimeStatus(a) === 'working');
+   463→  const key = `${item.type}-${item.x}-${item.y}`;
+   464→  const p = item.props ?? {};
+   465→
+   466→  switch (item.type) {
+   467→    case 'desk': return <FurnitureDesk key={key} x={item.x} y={item.y} color={p.color as string} wide={p.wide as boolean} />;
+   468→    case 'chair': return <FurnitureChair key={key} x={item.x} y={item.y} occupied={zoneAgents.length > 0} />;
+   469→    case 'monitor': return <FurnitureMonitor key={key} x={item.x} y={item.y} color={p.color as string} isActive={hasWorking} />;
+   470→    case 'keyboard': return <FurnitureKeyboard key={key} x={item.x} y={item.y} />;
+   471→    case 'meeting_table': return <FurnitureMeetingTable key={key} x={item.x} y={item.y} />;
+   472→    case 'server_rack': return <FurnitureServerRack key={key} x={item.x} y={item.y} isActive={hasWorking} />;
+   473→    case 'whiteboard': return <FurnitureWhiteboard key={key} x={item.x} y={item.y} />;
+   474→    case 'sofa': return <FurnitureSofa key={key} x={item.x} y={item.y} />;
+   475→    case 'coffee_machine': return <FurnitureCoffeeMachine key={key} x={item.x} y={item.y} />;
+   476→    case 'command_screen': return <FurnitureCommandScreen key={key} x={item.x} y={item.y} isActive={hasWorking} />;
+   477→    case 'bookshelf': return <FurnitureBookshelf key={key} x={item.x} y={item.y} />;
+   478→    case 'plant': return <FurniturePlant key={key} x={item.x} y={item.y} />;
+   479→    default: return null;
+   480→  }
+   481→}
+   482→
+   483→// ═══════════════════════════════════════════════════════════════════
+   484→// AGENT CHARACTER V2 — Mini-employee with head, body, arms, legs, shadow
+   485→// ═══════════════════════════════════════════════════════════════════
+   486→
+   487→function AgentCharacterV2({
+   488→  agent,
+   489→  x,
+   490→  y,
+   491→  sitting,
+   492→  facing = 'down',
+   493→  animationState,
+   494→  onClick,
+   495→  task,
+   496→}: {
+   497→  agent: OfficeAgent;
+   498→  x: number;
+   499→  y: number;
+   500→  sitting: boolean;
+   501→  facing?: 'down' | 'up' | 'left' | 'right';
+   502→  animationState?: AgentAnimationState | null;
+   503→  onClick?: () => void;
+   504→  task?: OfficeTask | null;
+   505→}) {
+   506→  const status = getRuntimeStatus(agent);
+   507→  const visual = getAgentVisual(agent.role);
+   508→  const statusVisual = getStatusVisual(status);
+   509→  const displayName = agent.profile?.displayName ?? agent.name;
+   510→
+   511→  const bodyColor = visual.color;
+   512→  const headColor = lighten(bodyColor, 18);
+   513→  const legColor = darken(bodyColor, 28);
+   514→  const skinColor = '#fbbf24';
+   515→
+   516→  // Animation based on status
+   517→  const statusAnim = (() => {
+   518→    switch (status) {
+   519→      case 'thinking': return { y: [0, -2, 0] };
+   520→      case 'working': return { y: [0, -1, 0] };
+   521→      case 'waiting_api': return { opacity: [1, 0.6, 1] };
+   522→      case 'reviewing': return { x: [0, 1, -1, 0] };
+   523→      case 'waiting_approval': return { scale: [1, 1.05, 1] };
+   524→      case 'error': return { x: [0, -2, 2, 0] };
+   525→      case 'offline': return {};
+   526→      default: return {};
+   527→    }
+   528→  })();
+   529→
+   530→  const animTransition = (() => {
+   531→    switch (status) {
+   532→      case 'thinking': return { duration: 1.5, repeat: Infinity, ease: 'easeInOut' as const };
+   533→      case 'working': return { duration: 0.6, repeat: Infinity, ease: 'easeInOut' as const };
+   534→      case 'waiting_api': return { duration: 1.5, repeat: Infinity, ease: 'easeInOut' as const };
+   535→      case 'reviewing': return { duration: 2, repeat: Infinity, ease: 'easeInOut' as const };
+   536→      case 'waiting_approval': return { duration: 1.2, repeat: Infinity, ease: 'easeInOut' as const };
+   537→      case 'error': return { duration: 0.5, repeat: 3, ease: 'easeInOut' as const };
+   538→      default: return {};
+   539→    }
+   540→  })();
+   541→
+   542→  const isOffline = status === 'offline';
+   543→  const isIdle = status === 'idle' || status === 'done';
+   544→
+   545→  // No counter-rotation needed — flat top-down view
+   546→  const labelCounterRotate = '';
+   547→
+   548→  return (
+   549→    <motion.div
+   550→      className="absolute cursor-pointer"
+   551→      style={{ left: x, top: y, zIndex: 20 }}
+   552→      onClick={onClick}
+   553→      animate={statusAnim}
+   554→      transition={animTransition as any}
+   555→      whileHover={{ scale: 1.15 }}
+   556→    >
+   557→      {/* ─── Shadow on floor ─── */}
+   558→      <div style={{
+   559→        position: 'absolute', bottom: sitting ? -4 : -3, left: '50%', transform: 'translateX(-50%)',
+   560→        width: sitting ? 36 : 28, height: sitting ? 10 : 9, borderRadius: '50%',
+   561→        background: 'rgba(0,0,0,0.12)', filter: 'blur(2px)',
+   562→      }} />
+   563→
+   564→      {/* ─── Standing character ─── */}
+   565→      {!sitting && (
+   566→        <>
+   567→          {/* Legs */}
+   568→          <div style={{ display: 'flex', justifyContent: 'center', gap: 3, marginBottom: -1 }}>
+   569→            <div style={{ width: 10, height: 14, background: legColor, borderRadius: '0 0 3px 3px' }} />
+   570→            <div style={{ width: 10, height: 14, background: legColor, borderRadius: '0 0 3px 3px' }} />
+   571→          </div>
+   572→          {/* Body */}
+   573→          <div style={{
+   574→            width: 32, height: 28, background: bodyColor,
+   575→            borderRadius: '4px 4px 5px 5px',
+   576→            margin: '0 auto', position: 'relative',
+   577→            boxShadow: `0 2px 5px rgba(0,0,0,0.25)`,
+   578→            opacity: isOffline ? 0.35 : 1,
+   579→            display: 'flex', alignItems: 'center', justifyContent: 'center',
+   580→          }}>
+   581→            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.9)', fontWeight: 800 }}>{visual.initials}</span>
+   582→            {/* Arms */}
+   583→            <div style={{ position: 'absolute', left: -7, top: 4, width: 7, height: 16, background: bodyColor, borderRadius: '3px 0 0 3px', opacity: 0.85 }} />
+   584→            <div style={{ position: 'absolute', right: -7, top: 4, width: 7, height: 16, background: bodyColor, borderRadius: '0 3px 3px 0', opacity: 0.85 }} />
+   585→          </div>
+   586→          {/* Head */}
+   587→          <div style={{
+   588→            width: 26, height: 26, borderRadius: '50%', background: skinColor,
+   589→            border: `3px solid ${lighten(bodyColor, 10)}`,
+   590→            margin: '-3px auto 0', position: 'relative',
+   591→            boxShadow: `0 2px 6px rgba(0,0,0,0.25)`,
+   592→            display: 'flex', alignItems: 'center', justifyContent: 'center',
+   593→          }}>
+   594→            <span style={{ fontSize: 13 }}>{visual.emoji}</span>
+   595→          </div>
+   596→        </>
+   597→      )}
+   598→
+   599→      {/* ─── Sitting character ─── */}
+   600→      {sitting && (
+   601→        <>
+   602→          {/* Head */}
+   603→          <div style={{
+   604→            width: 26, height: 26, borderRadius: '50%', background: skinColor,
+   605→            border: `3px solid ${lighten(bodyColor, 10)}`,
+   606→            margin: '0 auto', position: 'relative', zIndex: 3,
+   607→            boxShadow: `0 2px 6px rgba(0,0,0,0.25)`,
+   608→            display: 'flex', alignItems: 'center', justifyContent: 'center',
+   609→          }}>
+   610→            <span style={{ fontSize: 13 }}>{visual.emoji}</span>
+   611→          </div>
+   612→          {/* Body (wider, sitting) */}
+   613→          <div style={{
+   614→            width: 34, height: 20, background: bodyColor,
+   615→            borderRadius: '0 0 5px 5px',
+   616→            margin: '-2px auto 0', position: 'relative', zIndex: 2,
+   617→            boxShadow: `0 2px 4px rgba(0,0,0,0.2)`,
+   618→            opacity: isOffline ? 0.35 : 1,
+   619→            display: 'flex', alignItems: 'center', justifyContent: 'center',
+   620→          }}>
+   621→            <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.9)', fontWeight: 800, marginTop: 2 }}>{visual.initials}</span>
+   622→            {/* Arms on desk */}
+   623→            <div style={{ position: 'absolute', left: -8, top: 2, width: 8, height: 12, background: bodyColor, borderRadius: '3px 0 0 3px', opacity: 0.75 }} />
+   624→            <div style={{ position: 'absolute', right: -8, top: 2, width: 8, height: 12, background: bodyColor, borderRadius: '0 3px 3px 0', opacity: 0.75 }} />
+   625→          </div>
+   626→        </>
+   627→      )}
+   628→
+   629→      {/* ─── Status indicator bubble ─── */}
+   630→      {!isIdle && !isOffline && (
+   631→        <div style={{
+   632→          position: 'absolute', top: sitting ? -16 : -12, right: sitting ? -18 : -18, zIndex: 10,
+   633→          width: 18, height: 18, borderRadius: '50%',
+   634→          background: statusVisual.emoji === '⚠️' ? '#f97316' : statusVisual.emoji === '❌' ? '#ef4444' : '#22c55e',
+   635→          border: '2.5px solid white',
+   636→          display: 'flex', alignItems: 'center', justifyContent: 'center',
+   637→          boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
+   638→        }}>
+   639→          <span style={{ fontSize: 9 }}>{statusVisual.emoji}</span>
+   640→        </div>
+   641→      )}
+   642→
+   643→      {/* ─── Name label ─── */}
+   644→      <div style={{
+   645→        position: 'absolute', top: sitting ? -30 : -28, left: '50%',
+   646→        transform: `translateX(-50%) ${labelCounterRotate}`,
+   647→        whiteSpace: 'nowrap', zIndex: 30,
+   648→      }}>
+   649→        <span style={{
+   650→          fontSize: 11, fontWeight: 800, color: '#1e293b',
+   651→          background: 'rgba(255,255,255,0.95)',
+   652→          padding: '3px 8px', borderRadius: 5,
+   653→          boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
+   654→          border: `1.5px solid ${withAlpha(bodyColor, 0.25)}`,
+   655→        }}>
+   656→          {displayName}
+   657→        </span>
+   658→      </div>
+   659→
+   660→      {/* ─── Task indicator ─── */}
+   661→      {task && status === 'working' && (
+   662→        <div style={{
+   663→          position: 'absolute', top: sitting ? -36 : -34, left: '50%',
+   664→          transform: `translateX(-50%) ${labelCounterRotate}`,
+   665→          whiteSpace: 'nowrap', zIndex: 31,
+   666→        }}>
+   667→          <span style={{
+   668→            fontSize: 7, fontWeight: 600, color: '#fff',
+   669→            background: bodyColor,
+   670→            padding: '1px 5px', borderRadius: 3,
+   671→          }}>
+   672→            📋 {task.title.length > 18 ? task.title.slice(0, 16) + '…' : task.title}
+   673→          </span>
+   674→        </div>
+   675→      )}
+   676→
+   677→      {/* ─── Waiting approval indicator ─── */}
+   678→      {status === 'waiting_approval' && (
+   679→        <div style={{
+   680→          position: 'absolute', top: sitting ? -48 : -46, left: '50%',
+   681→          transform: `translateX(-50%) ${labelCounterRotate}`,
+   682→          whiteSpace: 'nowrap', zIndex: 32,
+   683→        }}>
+   684→          <span style={{
+   685→            fontSize: 7, fontWeight: 700, color: '#fff',
+   686→            background: '#f97316',
+   687→            padding: '1px 5px', borderRadius: 3,
+   688→          }}>
+   689→            ⚠ Waiting Approval
+   690→          </span>
+   691→        </div>
+   692→      )}
+   693→
+   694→      {/* ─── Event notification ─── */}
+   695→      {animationState?.notification && (
+   696→        <div style={{
+   697→          position: 'absolute', top: sitting ? -60 : -58, left: '50%',
+   698→          transform: `translateX(-50%) ${labelCounterRotate}`,
+   699→          whiteSpace: 'nowrap', zIndex: 33,
+   700→        }}>
+   701→          <span style={{
+   702→            fontSize: 7, color: '#fff', fontWeight: 600,
+   703→            background: '#1e293b', padding: '1px 5px', borderRadius: 3,
+   704→          }}>
+   705→            {animationState.notification}
+   706→          </span>
+   707→        </div>
+   708→      )}
+   709→
+   710→      {/* ─── Event highlight ring ─── */}
+   711→      {animationState?.highlight && (
+   712→        <motion.div
+   713→          style={{ position: 'absolute', inset: -8, borderRadius: '50%', border: '2px solid rgba(59,130,246,0.5)', zIndex: 5 }}
+   714→          animate={{ scale: [1, 1.3, 1], opacity: [1, 0.4, 1] }}
+   715→          transition={{ duration: 0.6, repeat: 2 }}
+   716→        />
+   717→      )}
+   718→    </motion.div>
+   719→  );
+   720→}
+   721→
+   722→// ═══════════════════════════════════════════════════════════════════
+   723→// ZONE WALL RENDERER — Volumetric walls that create room feeling
+   724→// wallHeight=20, wallThick=7 per spec
+   725→// ═══════════════════════════════════════════════════════════════════
+   726→
+   727→function ZoneWalls({ zone }: { zone: ZoneDef }) {
+   728→  const wallHeight = 20;
+   729→  const wallThick = 7;
+   730→  const wallColor = lighten(zone.wallColor, 40);
+   731→  const wallDark = darken(zone.wallColor, 10);
+   732→  const wallDarker = darken(zone.wallColor, 25);
+   733→
+   734→  return (
+   735→    <>
+   736→      {/* Back wall (top) */}
+   737→      <div style={{
+   738→        position: 'absolute', top: -wallHeight, left: -wallThick,
+   739→        width: zone.w + wallThick * 2, height: wallHeight,
+   740→        background: `linear-gradient(180deg, ${wallDark} 0%, ${wallColor} 100%)`,
+   741→        border: `1px solid ${wallDarker}`,
+   742→        borderRadius: '2px 2px 0 0', zIndex: 0,
+   743→      }} />
+   744→      {/* Left wall */}
+   745→      <div style={{
+   746→        position: 'absolute', top: -wallHeight, left: -wallThick,
+   747→        width: wallThick, height: zone.h + wallHeight,
+   748→        background: `linear-gradient(90deg, ${wallDarker} 0%, ${wallDark} 100%)`,
+   749→        border: `1px solid ${wallDarker}`, zIndex: 0,
+   750→      }} />
+   751→      {/* Right wall (partial — to show depth) */}
+   752→      <div style={{
+   753→        position: 'absolute', top: -wallHeight, right: -wallThick,
+   754→        width: wallThick, height: zone.h + wallHeight,
+   755→        background: `linear-gradient(270deg, ${darken(zone.wallColor, 20)} 0%, ${wallDark} 100%)`,
+   756→        border: `1px solid ${wallDarker}`, zIndex: 0,
+   757→      }} />
+   758→    </>
+   759→  );
+   760→}
+   761→
+   762→// ═══════════════════════════════════════════════════════════════════
+   763→// TOOL EXECUTION GLOW EFFECT
+   764→// ═══════════════════════════════════════════════════════════════════
+   765→
+   766→function ToolExecutionGlow({ zone, agents }: { zone: ZoneDef; agents: OfficeAgent[] }) {
+   767→  const hasRunning = agents.some(a => {
+   768→    const s = getRuntimeStatus(a);
+   769→    return s === 'working' || s === 'waiting_api';
+   770→  });
+   771→  if (!hasRunning) return null;
+   772→
+   773→  return (
+   774→    <motion.div
+   775→      style={{
+   776→        position: 'absolute', inset: 4, borderRadius: 4,
+   777→        border: `2px solid ${withAlpha(zone.wallColor, 0.4)}`,
+   778→        boxShadow: `0 0 12px ${withAlpha(zone.wallColor, 0.15)}, inset 0 0 12px ${withAlpha(zone.wallColor, 0.08)}`,
+   779→        zIndex: 15, pointerEvents: 'none',
+   780→      }}
+   781→      animate={{ opacity: [0.4, 0.8, 0.4] }}
+   782→      transition={{ duration: 2, repeat: Infinity }}
+   783→    />
+   784→  );
+   785→}
+   786→
+   787→// ═══════════════════════════════════════════════════════════════════
+   788→// ERROR ZONE EFFECT
+   789→// ═══════════════════════════════════════════════════════════════════
+   790→
+   791→function ErrorZoneEffect({ zone, agents }: { zone: ZoneDef; agents: OfficeAgent[] }) {
+   792→  const hasError = agents.some(a => getRuntimeStatus(a) === 'error');
+   793→  if (!hasError) return null;
+   794→
+   795→  return (
+   796→    <motion.div
+   797→      style={{
+   798→        position: 'absolute', inset: 4, borderRadius: 4,
+   799→        border: '2px solid rgba(239,68,68,0.5)',
+   800→        boxShadow: '0 0 16px rgba(239,68,68,0.2), inset 0 0 16px rgba(239,68,68,0.08)',
+   801→        zIndex: 15, pointerEvents: 'none',
+   802→      }}
+   803→      animate={{ opacity: [0.3, 0.7, 0.3] }}
+   804→      transition={{ duration: 1, repeat: Infinity }}
+   805→    />
+   806→  );
+   807→}
+   808→
+   809→// ═══════════════════════════════════════════════════════════════════
+   810→// APPROVAL ZONE EFFECT
+   811→// ═══════════════════════════════════════════════════════════════════
+   812→
+   813→function ApprovalZoneEffect({ zone, agents }: { zone: ZoneDef; agents: OfficeAgent[] }) {
+   814→  const hasApproval = agents.some(a => getRuntimeStatus(a) === 'waiting_approval');
+   815→  if (!hasApproval) return null;
+   816→
+   817→  return (
+   818→    <motion.div
+   819→      style={{
+   820→        position: 'absolute', inset: 4, borderRadius: 4,
+   821→        border: '2px solid rgba(249,115,22,0.5)',
+   822→        boxShadow: '0 0 14px rgba(249,115,22,0.15), inset 0 0 14px rgba(249,115,22,0.06)',
+   823→        zIndex: 15, pointerEvents: 'none',
+   824→      }}
+   825→      animate={{ opacity: [0.3, 0.6, 0.3] }}
+   826→      transition={{ duration: 1.5, repeat: Infinity }}
+   827→    />
+   828→  );
+   829→}
+   830→
+   831→// ═══════════════════════════════════════════════════════════════════
+   832→// MAIN OFFICE SCENE V2 COMPONENT
+   833→// ═══════════════════════════════════════════════════════════════════
+   834→
+   835→export function OfficeSceneV2({
+   836→  agents,
+   837→  tasks,
+   838→  onAgentClick,
+   839→  agentAnimations = {},
+   840→  zoneAnimations = {},
+   841→}: OfficeSceneV2Props) {
+   842→  // Group agents by runtime zone (runtime-first)
+   843→  const agentsByZone = useMemo(() => {
+   844→    const map: Record<string, OfficeAgent[]> = {};
+   845→    for (const agent of agents) {
+   846→      const zone = getRuntimeZone(agent) ?? 'lounge_area';
+   847→      if (!map[zone]) map[zone] = [];
+   848→      map[zone].push(agent);
+   849→    }
+   850→    return map;
+   851→  }, [agents]);
+   852→
+   853→  // Build task lookup by assignedAgentId
+   854→  const taskByAgent = useMemo(() => {
+   855→    const map: Record<string, OfficeTask> = {};
+   856→    for (const task of tasks) {
+   857→      if (task.assignedAgentId) {
+   858→        map[task.assignedAgentId] = task;
+   859→      }
+   860→    }
+   861→    return map;
+   862→  }, [tasks]);
+   863→
+   864→  // Labels are readable without counter-rotation (flat top-down view)
+   865→  const labelStyle: React.CSSProperties = {
+   866→    whiteSpace: 'nowrap',
+   867→  };
+   868→
+   869→  return (
+   870→    <div className="w-full h-full relative" style={{ background: 'linear-gradient(180deg, #dfe6ee 0%, #e8ecf2 30%, #dde3ea 100%)' }}>
+   871→      {/* ─── Office scene viewport — flat top-down view with 3D elements ─── */}
+   872→      <div
+   873→        className="w-full h-full overflow-auto flex justify-center items-start py-2"
+   874→      >
+   875→        <div
+   876→          className="relative flex-shrink-0 my-2"
+   877→          style={{
+   878→            width: FLOOR_W,
+   879→            height: FLOOR_H,
+   880→          }}
+   881→        >
+   882→          {/* ─── Main Office Floor ─── */}
+   883→          <div
+   884→            className="absolute inset-0"
+   885→            style={{
+   886→              background: `
+   887→                repeating-linear-gradient(0deg, transparent, transparent 49px, rgba(148,163,184,0.06) 49px, rgba(148,163,184,0.06) 50px),
+   888→                repeating-linear-gradient(90deg, transparent, transparent 49px, rgba(148,163,184,0.06) 49px, rgba(148,163,184,0.06) 50px),
+   889→                linear-gradient(180deg, #dde3ea 0%, #e8ecf1 50%, #e2e8f0 100%)
+   890→              `,
+   891→              boxShadow: `
+   892→                0 0 0 3px rgba(148,163,184,0.25),
+   893→                12px 12px 0 rgba(0,0,0,0.04),
+   894→                24px 24px 0 rgba(0,0,0,0.02),
+   895→                0 20px 60px rgba(0,0,0,0.15)
+   896→              `,
+   897→              borderRadius: 4,
+   898→            }}
+   899→          />
+   900→
+   901→          {/* ─── Zone Areas with Walls ─── */}
+   902→          {ZONES.map((zone) => {
+   903→            const zoneAgents = agentsByZone[zone.key] ?? [];
+   904→            const isHighlighted = !!zoneAnimations[zone.key];
+   905→            const furnitureItems = ZONE_FURNITURE[zone.key] ?? [];
+   906→            const seats = ZONE_SEATS[zone.key] ?? [];
+   907→
+   908→            return (
+   909→              <div key={zone.key}>
+   910→                {/* Zone floor area */}
+   911→                <div
+   912→                  className="absolute"
+   913→                  style={{
+   914→                    left: zone.x, top: zone.y,
+   915→                    width: zone.w, height: zone.h,
+   916→                    background: zone.floorColor,
+   917→                    borderRadius: 3,
+   918→                    zIndex: 1,
+   919→                    position: 'relative',
+   920→                  }}
+   921→                >
+   922→                  {/* Walls */}
+   923→                  <ZoneWalls zone={zone} />
+   924→
+   925→                  {/* Zone label */}
+   926→                  <div
+   927→                    className="absolute"
+   928→                    style={{ top: 8, left: 8, zIndex: 25, ...labelStyle }}
+   929→                  >
+   930→                    <span style={{
+   931→                      fontSize: 8, fontWeight: 700, color: darken(zone.wallColor, 15),
+   932→                      background: 'rgba(255,255,255,0.85)',
+   933→                      padding: '2px 6px', borderRadius: 3,
+   934→                      border: `1px solid ${withAlpha(zone.wallColor, 0.2)}`,
+   935→                    }}>
+   936→                      {zone.emoji} {zone.label}
+   937→                    </span>
+   938→                    {zoneAgents.length > 0 && (
+   939→                      <span style={{ marginLeft: 4, fontSize: 7, color: '#64748b' }}>
+   940→                        {zoneAgents.filter(a => getRuntimeStatus(a) !== 'offline').length}/{zoneAgents.length}
+   941→                      </span>
+   942→                    )}
+   943→                  </div>
+   944→
+   945→                  {/* Zone highlight pulse */}
+   946→                  {isHighlighted && (
+   947→                    <motion.div
+   948→                      className="absolute inset-0 rounded"
+   949→                      style={{ background: withAlpha(zone.wallColor, 0.08), zIndex: 14, pointerEvents: 'none' }}
+   950→                      animate={{ opacity: [0.3, 0.8, 0.3] }}
+   951→                      transition={{ duration: 1, repeat: 3 }}
+   952→                    />
+   953→                  )}
+   954→
+   955→                  {/* Tool execution glow */}
+   956→                  <ToolExecutionGlow zone={zone} agents={zoneAgents} />
+   957→
+   958→                  {/* Error zone effect */}
+   959→                  <ErrorZoneEffect zone={zone} agents={zoneAgents} />
+   960→
+   961→                  {/* Approval zone effect */}
+   962→                  <ApprovalZoneEffect zone={zone} agents={zoneAgents} />
+   963→
+   964→                  {/* ─── Furniture ─── */}
+   965→                  <div className="absolute inset-0" style={{ zIndex: 5 }}>
+   966→                    {furnitureItems.map(item => renderFurnitureItem(item, zoneAgents))}
+   967→                  </div>
+   968→
+   969→                  {/* ─── Agent Characters ─── */}
+   970→                  {zoneAgents.map((agent, i) => {
+   971→                    const seat = seats[i] ?? { x: 20 + i * 30, y: 60, sitting: false, facing: 'down' as const };
+   972→
+   973→                    return (
+   974→                      <motion.div
+   975→                        key={agent.id}
+   976→                        className="absolute"
+   977→                        style={{ left: seat.x, top: seat.y, zIndex: 20 }}
+   978→                        initial={{ opacity: 0.3 }}
+   979→                        animate={{ x: 0, y: 0, opacity: 1 }}
+   980→                        transition={{ duration: 0.8, ease: 'easeInOut' }}
+   981→                      >
+   982→                        <AgentCharacterV2
+   983→                          agent={agent}
+   984→                          x={0}
+   985→                          y={0}
+   986→                          sitting={seat.sitting}
+   987→                          facing={seat.facing}
+   988→                          animationState={agentAnimations[agent.id] ?? null}
+   989→                          onClick={() => onAgentClick?.(agent.id)}
+   990→                          task={taskByAgent[agent.id] ?? null}
+   991→                        />
+   992→                      </motion.div>
+   993→                    );
+   994→                  })}
+   995→                </div>
+   996→              </div>
+   997→            );
+   998→          })}
+   999→
+  1000→          {/* ─── Floor label ─── */}
+  1001→          <div className="absolute bottom-2 right-3" style={labelStyle}>
+  1002→            <span style={{ fontSize: 8, color: '#94a3b8', fontWeight: 500 }}>
+  1003→              🏢 Floor 1 — {agents.length} agents · {tasks.length} tasks
+  1004→            </span>
+  1005→          </div>
+  1006→        </div>{/* end floor container */}
+  1007→      </div>{/* end viewport */}
+  1008→
+  1009→      {/* ─── Legend (fixed in viewport) ─── */}
+  1010→      <div className="absolute bottom-2 left-2 flex items-center gap-3 text-[9px] text-gray-400 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-md shadow-sm z-50">
+  1011→        <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-green-400" /> Working</div>
+  1012→        <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-amber-400" /> Thinking</div>
+  1013→        <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-orange-400" /> Approval</div>
+  1014→        <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-red-400" /> Error</div>
+  1015→        <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-gray-300" /> Idle</div>
+  1016→      </div>
+  1017→    </div>
+  1018→  );
+  1019→}
+  1020→

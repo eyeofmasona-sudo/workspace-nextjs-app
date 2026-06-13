@@ -21,6 +21,7 @@ import { EventTypes } from '../types/events';
 import type { ChatMessage, CompletionRequest } from '../ai-provider/types';
 import type { AgentConfig } from '../agent-core/types';
 import { generateCorrelationId } from '../utils/correlation';
+import { isMarketingAgent, getAgentDepartment, Departments } from '../types/departments';
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -52,6 +53,7 @@ export interface OrchestratorChatInput {
   workspaceId?: string;
   mode?: 'auto' | 'manual';
   targetAgentIds?: string[];
+  targetDepartment?: 'dev_department' | 'marketing_department';
 }
 
 // ─── Internal types for AI delegation analysis ───────────────
@@ -63,6 +65,7 @@ interface AgentSummary {
   description: string;
   skills: string[];
   tools: string[];
+  department: string;
 }
 
 interface DelegationDecision {
@@ -122,8 +125,13 @@ class OrchestratorChatEngine {
       };
     }
 
-    // Step 2: Get available agents
-    const availableAgents = this.getAvailableAgents();
+    // Step 2: Get available agents (optionally filtered by department)
+    let availableAgents = this.getAvailableAgents();
+    if (input.targetDepartment) {
+      availableAgents = availableAgents.filter(
+        (a) => a.department === input.targetDepartment
+      );
+    }
     if (availableAgents.length === 0) {
       return {
         orchestratorResponse:
@@ -294,7 +302,7 @@ class OrchestratorChatEngine {
       const agentCatalog = availableAgents
         .map(
           (a) =>
-            `- ID: "${a.id}" | Name: "${a.name}" | Role: ${a.role} | Description: ${a.description}` +
+            `- ID: "${a.id}" | Name: "${a.name}" | Role: ${a.role} | Department: ${a.department} | Description: ${a.description}` +
             (a.skills.length > 0 ? ` | Skills: ${a.skills.join(', ')}` : '') +
             (a.tools.length > 0 ? ` | Tools: ${a.tools.join(', ')}` : '')
         )
@@ -311,6 +319,10 @@ RULES:
 3. Maximum ${MAX_DELEGATION_AGENTS} agents can be delegated to
 4. If no agent is relevant, return an empty list (the orchestrator will handle it directly)
 5. Be precise with subtask descriptions — each agent should know exactly what to do
+6. Consider department boundaries — dev agents handle product/technical tasks, marketing agents handle promotion/content/growth tasks
+7. For marketing-related tasks (launch, positioning, content, growth, campaigns), prefer marketing department agents
+8. For technical tasks (code, architecture, testing, deployment), prefer dev department agents
+9. Cross-department collaboration should go through the orchestrator — don't assign marketing tasks to dev agents or vice versa
 
 RESPOND WITH JSON ONLY. No markdown, no explanation outside JSON.
 Format:
@@ -624,6 +636,7 @@ ${agentSummaries}`;
         description: config.description,
         skills: config.skills.filter((s) => s.enabled).map((s) => s.skillId),
         tools: config.tools.filter((t) => t.enabled).map((t) => t.toolId),
+        department: getAgentDepartment(config.role),
       }));
   }
 }

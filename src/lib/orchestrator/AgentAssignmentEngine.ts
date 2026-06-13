@@ -109,6 +109,55 @@ const ROLE_KEYWORDS: RoleKeywordMap[] = [
     ],
     priority: 7,
   },
+  {
+    role: 'marketing_lead',
+    keywords: [
+      'marketing', 'gtm', 'go-to-market', 'launch plan', 'positioning',
+      'product marketing', 'pmm', 'market strategy', 'launch strategy',
+      'brand positioning', 'value proposition', 'launch coordination',
+    ],
+    priority: 9,
+  },
+  {
+    role: 'market_researcher',
+    keywords: [
+      'market research', 'competitor analysis', 'icp', 'ideal customer',
+      'persona', 'target audience', 'market size', 'tam', 'sam', 'som',
+      'jtbd', 'jobs to be done', 'differentiation', 'competitive analysis',
+      'market intelligence', 'audience segment',
+    ],
+    priority: 9,
+  },
+  {
+    role: 'content_strategist',
+    keywords: [
+      'content', 'messaging', 'copywriting', 'landing page copy',
+      'email copy', 'social media post', 'blog post', 'press release',
+      'content plan', 'editorial calendar', 'brand voice', 'tone of voice',
+      'content strategy', 'copy', 'headline', 'tagline', 'slogan',
+    ],
+    priority: 9,
+  },
+  {
+    role: 'growth_manager',
+    keywords: [
+      'growth', 'acquisition', 'seo', 'sem', 'paid ads', 'campaign',
+      'distribution', 'channel', 'funnel', 'conversion optimization',
+      'a/b test', 'experiment', 'community', 'product hunt', 'launch day',
+      'referral', 'viral', 'organic traffic', 'paid traffic',
+    ],
+    priority: 9,
+  },
+  {
+    role: 'marketing_analyst',
+    keywords: [
+      'analytics', 'kpi', 'metrics', 'dashboard', 'reporting',
+      'conversion rate', 'cac', 'ltv', 'roi', 'engagement rate',
+      'market feedback', 'user feedback', 'sentiment analysis',
+      'campaign performance', 'measurement', 'tracking',
+    ],
+    priority: 9,
+  },
 ];
 
 class AgentAssignmentEngine {

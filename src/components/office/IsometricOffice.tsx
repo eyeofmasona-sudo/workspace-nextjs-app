@@ -64,6 +64,10 @@ const ZONES: ZoneLayout[] = [
   { key: 'server_room',   x: 8,   y: 324, w: 230, h: 168, tint: 'rgba(20,184,166,0.06)',   border: 'rgba(20,184,166,0.18)' },
   { key: 'research_area',  x: 246, y: 324, w: 230, h: 168, tint: 'rgba(139,92,246,0.06)',   border: 'rgba(139,92,246,0.18)' },
   { key: 'lounge_area',    x: 484, y: 324, w: 228, h: 168, tint: 'rgba(168,162,158,0.06)',  border: 'rgba(168,162,158,0.18)' },
+  // Marketing Department
+  { key: 'marketing_area',  x: 8,   y: 500, w: 230, h: 150, tint: 'rgba(217,70,239,0.06)',  border: 'rgba(217,70,239,0.18)' },
+  { key: 'content_studio',  x: 246, y: 500, w: 228, h: 150, tint: 'rgba(245,158,11,0.06)',  border: 'rgba(245,158,11,0.18)' },
+  { key: 'growth_lab',      x: 484, y: 500, w: 228, h: 150, tint: 'rgba(6,182,212,0.06)',   border: 'rgba(6,182,212,0.18)' },
 ];
 
 // ─── Furniture positions per zone (absolute on floor) ───────────
@@ -107,6 +111,20 @@ const ZONE_FURNITURE: Record<string, FurniturePlacement[]> = {
   lounge_area: [
     { type: 'sofa', x: 30, y: 30 },
   ],
+  marketing_area: [
+    { type: 'desk', x: 20, y: 30, props: { monitorLabel: 'MKT', color: '#D946EF' } },
+    { type: 'desk', x: 100, y: 30, props: { monitorLabel: 'RSR', color: '#0EA5E9' } },
+    { type: 'bookshelf', x: 20, y: 15 },
+  ],
+  content_studio: [
+    { type: 'desk', x: 40, y: 30, props: { monitorLabel: 'CNT', color: '#F59E0B' } },
+    { type: 'bookshelf', x: 20, y: 10 },
+  ],
+  growth_lab: [
+    { type: 'desk', x: 20, y: 30, props: { monitorLabel: 'GRW', color: '#22C55E' } },
+    { type: 'desk', x: 100, y: 30, props: { monitorLabel: 'ANL', color: '#06B6D4' } },
+    { type: 'monitor_wall', x: 20, y: 10 },
+  ],
 };
 
 // ─── Agent seat positions per zone ──────────────────────────────
@@ -120,6 +138,9 @@ const ZONE_SEATS: Record<string, Array<{ x: number; y: number; sitting: boolean 
   server_room:      [{ x: 48, y: 85, sitting: true }, { x: 138, y: 85, sitting: true }],
   research_area:    [{ x: 98, y: 45, sitting: true }],
   lounge_area:      [{ x: 55, y: 40, sitting: false }],
+  marketing_area:  [{ x: 38, y: 30, sitting: true }, { x: 118, y: 30, sitting: true }],
+  content_studio:  [{ x: 58, y: 30, sitting: true }],
+  growth_lab:      [{ x: 38, y: 30, sitting: true }, { x: 118, y: 30, sitting: true }],
 };
 
 // ─── Render furniture by type ───────────────────────────────────
@@ -196,7 +217,7 @@ export function IsometricOffice({
           className="relative flex-shrink-0"
           style={{
             width: 720,
-            height: 500,
+            height: 680,
             transform: 'rotateX(60deg) rotateZ(-45deg)',
             transformOrigin: 'center center',
             transformStyle: 'flat',

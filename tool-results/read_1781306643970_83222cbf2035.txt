@@ -1,0 +1,1165 @@
+     1→/**
+     2→ * Central state class for the pixel-office engine.
+     3→ *
+     4→ * Ported 1:1 from pixel-agents/webview-ui/src/office/engine/officeState.ts
+     5→ * with Agent OS extensions:
+     6→ *   - syncAgents() method to receive data from React components
+     7→ *   - Behavior state system for agent movement patterns
+     8→ *   - Zone destinations and labels
+     9→ *   - Agent OS specific bubble types (done)
+    10→ *
+    11→ * Instead of using the extension's transport system, the Agent OS version
+    12→ * receives data through the syncAgents() method called from the React component.
+    13→ */
+    14→
+    15→import {
+    16→  AUTO_ON_FACING_DEPTH,
+    17→  AUTO_ON_SIDE_DEPTH,
+    18→  BEHAVIOR_EVENT_OVERRIDE_SEC,
+    19→  CHARACTER_HIT_HALF_WIDTH,
+    20→  CHARACTER_HIT_HEIGHT,
+    21→  CHARACTER_SITTING_OFFSET_PX,
+    22→  DISMISS_BUBBLE_FAST_FADE_SEC,
+    23→  DONE_BUBBLE_DURATION_SEC,
+    24→  FURNITURE_ANIM_INTERVAL_SEC,
+    25→  HUE_SHIFT_MIN_DEG,
+    26→  HUE_SHIFT_RANGE_DEG,
+    27→  INACTIVE_SEAT_TIMER_MIN_SEC,
+    28→  INACTIVE_SEAT_TIMER_RANGE_SEC,
+    29→  WAITING_BUBBLE_DURATION_SEC,
+    30→  MATRIX_EFFECT_DURATION_SEC,
+    31→} from '../constants';
+    32→import { getAnimationFrames, getCatalogEntry, getOnStateType } from '../layout/furnitureCatalog';
+    33→import {
+    34→  createDefaultLayout,
+    35→  getBlockedTiles,
+    36→  layoutToFurnitureInstances,
+    37→  layoutToSeats,
+    38→  layoutToTileMap,
+    39→} from '../layout/layoutSerializer';
+    40→import { findPath, getWalkableTiles, isWalkable } from '../layout/tileMap';
+    41→import { getLoadedCharacterCount } from '../sprites/spriteData';
+    42→import type {
+    43→  Character,
+    44→  FurnitureInstance,
+    45→  OfficeLayout,
+    46→  PlacedFurniture,
+    47→  Seat,
+    48→  TileType as TileTypeVal,
+    49→  ZoneDestination,
+    50→  ZoneLabel,
+    51→} from '../types';
+    52→import { BehaviorState, CharacterState, Direction, TILE_SIZE } from '../types';
+    53→import { createCharacter, updateCharacter } from './characters';
+    54→import { matrixEffectSeeds } from './matrixEffect';
+    55→import { extractToolName } from '../toolUtils';
+    56→
+    57→// ── Role → seat UID mapping (Agent OS extension) ─────────────────
+    58→
+    59→export const ROLE_SEAT_MAP: Record<string, string> = {
+    60→  orchestrator: 'chair-orc',
+    61→  architect: 'chair-arch',
+    62→  analyst: 'chair-anl',
+    63→  designer: 'chair-des',
+    64→  frontend_engineer: 'chair-fe',
+    65→  backend_engineer: 'chair-be',
+    66→  qa_engineer: 'chair-qa2',
+    67→  devops_engineer: 'chair-ops',
+    68→  data_engineer: 'chair-data',
+    69→  researcher: 'chair-res',
+    70→};
+    71→
+    72→// ── syncAgents input type ─────────────────────────────────────────
+    73→
+    74→export interface SyncAgentInput {
+    75→  id: string;
+    76→  name: string;
+    77→  role: string;
+    78→  status: string;
+    79→  runtimeState: {
+    80→    status: string;
+    81→    currentActivity: string | null;
+    82→  } | null;
+    83→  profile: {
+    84→    displayName: string;
+    85→  } | null;
+    86→}
+    87→
+    88→// ── OfficeState class ─────────────────────────────────────────────
+    89→
+    90→export class OfficeState {
+    91→  layout: OfficeLayout;
+    92→  tileMap: TileTypeVal[][];
+    93→  seats: Map<string, Seat>;
+    94→  blockedTiles: Set<string>;
+    95→  furniture: FurnitureInstance[];
+    96→  walkableTiles: Array<{ col: number; row: number }>;
+    97→  characters: Map<number, Character> = new Map();
+    98→  /** Accumulated time for furniture animation frame cycling */
+    99→  furnitureAnimTimer = 0;
+   100→  selectedAgentId: number | null = null;
+   101→  cameraFollowId: number | null = null;
+   102→  hoveredAgentId: number | null = null;
+   103→  hoveredTile: { col: number; row: number } | null = null;
+   104→  /** Maps "parentId:toolId" → sub-agent character ID (negative) */
+   105→  subagentIdMap: Map<string, number> = new Map();
+   106→  /** Reverse lookup: sub-agent character ID → parent info */
+   107→  subagentMeta: Map<number, { parentAgentId: number; parentToolId: string }> =
+   108→    new Map();
+   109→  private nextSubagentId = -1;
+   110→  /** Agent OS: zone destinations for behavior state system */
+   111→  zoneDestinations: Record<string, ZoneDestination[]> = {};
+   112→  /** Agent OS: zone labels for rendering */
+   113→  zoneLabels: ZoneLabel[] = [];
+   114→  /** Agent OS: maps external string ID to internal numeric character ID */
+   115→  private agentIdMap: Map<string, number> = new Map();
+   116→  private nextAgentId = 1;
+   117→
+   118→  constructor(layout?: OfficeLayout) {
+   119→    this.layout = layout || createDefaultLayout();
+   120→    this.tileMap = layoutToTileMap(this.layout);
+   121→    this.seats = layoutToSeats(this.layout.furniture);
+   122→    this.blockedTiles = getBlockedTiles(this.layout.furniture);
+   123→    this.furniture = layoutToFurnitureInstances(this.layout.furniture);
+   124→    this.walkableTiles = getWalkableTiles(this.tileMap, this.blockedTiles);
+   125→  }
+   126→
+   127→  // ── Zone configuration (Agent OS) ────────────────────────────────
+   128→
+   129→  setZoneDestinations(dests: Record<string, ZoneDestination[]>): void {
+   130→    this.zoneDestinations = dests;
+   131→  }
+   132→
+   133→  setZoneLabels(labels: ZoneLabel[]): void {
+   134→    this.zoneLabels = labels;
+   135→  }
+   136→
+   137→  // ── Layout rebuild ───────────────────────────────────────────────
+   138→
+   139→  /** Rebuild all derived state from a new layout. Reassigns existing characters.
+   140→   *  @param shift Optional pixel shift to apply when grid expands left/up */
+   141→  rebuildFromLayout(
+   142→    layout: OfficeLayout,
+   143→    shift?: { col: number; row: number },
+   144→  ): void {
+   145→    this.layout = layout;
+   146→    this.tileMap = layoutToTileMap(layout);
+   147→    this.seats = layoutToSeats(layout.furniture);
+   148→    this.blockedTiles = getBlockedTiles(layout.furniture);
+   149→    this.rebuildFurnitureInstances();
+   150→    this.walkableTiles = getWalkableTiles(this.tileMap, this.blockedTiles);
+   151→
+   152→    // Shift character positions when grid expands left/up
+   153→    if (shift && (shift.col !== 0 || shift.row !== 0)) {
+   154→      for (const ch of this.characters.values()) {
+   155→        ch.tileCol += shift.col;
+   156→        ch.tileRow += shift.row;
+   157→        ch.x += shift.col * TILE_SIZE;
+   158→        ch.y += shift.row * TILE_SIZE;
+   159→        // Clear path since tile coords changed
+   160→        ch.path = [];
+   161→        ch.moveProgress = 0;
+   162→      }
+   163→    }
+   164→
+   165→    // Reassign characters to new seats, preserving existing assignments when possible
+   166→    for (const seat of this.seats.values()) {
+   167→      seat.assigned = false;
+   168→    }
+   169→
+   170→    // First pass: try to keep characters at their existing seats
+   171→    for (const ch of this.characters.values()) {
+   172→      if (ch.seatId && this.seats.has(ch.seatId)) {
+   173→        const seat = this.seats.get(ch.seatId)!;
+   174→        if (!seat.assigned) {
+   175→          seat.assigned = true;
+   176→          // Snap character to seat position
+   177→          ch.tileCol = seat.seatCol;
+   178→          ch.tileRow = seat.seatRow;
+   179→          const cx = seat.seatCol * TILE_SIZE + TILE_SIZE / 2;
+   180→          const cy = seat.seatRow * TILE_SIZE + TILE_SIZE / 2;
+   181→          ch.x = cx;
+   182→          ch.y = cy;
+   183→          ch.dir = seat.facingDir;
+   184→          continue;
+   185→        }
+   186→      }
+   187→      ch.seatId = null; // will be reassigned below
+   188→    }
+   189→
+   190→    // Second pass: assign remaining characters to free seats
+   191→    for (const ch of this.characters.values()) {
+   192→      if (ch.seatId) continue;
+   193→      const seatId =
+   194→        this.findSeatForRole(ch.role) || this.findFreeSeat();
+   195→      if (seatId) {
+   196→        this.seats.get(seatId)!.assigned = true;
+   197→        ch.seatId = seatId;
+   198→        const seat = this.seats.get(seatId)!;
+   199→        ch.tileCol = seat.seatCol;
+   200→        ch.tileRow = seat.seatRow;
+   201→        ch.x = seat.seatCol * TILE_SIZE + TILE_SIZE / 2;
+   202→        ch.y = seat.seatRow * TILE_SIZE + TILE_SIZE / 2;
+   203→        ch.dir = seat.facingDir;
+   204→      }
+   205→    }
+   206→
+   207→    // Relocate any characters that ended up outside bounds or on non-walkable tiles
+   208→    for (const ch of this.characters.values()) {
+   209→      if (ch.seatId) continue; // seated characters are fine
+   210→      if (
+   211→        ch.tileCol < 0 ||
+   212→        ch.tileCol >= layout.cols ||
+   213→        ch.tileRow < 0 ||
+   214→        ch.tileRow >= layout.rows
+   215→      ) {
+   216→        this.relocateCharacterToWalkable(ch);
+   217→      }
+   218→    }
+   219→  }
+   220→
+   221→  /** Move a character to a random walkable tile */
+   222→  private relocateCharacterToWalkable(ch: Character): void {
+   223→    if (this.walkableTiles.length === 0) return;
+   224→    const spawn =
+   225→      this.walkableTiles[
+   226→        Math.floor(Math.random() * this.walkableTiles.length)
+   227→      ];
+   228→    ch.tileCol = spawn.col;
+   229→    ch.tileRow = spawn.row;
+   230→    ch.x = spawn.col * TILE_SIZE + TILE_SIZE / 2;
+   231→    ch.y = spawn.row * TILE_SIZE + TILE_SIZE / 2;
+   232→    ch.path = [];
+   233→    ch.moveProgress = 0;
+   234→  }
+   235→
+   236→  getLayout(): OfficeLayout {
+   237→    return this.layout;
+   238→  }
+   239→
+   240→  // ── Seat helpers ─────────────────────────────────────────────────
+   241→
+   242→  /** Get the blocked-tile key for a character's own seat, or null */
+   243→  private ownSeatKey(ch: Character): string | null {
+   244→    if (!ch.seatId) return null;
+   245→    const seat = this.seats.get(ch.seatId);
+   246→    if (!seat) return null;
+   247→    return `${seat.seatCol},${seat.seatRow}`;
+   248→  }
+   249→
+   250→  /** Temporarily unblock a character's own seat, run fn, then re-block */
+   251→  private withOwnSeatUnblocked<T>(ch: Character, fn: () => T): T {
+   252→    const key = this.ownSeatKey(ch);
+   253→    if (key) this.blockedTiles.delete(key);
+   254→    const result = fn();
+   255→    if (key) this.blockedTiles.add(key);
+   256→    return result;
+   257→  }
+   258→
+   259→  /** Find seat by role (Agent OS extension) */
+   260→  private findSeatForRole(role: string): string | null {
+   261→    const seatId = ROLE_SEAT_MAP[role];
+   262→    if (
+   263→      seatId &&
+   264→      this.seats.has(seatId) &&
+   265→      !this.seats.get(seatId)!.assigned
+   266→    ) {
+   267→      return seatId;
+   268→    }
+   269→    return null;
+   270→  }
+   271→
+   272→  private findFreeSeat(): string | null {
+   273→    // Build set of tiles occupied by electronics (PCs, monitors, etc.)
+   274→    const electronicsTiles = new Set<string>();
+   275→    for (const item of this.layout.furniture) {
+   276→      const entry = getCatalogEntry(item.type);
+   277→      if (!entry || entry.category !== 'electronics') continue;
+   278→      for (let dr = 0; dr < entry.footprintH; dr++) {
+   279→        for (let dc = 0; dc < entry.footprintW; dc++) {
+   280→          electronicsTiles.add(`${item.col + dc},${item.row + dr}`);
+   281→        }
+   282→      }
+   283→    }
+   284→
+   285→    // Collect free seats, split into those facing electronics and the rest
+   286→    const pcSeats: string[] = [];
+   287→    const otherSeats: string[] = [];
+   288→    for (const [uid, seat] of this.seats) {
+   289→      if (seat.assigned) continue;
+   290→
+   291→      // Check if this seat faces electronics (same logic as auto-state detection)
+   292→      let facesPC = false;
+   293→      const dCol =
+   294→        seat.facingDir === Direction.RIGHT
+   295→          ? 1
+   296→          : seat.facingDir === Direction.LEFT
+   297→            ? -1
+   298→            : 0;
+   299→      const dRow =
+   300→        seat.facingDir === Direction.DOWN
+   301→          ? 1
+   302→          : seat.facingDir === Direction.UP
+   303→            ? -1
+   304→            : 0;
+   305→      for (let d = 1; d <= AUTO_ON_FACING_DEPTH && !facesPC; d++) {
+   306→        const tileCol = seat.seatCol + dCol * d;
+   307→        const tileRow = seat.seatRow + dRow * d;
+   308→        if (electronicsTiles.has(`${tileCol},${tileRow}`)) {
+   309→          facesPC = true;
+   310→          break;
+   311→        }
+   312→        if (dCol !== 0) {
+   313→          if (
+   314→            electronicsTiles.has(`${tileCol},${tileRow - 1}`) ||
+   315→            electronicsTiles.has(`${tileCol},${tileRow + 1}`)
+   316→          ) {
+   317→            facesPC = true;
+   318→            break;
+   319→          }
+   320→        } else {
+   321→          if (
+   322→            electronicsTiles.has(`${tileCol - 1},${tileRow}`) ||
+   323→            electronicsTiles.has(`${tileCol + 1},${tileRow}`)
+   324→          ) {
+   325→            facesPC = true;
+   326→            break;
+   327→          }
+   328→        }
+   329→      }
+   330→      (facesPC ? pcSeats : otherSeats).push(uid);
+   331→    }
+   332→
+   333→    // Pick randomly: prefer PC seats, then any seat
+   334→    if (pcSeats.length > 0)
+   335→      return pcSeats[Math.floor(Math.random() * pcSeats.length)];
+   336→    if (otherSeats.length > 0)
+   337→      return otherSeats[Math.floor(Math.random() * otherSeats.length)];
+   338→    return null;
+   339→  }
+   340→
+   341→  // ── Palette diversity ────────────────────────────────────────────
+   342→
+   343→  /**
+   344→   * Pick a diverse palette for a new agent based on currently active agents.
+   345→   * First 6 agents each get a unique skin (random order). Beyond 6, skins
+   346→   * repeat in balanced rounds with a random hue shift (≥45°).
+   347→   */
+   348→  private pickDiversePalette(): { palette: number; hueShift: number } {
+   349→    // Count how many non-sub-agents use each base palette (0-5)
+   350→    const paletteCount = getLoadedCharacterCount();
+   351→    const counts = new Array(paletteCount).fill(0) as number[];
+   352→    for (const ch of this.characters.values()) {
+   353→      if (ch.isSubagent) continue;
+   354→      if (ch.palette < paletteCount) counts[ch.palette]++;
+   355→    }
+   356→    const minCount = Math.min(...counts);
+   357→    // Available = palettes at the minimum count (least used)
+   358→    const available: number[] = [];
+   359→    for (let i = 0; i < paletteCount; i++) {
+   360→      if (counts[i] === minCount) available.push(i);
+   361→    }
+   362→    const palette =
+   363→      available[Math.floor(Math.random() * available.length)];
+   364→    // First round (minCount === 0): no hue shift. Subsequent rounds: random ≥45°.
+   365→    let hueShift = 0;
+   366→    if (minCount > 0) {
+   367→      hueShift =
+   368→        HUE_SHIFT_MIN_DEG +
+   369→        Math.floor(Math.random() * HUE_SHIFT_RANGE_DEG);
+   370→    }
+   371→    return { palette, hueShift };
+   372→  }
+   373→
+   374→  // ── Agent management ─────────────────────────────────────────────
+   375→
+   376→  addAgent(
+   377→    id: number,
+   378→    preferredPalette?: number,
+   379→    preferredHueShift?: number,
+   380→    preferredSeatId?: string,
+   381→    skipSpawnEffect?: boolean,
+   382→    folderName?: string,
+   383→  ): void {
+   384→    if (this.characters.has(id)) return;
+   385→
+   386→    let palette: number;
+   387→    let hueShift: number;
+   388→    if (preferredPalette !== undefined) {
+   389→      palette = preferredPalette;
+   390→      hueShift = preferredHueShift ?? 0;
+   391→    } else {
+   392→      const pick = this.pickDiversePalette();
+   393→      palette = pick.palette;
+   394→      hueShift = pick.hueShift;
+   395→    }
+   396→
+   397→    // Try preferred seat first, then any free seat
+   398→    let seatId: string | null = null;
+   399→    if (preferredSeatId && this.seats.has(preferredSeatId)) {
+   400→      const seat = this.seats.get(preferredSeatId)!;
+   401→      if (!seat.assigned) {
+   402→        seatId = preferredSeatId;
+   403→      }
+   404→    }
+   405→    if (!seatId) {
+   406→      seatId = this.findFreeSeat();
+   407→    }
+   408→
+   409→    let ch: Character;
+   410→    if (seatId) {
+   411→      const seat = this.seats.get(seatId)!;
+   412→      seat.assigned = true;
+   413→      ch = createCharacter(id, palette, seatId, seat, hueShift);
+   414→    } else {
+   415→      // No seats — spawn at random walkable tile
+   416→      const spawn =
+   417→        this.walkableTiles.length > 0
+   418→          ? this.walkableTiles[
+   419→              Math.floor(Math.random() * this.walkableTiles.length)
+   420→            ]
+   421→          : { col: 1, row: 1 };
+   422→      ch = createCharacter(id, palette, null, null, hueShift);
+   423→      ch.x = spawn.col * TILE_SIZE + TILE_SIZE / 2;
+   424→      ch.y = spawn.row * TILE_SIZE + TILE_SIZE / 2;
+   425→      ch.tileCol = spawn.col;
+   426→      ch.tileRow = spawn.row;
+   427→    }
+   428→
+   429→    if (folderName) {
+   430→      ch.folderName = folderName;
+   431→    }
+   432→    if (!skipSpawnEffect) {
+   433→      ch.matrixEffect = 'spawn';
+   434→      ch.matrixEffectTimer = 0;
+   435→      ch.matrixEffectSeeds = matrixEffectSeeds();
+   436→    }
+   437→    this.characters.set(id, ch);
+   438→  }
+   439→
+   440→  removeAgent(id: number): void {
+   441→    const ch = this.characters.get(id);
+   442→    if (!ch) return;
+   443→    if (ch.matrixEffect === 'despawn') return; // already despawning
+   444→    // Free seat and clear selection immediately
+   445→    if (ch.seatId) {
+   446→      const seat = this.seats.get(ch.seatId);
+   447→      if (seat) seat.assigned = false;
+   448→    }
+   449→    if (this.selectedAgentId === id) this.selectedAgentId = null;
+   450→    if (this.cameraFollowId === id) this.cameraFollowId = null;
+   451→    // Clean up Agent OS id map
+   452→    for (const [extId, intId] of this.agentIdMap) {
+   453→      if (intId === id) {
+   454→        this.agentIdMap.delete(extId);
+   455→        break;
+   456→      }
+   457→    }
+   458→    // Start despawn animation instead of immediate delete
+   459→    ch.matrixEffect = 'despawn';
+   460→    ch.matrixEffectTimer = 0;
+   461→    ch.matrixEffectSeeds = matrixEffectSeeds();
+   462→    ch.bubbleType = null;
+   463→  }
+   464→
+   465→  /** Find seat uid at a given tile position, or null */
+   466→  getSeatAtTile(col: number, row: number): string | null {
+   467→    for (const [uid, seat] of this.seats) {
+   468→      if (seat.seatCol === col && seat.seatRow === row) return uid;
+   469→    }
+   470→    return null;
+   471→  }
+   472→
+   473→  /** Reassign an agent from their current seat to a new seat */
+   474→  reassignSeat(agentId: number, seatId: string): void {
+   475→    const ch = this.characters.get(agentId);
+   476→    if (!ch) return;
+   477→    // Unassign old seat
+   478→    if (ch.seatId) {
+   479→      const old = this.seats.get(ch.seatId);
+   480→      if (old) old.assigned = false;
+   481→    }
+   482→    // Assign new seat
+   483→    const seat = this.seats.get(seatId);
+   484→    if (!seat || seat.assigned) return;
+   485→    seat.assigned = true;
+   486→    ch.seatId = seatId;
+   487→    // Pathfind to new seat (unblock own seat tile for this query)
+   488→    const path = this.withOwnSeatUnblocked(ch, () =>
+   489→      findPath(
+   490→        ch.tileCol,
+   491→        ch.tileRow,
+   492→        seat.seatCol,
+   493→        seat.seatRow,
+   494→        this.tileMap,
+   495→        this.blockedTiles,
+   496→      ),
+   497→    );
+   498→    if (path.length > 0) {
+   499→      ch.path = path;
+   500→      ch.moveProgress = 0;
+   501→      ch.state = CharacterState.WALK;
+   502→      ch.frame = 0;
+   503→      ch.frameTimer = 0;
+   504→    } else {
+   505→      // Already at seat or no path — sit down
+   506→      ch.state = CharacterState.TYPE;
+   507→      ch.dir = seat.facingDir;
+   508→      ch.frame = 0;
+   509→      ch.frameTimer = 0;
+   510→      if (!ch.isActive) {
+   511→        ch.seatTimer =
+   512→          INACTIVE_SEAT_TIMER_MIN_SEC +
+   513→          Math.random() * INACTIVE_SEAT_TIMER_RANGE_SEC;
+   514→      }
+   515→    }
+   516→  }
+   517→
+   518→  /** Send an agent back to their currently assigned seat */
+   519→  sendToSeat(agentId: number): void {
+   520→    const ch = this.characters.get(agentId);
+   521→    if (!ch || !ch.seatId) return;
+   522→    const seat = this.seats.get(ch.seatId);
+   523→    if (!seat) return;
+   524→    const path = this.withOwnSeatUnblocked(ch, () =>
+   525→      findPath(
+   526→        ch.tileCol,
+   527→        ch.tileRow,
+   528→        seat.seatCol,
+   529→        seat.seatRow,
+   530→        this.tileMap,
+   531→        this.blockedTiles,
+   532→      ),
+   533→    );
+   534→    if (path.length > 0) {
+   535→      ch.path = path;
+   536→      ch.moveProgress = 0;
+   537→      ch.state = CharacterState.WALK;
+   538→      ch.frame = 0;
+   539→      ch.frameTimer = 0;
+   540→    } else {
+   541→      // Already at seat — sit down
+   542→      ch.state = CharacterState.TYPE;
+   543→      ch.dir = seat.facingDir;
+   544→      ch.frame = 0;
+   545→      ch.frameTimer = 0;
+   546→      if (!ch.isActive) {
+   547→        ch.seatTimer =
+   548→          INACTIVE_SEAT_TIMER_MIN_SEC +
+   549→          Math.random() * INACTIVE_SEAT_TIMER_RANGE_SEC;
+   550→      }
+   551→    }
+   552→  }
+   553→
+   554→  /** Walk an agent to an arbitrary walkable tile (right-click command) */
+   555→  walkToTile(agentId: number, col: number, row: number): boolean {
+   556→    const ch = this.characters.get(agentId);
+   557→    if (!ch || ch.isSubagent) return false;
+   558→    if (!isWalkable(col, row, this.tileMap, this.blockedTiles)) {
+   559→      // Also allow walking to own seat tile (blocked for others but not self)
+   560→      const key = this.ownSeatKey(ch);
+   561→      if (!key || key !== `${col},${row}`) return false;
+   562→    }
+   563→    const path = this.withOwnSeatUnblocked(ch, () =>
+   564→      findPath(ch.tileCol, ch.tileRow, col, row, this.tileMap, this.blockedTiles),
+   565→    );
+   566→    if (path.length === 0) return false;
+   567→    ch.path = path;
+   568→    ch.moveProgress = 0;
+   569→    ch.state = CharacterState.WALK;
+   570→    ch.frame = 0;
+   571→    ch.frameTimer = 0;
+   572→    return true;
+   573→  }
+   574→
+   575→  // ── Sub-agent management ─────────────────────────────────────────
+   576→
+   577→  /** Create a sub-agent character with the parent's palette. Returns the sub-agent ID. */
+   578→  addSubagent(parentAgentId: number, parentToolId: string): number {
+   579→    const key = `${parentAgentId}:${parentToolId}`;
+   580→    if (this.subagentIdMap.has(key))
+   581→      return this.subagentIdMap.get(key)!;
+   582→
+   583→    const id = this.nextSubagentId--;
+   584→    const parentCh = this.characters.get(parentAgentId);
+   585→    const palette = parentCh ? parentCh.palette : 0;
+   586→    const hueShift = parentCh ? parentCh.hueShift : 0;
+   587→
+   588→    // Find the closest walkable tile to the parent, avoiding tiles occupied by other characters
+   589→    const parentCol = parentCh ? parentCh.tileCol : 0;
+   590→    const parentRow = parentCh ? parentCh.tileRow : 0;
+   591→    const dist = (c: number, r: number) =>
+   592→      Math.abs(c - parentCol) + Math.abs(r - parentRow);
+   593→
+   594→    // Build set of tiles occupied by existing characters
+   595→    const occupiedTiles = new Set<string>();
+   596→    for (const [, other] of this.characters) {
+   597→      occupiedTiles.add(`${other.tileCol},${other.tileRow}`);
+   598→    }
+   599→
+   600→    let spawn = { col: parentCol, row: parentRow };
+   601→    if (this.walkableTiles.length > 0) {
+   602→      let closest = this.walkableTiles[0];
+   603→      let closestDist = Infinity;
+   604→      for (const tile of this.walkableTiles) {
+   605→        if (occupiedTiles.has(`${tile.col},${tile.row}`)) continue;
+   606→        const d = dist(tile.col, tile.row);
+   607→        if (d < closestDist) {
+   608→          closest = tile;
+   609→          closestDist = d;
+   610→        }
+   611→      }
+   612→      spawn = closest;
+   613→    }
+   614→
+   615→    const ch = createCharacter(id, palette, null, null, hueShift);
+   616→    ch.x = spawn.col * TILE_SIZE + TILE_SIZE / 2;
+   617→    ch.y = spawn.row * TILE_SIZE + TILE_SIZE / 2;
+   618→    ch.tileCol = spawn.col;
+   619→    ch.tileRow = spawn.row;
+   620→    // Face the same direction as the parent agent
+   621→    if (parentCh) ch.dir = parentCh.dir;
+   622→    ch.isSubagent = true;
+   623→    ch.parentAgentId = parentAgentId;
+   624→    ch.matrixEffect = 'spawn';
+   625→    ch.matrixEffectTimer = 0;
+   626→    ch.matrixEffectSeeds = matrixEffectSeeds();
+   627→    this.characters.set(id, ch);
+   628→
+   629→    this.subagentIdMap.set(key, id);
+   630→    this.subagentMeta.set(id, { parentAgentId, parentToolId });
+   631→    return id;
+   632→  }
+   633→
+   634→  /** Remove a specific sub-agent character and free its seat */
+   635→  removeSubagent(parentAgentId: number, parentToolId: string): void {
+   636→    const key = `${parentAgentId}:${parentToolId}`;
+   637→    const id = this.subagentIdMap.get(key);
+   638→    if (id === undefined) return;
+   639→
+   640→    const ch = this.characters.get(id);
+   641→    if (ch) {
+   642→      if (ch.matrixEffect === 'despawn') {
+   643→        // Already despawning — just clean up maps
+   644→        this.subagentIdMap.delete(key);
+   645→        this.subagentMeta.delete(id);
+   646→        return;
+   647→      }
+   648→      if (ch.seatId) {
+   649→        const seat = this.seats.get(ch.seatId);
+   650→        if (seat) seat.assigned = false;
+   651→      }
+   652→      // Start despawn animation — keep character in map for rendering
+   653→      ch.matrixEffect = 'despawn';
+   654→      ch.matrixEffectTimer = 0;
+   655→      ch.matrixEffectSeeds = matrixEffectSeeds();
+   656→      ch.bubbleType = null;
+   657→    }
+   658→    // Clean up tracking maps immediately so keys don't collide
+   659→    this.subagentIdMap.delete(key);
+   660→    this.subagentMeta.delete(id);
+   661→    if (this.selectedAgentId === id) this.selectedAgentId = null;
+   662→    if (this.cameraFollowId === id) this.cameraFollowId = null;
+   663→  }
+   664→
+   665→  /** Remove all sub-agents belonging to a parent agent */
+   666→  removeAllSubagents(parentAgentId: number): void {
+   667→    const toRemove: string[] = [];
+   668→    for (const [key, id] of this.subagentIdMap) {
+   669→      const meta = this.subagentMeta.get(id);
+   670→      if (meta && meta.parentAgentId === parentAgentId) {
+   671→        const ch = this.characters.get(id);
+   672→        if (ch) {
+   673→          if (ch.matrixEffect === 'despawn') {
+   674→            // Already despawning — just clean up maps
+   675→            this.subagentMeta.delete(id);
+   676→            toRemove.push(key);
+   677→            continue;
+   678→          }
+   679→          if (ch.seatId) {
+   680→            const seat = this.seats.get(ch.seatId);
+   681→            if (seat) seat.assigned = false;
+   682→          }
+   683→          // Start despawn animation
+   684→          ch.matrixEffect = 'despawn';
+   685→          ch.matrixEffectTimer = 0;
+   686→          ch.matrixEffectSeeds = matrixEffectSeeds();
+   687→          ch.bubbleType = null;
+   688→        }
+   689→        this.subagentMeta.delete(id);
+   690→        if (this.selectedAgentId === id) this.selectedAgentId = null;
+   691→        if (this.cameraFollowId === id) this.cameraFollowId = null;
+   692→        toRemove.push(key);
+   693→      }
+   694→    }
+   695→    for (const key of toRemove) {
+   696→      this.subagentIdMap.delete(key);
+   697→    }
+   698→  }
+   699→
+   700→  /** Look up the sub-agent character ID for a given parent+toolId, or null */
+   701→  getSubagentId(parentAgentId: number, parentToolId: string): number | null {
+   702→    return (
+   703→      this.subagentIdMap.get(`${parentAgentId}:${parentToolId}`) ?? null
+   704→    );
+   705→  }
+   706→
+   707→  // ── Agent state manipulation ─────────────────────────────────────
+   708→
+   709→  setAgentActive(id: number, active: boolean): void {
+   710→    const ch = this.characters.get(id);
+   711→    if (ch) {
+   712→      ch.isActive = active;
+   713→      if (!active) {
+   714→        // Sentinel -1: signals turn just ended, skip next seat rest timer.
+   715→        // Prevents the WALK handler from setting a 2-4 min rest on arrival.
+   716→        ch.seatTimer = -1;
+   717→        ch.path = [];
+   718→        ch.moveProgress = 0;
+   719→        ch.behaviorState = BehaviorState.IDLE;
+   720→        ch.targetTile = null;
+   721→        ch.eventOverride = false;
+   722→      }
+   723→      this.rebuildFurnitureInstances();
+   724→    }
+   725→  }
+   726→
+   727→  setAgentTool(id: number, tool: string | null): void {
+   728→    const ch = this.characters.get(id);
+   729→    if (ch) {
+   730→      ch.currentTool = tool;
+   731→    }
+   732→  }
+   733→
+   734→  setAgentStatus(id: number, status: string): void {
+   735→    const ch = this.characters.get(id);
+   736→    if (ch) ch.agentStatus = status;
+   737→  }
+   738→
+   739→  // Event-driven behavior state changes (Agent OS extension)
+   740→  setAgentBehavior(
+   741→    id: number,
+   742→    behavior: BehaviorState,
+   743→    duration?: number,
+   744→  ): void {
+   745→    const ch = this.characters.get(id);
+   746→    if (!ch) return;
+   747→    ch.behaviorState = behavior;
+   748→    ch.behaviorTimer = duration ?? BEHAVIOR_EVENT_OVERRIDE_SEC;
+   749→    ch.eventOverride = true;
+   750→    // Set target tile for non-working states
+   751→    if (
+   752→      behavior === BehaviorState.MEETING ||
+   753→      behavior === BehaviorState.BREAK ||
+   754→      behavior === BehaviorState.RESEARCH
+   755→    ) {
+   756→      const dests = this.zoneDestinations[behavior];
+   757→      if (dests && dests.length > 0) {
+   758→        ch.targetTile =
+   759→          dests[Math.floor(Math.random() * dests.length)];
+   760→      }
+   761→    } else {
+   762→      ch.targetTile = null;
+   763→    }
+   764→    // If currently typing, switch to walk/idle so behavior takes effect
+   765→    if (ch.state === CharacterState.TYPE && ch.targetTile) {
+   766→      ch.state = CharacterState.IDLE;
+   767→      ch.frame = 0;
+   768→      ch.frameTimer = 0;
+   769→    }
+   770→  }
+   771→
+   772→  // ── Bubbles ──────────────────────────────────────────────────────
+   773→
+   774→  showPermissionBubble(id: number): void {
+   775→    const ch = this.characters.get(id);
+   776→    if (ch) {
+   777→      ch.bubbleType = 'permission';
+   778→      ch.bubbleTimer = 0;
+   779→    }
+   780→  }
+   781→
+   782→  clearPermissionBubble(id: number): void {
+   783→    const ch = this.characters.get(id);
+   784→    if (ch && ch.bubbleType === 'permission') {
+   785→      ch.bubbleType = null;
+   786→      ch.bubbleTimer = 0;
+   787→    }
+   788→  }
+   789→
+   790→  showWaitingBubble(id: number): void {
+   791→    const ch = this.characters.get(id);
+   792→    if (ch) {
+   793→      ch.bubbleType = 'waiting';
+   794→      ch.bubbleTimer = WAITING_BUBBLE_DURATION_SEC;
+   795→    }
+   796→  }
+   797→
+   798→  showDoneBubble(id: number): void {
+   799→    const ch = this.characters.get(id);
+   800→    if (ch) {
+   801→      ch.bubbleType = 'done';
+   802→      ch.bubbleTimer = DONE_BUBBLE_DURATION_SEC;
+   803→    }
+   804→  }
+   805→
+   806→  /** Dismiss bubble on click — permission: instant, waiting: quick fade */
+   807→  dismissBubble(id: number): void {
+   808→    const ch = this.characters.get(id);
+   809→    if (!ch || !ch.bubbleType) return;
+   810→    if (ch.bubbleType === 'permission') {
+   811→      ch.bubbleType = null;
+   812→      ch.bubbleTimer = 0;
+   813→    } else if (ch.bubbleType === 'waiting') {
+   814→      // Trigger immediate fade (0.3s remaining)
+   815→      ch.bubbleTimer = Math.min(
+   816→        ch.bubbleTimer,
+   817→        DISMISS_BUBBLE_FAST_FADE_SEC,
+   818→      );
+   819→    } else {
+   820→      ch.bubbleType = null;
+   821→      ch.bubbleTimer = 0;
+   822→    }
+   823→  }
+   824→
+   825→  // ── Team / token info ────────────────────────────────────────────
+   826→
+   827→  setTeamInfo(
+   828→    id: number,
+   829→    teamName?: string,
+   830→    agentName?: string,
+   831→    isTeamLead?: boolean,
+   832→    leadAgentId?: number,
+   833→    teamUsesTmux?: boolean,
+   834→  ): void {
+   835→    const ch = this.characters.get(id);
+   836→    if (!ch) return;
+   837→    ch.teamName = teamName;
+   838→    ch.agentName = agentName;
+   839→    ch.isTeamLead = isTeamLead;
+   840→    ch.leadAgentId = leadAgentId;
+   841→    if (teamUsesTmux !== undefined) {
+   842→      ch.teamUsesTmux = teamUsesTmux;
+   843→    }
+   844→  }
+   845→
+   846→  setAgentTokens(id: number, inputTokens: number, outputTokens: number): void {
+   847→    const ch = this.characters.get(id);
+   848→    if (!ch) return;
+   849→    ch.inputTokens = inputTokens;
+   850→    ch.outputTokens = outputTokens;
+   851→  }
+   852→
+   853→  // ── Furniture auto-state ─────────────────────────────────────────
+   854→
+   855→  /** Rebuild furniture instances with auto-state applied (active agents turn electronics ON) */
+   856→  private rebuildFurnitureInstances(): void {
+   857→    // Collect tiles where active agents face desks
+   858→    const autoOnTiles = new Set<string>();
+   859→    for (const ch of this.characters.values()) {
+   860→      if (!ch.isActive || !ch.seatId) continue;
+   861→      const seat = this.seats.get(ch.seatId);
+   862→      if (!seat) continue;
+   863→      // Find the desk tile(s) the agent faces from their seat
+   864→      const dCol =
+   865→        seat.facingDir === Direction.RIGHT
+   866→          ? 1
+   867→          : seat.facingDir === Direction.LEFT
+   868→            ? -1
+   869→            : 0;
+   870→      const dRow =
+   871→        seat.facingDir === Direction.DOWN
+   872→          ? 1
+   873→          : seat.facingDir === Direction.UP
+   874→            ? -1
+   875→            : 0;
+   876→      // Check tiles in the facing direction (desk could be 1-3 tiles deep)
+   877→      for (let d = 1; d <= AUTO_ON_FACING_DEPTH; d++) {
+   878→        const tileCol = seat.seatCol + dCol * d;
+   879→        const tileRow = seat.seatRow + dRow * d;
+   880→        autoOnTiles.add(`${tileCol},${tileRow}`);
+   881→      }
+   882→      // Also check tiles to the sides of the facing direction (desks can be wide)
+   883→      for (let d = 1; d <= AUTO_ON_SIDE_DEPTH; d++) {
+   884→        const baseCol = seat.seatCol + dCol * d;
+   885→        const baseRow = seat.seatRow + dRow * d;
+   886→        if (dCol !== 0) {
+   887→          // Facing left/right: check tiles above and below
+   888→          autoOnTiles.add(`${baseCol},${baseRow - 1}`);
+   889→          autoOnTiles.add(`${baseCol},${baseRow + 1}`);
+   890→        } else {
+   891→          // Facing up/down: check tiles left and right
+   892→          autoOnTiles.add(`${baseCol - 1},${baseRow}`);
+   893→          autoOnTiles.add(`${baseCol + 1},${baseRow}`);
+   894→        }
+   895→      }
+   896→    }
+   897→
+   898→    if (autoOnTiles.size === 0) {
+   899→      this.furniture = layoutToFurnitureInstances(this.layout.furniture);
+   900→      return;
+   901→    }
+   902→
+   903→    // Build modified furniture list with auto-state and animation applied
+   904→    const animFrame = Math.floor(
+   905→      this.furnitureAnimTimer / FURNITURE_ANIM_INTERVAL_SEC,
+   906→    );
+   907→    const modifiedFurniture: PlacedFurniture[] = this.layout.furniture.map(
+   908→      (item) => {
+   909→        const entry = getCatalogEntry(item.type);
+   910→        if (!entry) return item;
+   911→        // Check if any tile of this furniture overlaps an auto-on tile
+   912→        for (let dr = 0; dr < entry.footprintH; dr++) {
+   913→          for (let dc = 0; dc < entry.footprintW; dc++) {
+   914→            if (autoOnTiles.has(`${item.col + dc},${item.row + dr}`)) {
+   915→              let onType = getOnStateType(item.type);
+   916→              if (onType !== item.type) {
+   917→                // Check if the on-state type has animation frames
+   918→                const frames = getAnimationFrames(onType);
+   919→                if (frames && frames.length > 1) {
+   920→                  const frameIdx = animFrame % frames.length;
+   921→                  onType = frames[frameIdx];
+   922→                }
+   923→                return { ...item, type: onType };
+   924→              }
+   925→              return item;
+   926→            }
+   927→          }
+   928→        }
+   929→        return item;
+   930→      },
+   931→    );
+   932→
+   933→    this.furniture = layoutToFurnitureInstances(modifiedFurniture);
+   934→  }
+   935→
+   936→  // ── Main update loop ─────────────────────────────────────────────
+   937→
+   938→  update(dt: number): void {
+   939→    // Furniture animation cycling
+   940→    const prevFrame = Math.floor(
+   941→      this.furnitureAnimTimer / FURNITURE_ANIM_INTERVAL_SEC,
+   942→    );
+   943→    this.furnitureAnimTimer += dt;
+   944→    const newFrame = Math.floor(
+   945→      this.furnitureAnimTimer / FURNITURE_ANIM_INTERVAL_SEC,
+   946→    );
+   947→    if (newFrame !== prevFrame) {
+   948→      this.rebuildFurnitureInstances();
+   949→    }
+   950→
+   951→    const toDelete: number[] = [];
+   952→    for (const ch of this.characters.values()) {
+   953→      // Handle matrix effect animation
+   954→      if (ch.matrixEffect) {
+   955→        ch.matrixEffectTimer = (ch.matrixEffectTimer ?? 0) + dt;
+   956→        if (ch.matrixEffectTimer >= MATRIX_EFFECT_DURATION_SEC) {
+   957→          if (ch.matrixEffect === 'spawn') {
+   958→            // Spawn complete — clear effect, resume normal FSM
+   959→            ch.matrixEffect = null;
+   960→            ch.matrixEffectTimer = 0;
+   961→            ch.matrixEffectSeeds = [];
+   962→          } else {
+   963→            // Despawn complete — mark for deletion
+   964→            toDelete.push(ch.id);
+   965→          }
+   966→        }
+   967→        continue; // skip normal FSM while effect is active
+   968→      }
+   969→
+   970→      // Temporarily unblock own seat so character can pathfind to it
+   971→      this.withOwnSeatUnblocked(ch, () =>
+   972→        updateCharacter(
+   973→          ch,
+   974→          dt,
+   975→          this.walkableTiles,
+   976→          this.seats,
+   977→          this.tileMap,
+   978→          this.blockedTiles,
+   979→          this.zoneDestinations,
+   980→        ),
+   981→      );
+   982→
+   983→      // Tick bubble timer for waiting bubbles
+   984→      if (ch.bubbleType === 'waiting') {
+   985→        ch.bubbleTimer -= dt;
+   986→        if (ch.bubbleTimer <= 0) {
+   987→          ch.bubbleType = null;
+   988→          ch.bubbleTimer = 0;
+   989→        }
+   990→      }
+   991→    }
+   992→    // Remove characters that finished despawn
+   993→    for (const id of toDelete) {
+   994→      this.characters.delete(id);
+   995→      // Also clean up Agent OS id map
+   996→      for (const [extId, intId] of this.agentIdMap) {
+   997→        if (intId === id) {
+   998→          this.agentIdMap.delete(extId);
+   999→          break;
+  1000→        }
+  1001→      }
+  1002→    }
+  1003→  }
+  1004→
+  1005→  // ── Query methods ────────────────────────────────────────────────
+  1006→
+  1007→  getCharacters(): Character[] {
+  1008→    return Array.from(this.characters.values());
+  1009→  }
+  1010→
+  1011→  /** Get character at pixel position (for hit testing). Returns id or null. */
+  1012→  getCharacterAt(worldX: number, worldY: number): number | null {
+  1013→    const chars = this.getCharacters().sort((a, b) => b.y - a.y);
+  1014→    for (const ch of chars) {
+  1015→      // Skip characters that are despawning
+  1016→      if (ch.matrixEffect === 'despawn') continue;
+  1017→      // Character sprite is 16x24, anchored bottom-center
+  1018→      // Apply sitting offset to match visual position
+  1019→      const sittingOffset =
+  1020→        ch.state === CharacterState.TYPE
+  1021→          ? CHARACTER_SITTING_OFFSET_PX
+  1022→          : 0;
+  1023→      const anchorY = ch.y + sittingOffset;
+  1024→      const left = ch.x - CHARACTER_HIT_HALF_WIDTH;
+  1025→      const right = ch.x + CHARACTER_HIT_HALF_WIDTH;
+  1026→      const top = anchorY - CHARACTER_HIT_HEIGHT;
+  1027→      const bottom = anchorY;
+  1028→      if (
+  1029→        worldX >= left &&
+  1030→        worldX <= right &&
+  1031→        worldY >= top &&
+  1032→        worldY <= bottom
+  1033→      ) {
+  1034→        return ch.id;
+  1035→      }
+  1036→    }
+  1037→    return null;
+  1038→  }
+  1039→
+  1040→  // ── syncAgents (Agent OS extension) ──────────────────────────────
+  1041→
+  1042→  /**
+  1043→   * Synchronize the engine's agent list with external data.
+  1044→   * Called from the React component to push agent state into the engine.
+  1045→   *
+  1046→   * - Adds new agents as characters
+  1047→   * - Removes agents no longer present (with despawn animation)
+  1048→   * - Updates agent active/idle state based on runtime status
+  1049→   * - Sets current tool based on currentActivity
+  1050→   * - Shows permission bubble when status is 'waiting_approval'
+  1051→   * - Assigns agents to seats
+  1052→   */
+  1053→  syncAgents(agents: SyncAgentInput[]): void {
+  1054→    const currentExternalIds = new Set<string>();
+  1055→
+  1056→    for (const agent of agents) {
+  1057→      currentExternalIds.add(agent.id);
+  1058→
+  1059→      // Get or create internal numeric ID for this agent
+  1060→      let intId = this.agentIdMap.get(agent.id);
+  1061→      if (intId === undefined) {
+  1062→        intId = this.nextAgentId++;
+  1063→        this.agentIdMap.set(agent.id, intId);
+  1064→      }
+  1065→
+  1066→      // Determine display name
+  1067→      const displayName =
+  1068→        agent.profile?.displayName || agent.name || agent.id;
+  1069→
+  1070→      // Determine role
+  1071→      const role = agent.role || 'analyst';
+  1072→
+  1073→      // Check if character already exists
+  1074→      const existingCh = this.characters.get(intId);
+  1075→
+  1076→      if (!existingCh) {
+  1077→        // Add new agent
+  1078→        // Try role-specific seat first
+  1079→        const preferredSeatId = ROLE_SEAT_MAP[role];
+  1080→        this.addAgent(
+  1081→          intId,
+  1082→          undefined,
+  1083→          undefined,
+  1084→          preferredSeatId,
+  1085→          false,
+  1086→        );
+  1087→
+  1088→        // Set name and role on the newly created character
+  1089→        const ch = this.characters.get(intId);
+  1090→        if (ch) {
+  1091→          ch.name = displayName;
+  1092→          ch.role = role;
+  1093→        }
+  1094→      } else {
+  1095→        // Update existing agent
+  1096→        existingCh.name = displayName;
+  1097→        existingCh.role = role;
+  1098→
+  1099→        // Update active state based on runtime status
+  1100→        const runtimeStatus = agent.runtimeState?.status;
+  1101→        const isActive =
+  1102→          runtimeStatus === 'running' ||
+  1103→          runtimeStatus === 'thinking' ||
+  1104→          runtimeStatus === 'acting' ||
+  1105→          agent.status === 'active' ||
+  1106→          agent.status === 'running';
+  1107→        const isInactive =
+  1108→          runtimeStatus === 'idle' || agent.status === 'offline';
+  1109→
+  1110→        if (isActive && !existingCh.isActive) {
+  1111→          this.setAgentActive(intId, true);
+  1112→        } else if (isInactive && existingCh.isActive) {
+  1113→          this.setAgentActive(intId, false);
+  1114→        }
+  1115→
+  1116→        // Set current tool based on currentActivity
+  1117→        const activity = agent.runtimeState?.currentActivity;
+  1118→        if (activity) {
+  1119→          const toolName = extractToolName(activity);
+  1120→          this.setAgentTool(intId, toolName);
+  1121→        } else {
+  1122→          this.setAgentTool(intId, null);
+  1123→        }
+  1124→
+  1125→        // Show permission bubble when waiting for approval
+  1126→        if (agent.status === 'waiting_approval') {
+  1127→          if (existingCh.bubbleType !== 'permission') {
+  1128→            this.showPermissionBubble(intId);
+  1129→          }
+  1130→        } else if (
+  1131→          existingCh.bubbleType === 'permission' &&
+  1132→          agent.status !== 'waiting_approval'
+  1133→        ) {
+  1134→          this.clearPermissionBubble(intId);
+  1135→        }
+  1136→
+  1137→        // Update agent status
+  1138→        existingCh.agentStatus = agent.status;
+  1139→      }
+  1140→    }
+  1141→
+  1142→    // Remove agents no longer in the list
+  1143→    for (const [extId, intId] of this.agentIdMap) {
+  1144→      if (!currentExternalIds.has(extId)) {
+  1145→        this.removeAgent(intId);
+  1146→        // Note: removeAgent handles despawn animation
+  1147→        // The agentIdMap entry is cleaned up inside removeAgent
+  1148→      }
+  1149→    }
+  1150→  }
+  1151→
+  1152→  /** Get the internal numeric ID for an external agent string ID */
+  1153→  getInternalAgentId(externalId: string): number | null {
+  1154→    return this.agentIdMap.get(externalId) ?? null;
+  1155→  }
+  1156→
+  1157→  /** Get the external string ID for an internal numeric agent ID */
+  1158→  getExternalAgentId(internalId: number): string | null {
+  1159→    for (const [extId, intId] of this.agentIdMap) {
+  1160→      if (intId === internalId) return extId;
+  1161→    }
+  1162→    return null;
+  1163→  }
+  1164→}
+  1165→

@@ -1,0 +1,1730 @@
+     1→// ─── Agent OS — Pixel Agents Office + Orchestrator Chat ──────────
+     2→// The pixel office is the PRIMARY view. The orchestrator chat is a
+     3→// floating panel on the left. All 11 agents displayed as pixel
+     4→// characters in a multi-room office with real-time behavior.
+     5→// Management panels (tasks, approvals, events) are overlays.
+     6→
+     7→'use client';
+     8→
+     9→import { useEffect, useState, useCallback, useRef } from 'react';
+    10→import {
+    11→  Cpu, Send, RefreshCw, Zap, Clock, Hash,
+    12→  AlertTriangle, CheckCircle2, XCircle, Loader2, Sparkles,
+    13→  Crown, Wrench, ChevronDown, ChevronUp, UserPlus, Trash2,
+    14→  ListChecks, BarChart3, Radio, Building2, MessageSquare,
+    15→  PanelLeftClose, PanelLeftOpen, Globe,
+    16→} from 'lucide-react';
+    17→import { Button } from '@/components/ui/button';
+    18→import { Card, CardContent } from '@/components/ui/card';
+    19→import { Badge } from '@/components/ui/badge';
+    20→import { Textarea } from '@/components/ui/textarea';
+    21→import { Label } from '@/components/ui/label';
+    22→import { Input } from '@/components/ui/input';
+    23→import {
+    24→  Sheet,
+    25→  SheetContent,
+    26→  SheetHeader,
+    27→  SheetTitle,
+    28→} from '@/components/ui/sheet';
+    29→import {
+    30→  Dialog,
+    31→  DialogContent,
+    32→  DialogHeader,
+    33→  DialogTitle,
+    34→  DialogTrigger,
+    35→  DialogFooter,
+    36→  DialogClose,
+    37→} from '@/components/ui/dialog';
+    38→import { Separator } from '@/components/ui/separator';
+    39→import { useResponsive } from '@/hooks/use-breakpoint';
+    40→import { motion, AnimatePresence } from 'framer-motion';
+    41→
+    42→// ─── Pixel Office components ──────────────────────────────────
+    43→import { PixelOfficeCanvas } from '@/components/pixel-office/PixelOfficeCanvas';
+    44→import { OfficeState, ROLE_SEAT_MAP } from '@/lib/pixel-office/engine/officeState';
+    45→import { BehaviorState } from '@/lib/pixel-office/types';
+    46→import { loadAllAssets } from '@/lib/pixel-office/assetLoader';
+    47→import type { ZoneDestination, ZoneLabel, TileType as TileTypeVal } from '@/lib/pixel-office/types';
+    48→
+    49→// ─── Office data hooks ────────────────────────────────────────
+    50→import { useOfficeData } from '@/hooks/useOfficeData';
+    51→import { useEventStream } from '@/hooks/useEventStream';
+    52→import type { OfficeAgent } from '@/hooks/useOfficeData';
+    53→
+    54→// ─── Browser Operator ─────────────────────────────────────────
+    55→import { BrowserOperatorPanel } from '@/components/browser-operator/BrowserOperatorPanel';
+    56→
+    57→// ─── Types ────────────────────────────────────────────────────
+    58→
+    59→interface AgentSkillRef {
+    60→  skillId: string;
+    61→  enabled: boolean;
+    62→  hasConfig: boolean;
+    63→}
+    64→
+    65→interface AgentToolRef {
+    66→  toolId: string;
+    67→  enabled: boolean;
+    68→  requiredPermission: string;
+    69→}
+    70→
+    71→interface RuntimeAgent {
+    72→  id: string;
+    73→  name: string;
+    74→  role: string;
+    75→  type: string;
+    76→  description: string;
+    77→  status: string;
+    78→  model: {
+    79→    preferred: string;
+    80→    fallback: string | null;
+    81→  };
+    82→  execution: {
+    83→    temperature: number;
+    84→    maxTokens: number;
+    85→  };
+    86→  skills: AgentSkillRef[];
+    87→  tools: AgentToolRef[];
+    88→  hooks: string[];
+    89→  visualProfile: {
+    90→    color: string;
+    91→    icon: string;
+    92→    avatarEmoji: string;
+    93→  };
+    94→  executionCount: number;
+    95→  lastActivityAt: number | null;
+    96→}
+    97→
+    98→interface RuntimeStatus {
+    99→  agents: RuntimeAgent[];
+   100→  stats: {
+   101→    totalAgents: number;
+   102→    permanentAgents: number;
+   103→    temporaryAgents: number;
+   104→    agentsByRole: Record<string, number>;
+   105→    agentsByStatus: Record<string, number>;
+   106→  };
+   107→  registrySize: number;
+   108→  skills: {
+   109→    totalSkills: number;
+   110→    skillIds: string[];
+   111→    registrations: Array<{
+   112→      id: string;
+   113→      name: string;
+   114→      version?: string;
+   115→      source: string;
+   116→    }>;
+   117→  };
+   118→  tools: {
+   119→    totalTools: number;
+   120→    toolIds: string[];
+   121→    toolsByPermission: Record<string, number>;
+   122→    registrations: Array<{
+   123→      id: string;
+   124→      name: string;
+   125→      version?: string;
+   126→      permission: string;
+   127→      source: string;
+   128→    }>;
+   129→  };
+   130→}
+   131→
+   132→interface AIStatus {
+   133→  configured: boolean;
+   134→  providers: Array<{ id: string; name: string; available: boolean }>;
+   135→  registeredProviderIds: string[];
+   136→  error?: string;
+   137→}
+   138→
+   139→interface DelegatedTask {
+   140→  agentId: string;
+   141→  agentName: string;
+   142→  task: string;
+   143→  status: 'completed' | 'failed' | 'running';
+   144→  result?: string;
+   145→  durationMs?: number;
+   146→}
+   147→
+   148→interface OrchestratorChatResponse {
+   149→  orchestratorResponse: string;
+   150→  delegatedTasks: DelegatedTask[];
+   151→  totalDurationMs: number;
+   152→  modelUsed: string;
+   153→  usage: {
+   154→    promptTokens: number;
+   155→    completionTokens: number;
+   156→    totalTokens: number;
+   157→  };
+   158→}
+   159→
+   160→interface ChatMessage {
+   161→  id: string;
+   162→  role: 'user' | 'assistant' | 'delegation';
+   163→  content: string;
+   164→  model?: string;
+   165→  usage?: {
+   166→    promptTokens: number;
+   167→    completionTokens: number;
+   168→    totalTokens: number;
+   169→  };
+   170→  durationMs?: number;
+   171→  timestamp: number;
+   172→  error?: boolean;
+   173→  delegatedTasks?: DelegatedTask[];
+   174→  totalDurationMs?: number;
+   175→}
+   176→
+   177→interface HiredAgent {
+   178→  id: string;
+   179→  name: string;
+   180→  role: string;
+   181→  description: string;
+   182→  model: string;
+   183→  skills: string[];
+   184→  tools: string[];
+   185→}
+   186→
+   187→// ─── Color Scheme for All 11 Roles ────────────────────────────
+   188→
+   189→const ROLE_COLORS: Record<string, { bg: string; border: string; text: string; badge: string; glow: string; ring: string }> = {
+   190→  orchestrator: { bg: 'bg-purple-500/10', border: 'border-purple-500/30', text: 'text-purple-400', badge: 'bg-purple-500/20 text-purple-300', glow: 'shadow-purple-500/20', ring: 'ring-purple-500/50' },
+   191→  analyst: { bg: 'bg-blue-500/10', border: 'border-blue-500/30', text: 'text-blue-400', badge: 'bg-blue-500/20 text-blue-300', glow: 'shadow-blue-500/20', ring: 'ring-blue-500/50' },
+   192→  architect: { bg: 'bg-amber-500/10', border: 'border-amber-500/30', text: 'text-amber-400', badge: 'bg-amber-500/20 text-amber-300', glow: 'shadow-amber-500/20', ring: 'ring-amber-500/50' },
+   193→  designer: { bg: 'bg-pink-500/10', border: 'border-pink-500/30', text: 'text-pink-400', badge: 'bg-pink-500/20 text-pink-300', glow: 'shadow-pink-500/20', ring: 'ring-pink-500/50' },
+   194→  frontend_engineer: { bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-400', badge: 'bg-emerald-500/20 text-emerald-300', glow: 'shadow-emerald-500/20', ring: 'ring-emerald-500/50' },
+   195→  backend_engineer: { bg: 'bg-indigo-500/10', border: 'border-indigo-500/30', text: 'text-indigo-400', badge: 'bg-indigo-500/20 text-indigo-300', glow: 'shadow-indigo-500/20', ring: 'ring-indigo-500/50' },
+   196→  data_engineer: { bg: 'bg-teal-500/10', border: 'border-teal-500/30', text: 'text-teal-400', badge: 'bg-teal-500/20 text-teal-300', glow: 'shadow-teal-500/20', ring: 'ring-teal-500/50' },
+   197→  qa_engineer: { bg: 'bg-rose-500/10', border: 'border-rose-500/30', text: 'text-rose-400', badge: 'bg-rose-500/20 text-rose-300', glow: 'shadow-rose-500/20', ring: 'ring-rose-500/50' },
+   198→  devops_engineer: { bg: 'bg-orange-500/10', border: 'border-orange-500/30', text: 'text-orange-400', badge: 'bg-orange-500/20 text-orange-300', glow: 'shadow-orange-500/20', ring: 'ring-orange-500/50' },
+   199→  researcher: { bg: 'bg-violet-500/10', border: 'border-violet-500/30', text: 'text-violet-400', badge: 'bg-violet-500/20 text-violet-300', glow: 'shadow-violet-500/20', ring: 'ring-violet-500/50' },
+   200→  security_engineer: { bg: 'bg-red-500/10', border: 'border-red-500/30', text: 'text-red-400', badge: 'bg-red-500/20 text-red-300', glow: 'shadow-red-500/20', ring: 'ring-red-500/50' },
+   201→  custom: { bg: 'bg-slate-500/10', border: 'border-slate-500/30', text: 'text-slate-400', badge: 'bg-slate-500/20 text-slate-300', glow: 'shadow-slate-500/20', ring: 'ring-slate-500/50' },
+   202→};
+   203→
+   204→const DEFAULT_ROLE_COLORS = ROLE_COLORS.custom;
+   205→
+   206→const STATUS_COLORS: Record<string, string> = {
+   207→  idle: 'bg-slate-400',
+   208→  thinking: 'bg-yellow-400 animate-pulse',
+   209→  working: 'bg-emerald-400 animate-pulse',
+   210→  waiting_api: 'bg-blue-400 animate-pulse',
+   211→  reviewing: 'bg-amber-400',
+   212→  waiting_approval: 'bg-orange-400',
+   213→  done: 'bg-emerald-500',
+   214→  error: 'bg-red-500',
+   215→  offline: 'bg-slate-600',
+   216→};
+   217→
+   218→const STATUS_LABELS: Record<string, string> = {
+   219→  idle: 'Idle',
+   220→  thinking: 'Thinking',
+   221→  working: 'Working',
+   222→  waiting_api: 'API Wait',
+   223→  reviewing: 'Reviewing',
+   224→  waiting_approval: 'Awaiting',
+   225→  done: 'Done',
+   226→  error: 'Error',
+   227→  offline: 'Offline',
+   228→};
+   229→
+   230→const SKILL_COLORS: Record<string, string> = {
+   231→  planning: 'bg-purple-500/15 text-purple-300 border-purple-500/20',
+   232→  summarization: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/20',
+   233→  validation: 'bg-rose-500/15 text-rose-300 border-rose-500/20',
+   234→  code_generation: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/20',
+   235→  testing: 'bg-amber-500/15 text-amber-300 border-amber-500/20',
+   236→  research: 'bg-blue-500/15 text-blue-300 border-blue-500/20',
+   237→  design: 'bg-pink-500/15 text-pink-300 border-pink-500/20',
+   238→  security_audit: 'bg-red-500/15 text-red-300 border-red-500/20',
+   239→};
+   240→
+   241→const TOOL_COLORS: Record<string, string> = {
+   242→  calculator: 'bg-amber-500/15 text-amber-300 border-amber-500/20',
+   243→  http_request: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/20',
+   244→  file_reader: 'bg-teal-500/15 text-teal-300 border-teal-500/20',
+   245→  code_executor: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/20',
+   246→  browser: 'bg-violet-500/15 text-violet-300 border-violet-500/20',
+   247→  database_query: 'bg-blue-500/15 text-blue-300 border-blue-500/20',
+   248→};
+   249→
+   250→const DEFAULT_SKILL_COLOR = 'bg-rose-500/15 text-rose-300 border-rose-500/20';
+   251→const DEFAULT_TOOL_COLOR = 'bg-amber-500/15 text-amber-300 border-amber-500/20';
+   252→
+   253→const CAPABILITY_OPTIONS = [
+   254→  'planning', 'validation', 'summarization', 'code_generation',
+   255→  'testing', 'research', 'design', 'security_audit',
+   256→  'code_review', 'deployment', 'monitoring', 'documentation',
+   257→];
+   258→
+   259→// ─── Pixel Office Layout (40×36) ─────────────────────────────
+   260→const COLS = 40;
+   261→const ROWS = 36;
+   262→
+   263→function buildTiles(): TileTypeVal[] {
+   264→  const W = 0 as TileTypeVal;
+   265→  const F1 = 1 as TileTypeVal;
+   266→  const F2 = 2 as TileTypeVal;
+   267→  const F3 = 3 as TileTypeVal;
+   268→  const F4 = 4 as TileTypeVal;
+   269→  const F5 = 5 as TileTypeVal;
+   270→  const F6 = 6 as TileTypeVal;
+   271→  const F7 = 7 as TileTypeVal;
+   272→  const F8 = 8 as TileTypeVal;
+   273→  const F9 = 9 as TileTypeVal;
+   274→  const F10 = 10 as TileTypeVal;
+   275→
+   276→  const tiles: TileTypeVal[] = [];
+   277→  for (let r = 0; r < ROWS; r++) {
+   278→    for (let c = 0; c < COLS; c++) {
+   279→      if (r === 0 || r === ROWS - 1 || c === 0 || c === COLS - 1) { tiles.push(W); continue; }
+   280→      if (r === 10) { tiles.push((c >= 5 && c <= 6) || (c >= 18 && c <= 19) || (c >= 31 && c <= 32) ? F8 : W); continue; }
+   281→      if (r === 20) { tiles.push((c >= 5 && c <= 6) || (c >= 18 && c <= 19) || (c >= 31 && c <= 32) ? F8 : W); continue; }
+   282→      if (r === 30) { tiles.push((c >= 8 && c <= 9) || (c >= 28 && c <= 29) ? F8 : W); continue; }
+   283→      if (r >= 1 && r <= 9) {
+   284→        if (c === 13) { tiles.push(r >= 4 && r <= 5 ? F8 : W); continue; }
+   285→        if (c === 25) { tiles.push(r >= 4 && r <= 5 ? F8 : W); continue; }
+   286→        if (c >= 1 && c <= 12) { tiles.push(F1); continue; }
+   287→        if (c >= 14 && c <= 24) { tiles.push(F2); continue; }
+   288→        if (c >= 26 && c <= 38) { tiles.push(F3); continue; }
+   289→        tiles.push(W); continue;
+   290→      }
+   291→      if (r >= 11 && r <= 19) {
+   292→        if (c === 13) { tiles.push(r >= 14 && r <= 15 ? F8 : W); continue; }
+   293→        if (c === 25) { tiles.push(r >= 14 && r <= 15 ? F8 : W); continue; }
+   294→        if (c >= 1 && c <= 12) { tiles.push(F4); continue; }
+   295→        if (c >= 14 && c <= 24) { tiles.push(F5); continue; }
+   296→        if (c >= 26 && c <= 38) { tiles.push(F6); continue; }
+   297→        tiles.push(W); continue;
+   298→      }
+   299→      if (r >= 21 && r <= 29) {
+   300→        if (c === 13) { tiles.push(r >= 24 && r <= 25 ? F8 : W); continue; }
+   301→        if (c === 25) { tiles.push(r >= 24 && r <= 25 ? F8 : W); continue; }
+   302→        if (c >= 1 && c <= 12) { tiles.push(F9); continue; }
+   303→        if (c >= 14 && c <= 24) { tiles.push(F10); continue; }
+   304→        if (c >= 26 && c <= 38) { tiles.push(F7); continue; }
+   305→        tiles.push(W); continue;
+   306→      }
+   307→      tiles.push(F7);
+   308→    }
+   309→  }
+   310→  return tiles;
+   311→}
+   312→
+   313→function buildTileColors(): Array<{ h: number; s: number; b: number; c: number } | null> {
+   314→  const wallColor = { h: 214, s: 30, b: -100, c: -55 };
+   315→  const cmdColor = { h: 30, s: 50, b: -43, c: -88 };
+   316→  const meetColor = { h: 210, s: 35, b: -30, c: -75 };
+   317→  const designColor = { h: 330, s: 40, b: -35, c: -80 };
+   318→  const devColor = { h: 150, s: 40, b: -40, c: -82 };
+   319→  const serverColor = { h: 200, s: 45, b: -50, c: -70 };
+   320→  const researchColor = { h: 35, s: 55, b: -38, c: -85 };
+   321→  const loungeColor = { h: 20, s: 60, b: -35, c: -85 };
+   322→  const doorColor = { h: 35, s: 25, b: 10, c: 0 };
+   323→  const qaColor = { h: 345, s: 40, b: -40, c: -82 };
+   324→  const opsColor = { h: 25, s: 50, b: -38, c: -80 };
+   325→  const tiles = buildTiles();
+   326→  const colors: Array<{ h: number; s: number; b: number; c: number } | null> = [];
+   327→  for (let i = 0; i < tiles.length; i++) {
+   328→    const tile = tiles[i];
+   329→    if (tile === 0) { colors.push(wallColor); continue; }
+   330→    if (tile === 8) { colors.push(doorColor); continue; }
+   331→    if (tile === 1) { colors.push(cmdColor); continue; }
+   332→    if (tile === 2) { colors.push(meetColor); continue; }
+   333→    if (tile === 3) { colors.push(designColor); continue; }
+   334→    if (tile === 4) { colors.push(devColor); continue; }
+   335→    if (tile === 5) { colors.push(serverColor); continue; }
+   336→    if (tile === 6) { colors.push(researchColor); continue; }
+   337→    if (tile === 7) { colors.push(loungeColor); continue; }
+   338→    if (tile === 9) { colors.push(qaColor); continue; }
+   339→    if (tile === 10) { colors.push(opsColor); continue; }
+   340→    colors.push(wallColor);
+   341→  }
+   342→  return colors;
+   343→}
+   344→
+   345→const DEFAULT_AGENT_OS_LAYOUT = {
+   346→  version: 1 as const,
+   347→  cols: COLS,
+   348→  rows: ROWS,
+   349→  layoutRevision: 4,
+   350→  tiles: buildTiles(),
+   351→  tileColors: buildTileColors(),
+   352→  furniture: [
+   353→    // ═══ COMMAND CENTER (cols 1-12, rows 1-9) ═══
+   354→    { uid: 'cmd-shelf1', type: 'DOUBLE_BOOKSHELF', col: 1, row: 0 },
+   355→    { uid: 'cmd-clock', type: 'CLOCK', col: 5, row: 0 },
+   356→    { uid: 'cmd-wb', type: 'WHITEBOARD', col: 7, row: 0 },
+   357→    { uid: 'cmd-paint1', type: 'SMALL_PAINTING', col: 10, row: 0 },
+   358→    { uid: 'cmd-paint2', type: 'SMALL_PAINTING_2', col: 11, row: 0 },
+   359→    { uid: 'desk-orc', type: 'DESK_FRONT', col: 2, row: 2 },
+   360→    { uid: 'pc-orc', type: 'PC_FRONT_OFF', col: 3, row: 2 },
+   361→    { uid: 'chair-orc', type: 'WOODEN_CHAIR_BACK', col: 3, row: 4 },
+   362→    { uid: 'desk-arch', type: 'DESK_FRONT', col: 7, row: 2 },
+   363→    { uid: 'pc-arch', type: 'PC_FRONT_OFF', col: 8, row: 2 },
+   364→    { uid: 'chair-arch', type: 'WOODEN_CHAIR_BACK', col: 8, row: 4 },
+   365→    { uid: 'desk-anl', type: 'DESK_FRONT', col: 2, row: 6 },
+   366→    { uid: 'pc-anl', type: 'PC_FRONT_OFF', col: 3, row: 6 },
+   367→    { uid: 'chair-anl', type: 'WOODEN_CHAIR_BACK', col: 3, row: 8 },
+   368→    { uid: 'cmd-plant1', type: 'LARGE_PLANT', col: 1, row: 1 },
+   369→    { uid: 'cmd-plant2', type: 'PLANT', col: 11, row: 5 },
+   370→    { uid: 'cmd-cactus', type: 'CACTUS', col: 12, row: 1 },
+   371→    { uid: 'cmd-bin', type: 'BIN', col: 12, row: 9 },
+   372→    // ═══ MEETING ROOM (cols 14-24, rows 1-9) ═══
+   373→    { uid: 'meet-clock', type: 'CLOCK', col: 15, row: 0 },
+   374→    { uid: 'meet-wb', type: 'WHITEBOARD', col: 18, row: 0 },
+   375→    { uid: 'meet-paint', type: 'LARGE_PAINTING', col: 22, row: 0 },
+   376→    { uid: 'meet-table', type: 'TABLE_FRONT', col: 18, row: 4 },
+   377→    { uid: 'meet-bench1', type: 'CUSHIONED_BENCH', col: 17, row: 5 },
+   378→    { uid: 'meet-bench2', type: 'CUSHIONED_BENCH', col: 21, row: 5 },
+   379→    { uid: 'meet-chair1', type: 'CUSHIONED_CHAIR_FRONT', col: 18, row: 3 },
+   380→    { uid: 'meet-chair2', type: 'CUSHIONED_CHAIR_BACK', col: 18, row: 6 },
+   381→    { uid: 'meet-chair3', type: 'CUSHIONED_CHAIR_FRONT', col: 20, row: 3 },
+   382→    { uid: 'meet-chair4', type: 'CUSHIONED_CHAIR_BACK', col: 20, row: 6 },
+   383→    { uid: 'meet-plant1', type: 'PLANT_2', col: 14, row: 1 },
+   384→    { uid: 'meet-plant2', type: 'LARGE_PLANT', col: 23, row: 8 },
+   385→    { uid: 'meet-shelf', type: 'BOOKSHELF', col: 14, row: 0 },
+   386→    // ═══ DESIGN AREA (cols 26-38, rows 1-9) ═══
+   387→    { uid: 'des-shelf', type: 'DOUBLE_BOOKSHELF', col: 26, row: 0 },
+   388→    { uid: 'des-hplant', type: 'HANGING_PLANT', col: 30, row: 0 },
+   389→    { uid: 'des-paint1', type: 'SMALL_PAINTING', col: 34, row: 0 },
+   390→    { uid: 'des-paint2', type: 'SMALL_PAINTING_2', col: 37, row: 0 },
+   391→    { uid: 'desk-des', type: 'DESK_FRONT', col: 29, row: 2 },
+   392→    { uid: 'pc-des', type: 'PC_FRONT_OFF', col: 30, row: 2 },
+   393→    { uid: 'chair-des', type: 'WOODEN_CHAIR_BACK', col: 30, row: 4 },
+   394→    { uid: 'des-table', type: 'COFFEE_TABLE', col: 29, row: 7 },
+   395→    { uid: 'des-bench', type: 'CUSHIONED_BENCH', col: 28, row: 8 },
+   396→    { uid: 'des-bench2', type: 'CUSHIONED_BENCH', col: 31, row: 8 },
+   397→    { uid: 'des-plant1', type: 'PLANT', col: 37, row: 1 },
+   398→    { uid: 'des-cactus', type: 'CACTUS', col: 26, row: 6 },
+   399→    { uid: 'des-bin', type: 'BIN', col: 37, row: 9 },
+   400→    // ═══ DEVELOPMENT AREA (cols 1-12, rows 11-19) ═══
+   401→    { uid: 'dev-shelf', type: 'BOOKSHELF', col: 1, row: 10 },
+   402→    { uid: 'dev-wb', type: 'WHITEBOARD', col: 7, row: 10 },
+   403→    { uid: 'dev-clock', type: 'CLOCK', col: 11, row: 10 },
+   404→    { uid: 'desk-fe', type: 'DESK_FRONT', col: 2, row: 12 },
+   405→    { uid: 'pc-fe', type: 'PC_FRONT_OFF', col: 3, row: 12 },
+   406→    { uid: 'chair-fe', type: 'WOODEN_CHAIR_BACK', col: 3, row: 14 },
+   407→    { uid: 'desk-be', type: 'DESK_FRONT', col: 7, row: 12 },
+   408→    { uid: 'pc-be', type: 'PC_FRONT_OFF', col: 8, row: 12 },
+   409→    { uid: 'chair-be', type: 'WOODEN_CHAIR_BACK', col: 8, row: 14 },
+   410→    { uid: 'dev-plant1', type: 'LARGE_PLANT', col: 1, row: 11 },
+   411→    { uid: 'dev-plant2', type: 'PLANT', col: 11, row: 13 },
+   412→    { uid: 'dev-cactus', type: 'CACTUS', col: 12, row: 17 },
+   413→    { uid: 'dev-bin', type: 'BIN', col: 12, row: 19 },
+   414→    // ═══ SERVER ROOM (cols 14-24, rows 11-19) ═══
+   415→    { uid: 'srv-shelf', type: 'DOUBLE_BOOKSHELF', col: 14, row: 10 },
+   416→    { uid: 'srv-clock', type: 'CLOCK', col: 17, row: 10 },
+   417→    { uid: 'srv-paint', type: 'LARGE_PAINTING', col: 23, row: 10 },
+   418→    { uid: 'desk-data', type: 'DESK_FRONT', col: 16, row: 12 },
+   419→    { uid: 'pc-data', type: 'PC_FRONT_OFF', col: 17, row: 12 },
+   420→    { uid: 'chair-data', type: 'WOODEN_CHAIR_BACK', col: 17, row: 14 },
+   421→    { uid: 'srv-rack1', type: 'DESK_SIDE', col: 21, row: 12 },
+   422→    { uid: 'srv-rack2', type: 'DESK_SIDE', col: 21, row: 16 },
+   423→    { uid: 'srv-pc1', type: 'PC_FRONT_OFF', col: 23, row: 11 },
+   424→    { uid: 'srv-pc2', type: 'PC_FRONT_OFF', col: 24, row: 11 },
+   425→    { uid: 'srv-plant1', type: 'PLANT_2', col: 14, row: 17 },
+   426→    { uid: 'srv-bin', type: 'BIN', col: 23, row: 19 },
+   427→    { uid: 'srv-pot', type: 'POT', col: 15, row: 18 },
+   428→    // ═══ RESEARCH AREA (cols 26-38, rows 11-19) ═══
+   429→    { uid: 'res-wb', type: 'WHITEBOARD', col: 30, row: 10 },
+   430→    { uid: 'res-shelf1', type: 'DOUBLE_BOOKSHELF', col: 26, row: 10 },
+   431→    { uid: 'res-shelf2', type: 'BOOKSHELF', col: 36, row: 10 },
+   432→    { uid: 'desk-res', type: 'DESK_FRONT', col: 29, row: 12 },
+   433→    { uid: 'pc-res', type: 'PC_FRONT_OFF', col: 30, row: 12 },
+   434→    { uid: 'chair-res', type: 'WOODEN_CHAIR_BACK', col: 30, row: 14 },
+   435→    { uid: 'res-htable', type: 'SMALL_TABLE', col: 33, row: 15 },
+   436→    { uid: 'res-hchair1', type: 'WOODEN_CHAIR_FRONT', col: 32, row: 16 },
+   437→    { uid: 'res-hchair2', type: 'WOODEN_CHAIR_FRONT', col: 35, row: 16 },
+   438→    { uid: 'res-plant1', type: 'LARGE_PLANT', col: 26, row: 11 },
+   439→    { uid: 'res-cactus', type: 'CACTUS', col: 37, row: 17 },
+   440→    { uid: 'res-plant2', type: 'PLANT', col: 37, row: 11 },
+   441→    { uid: 'res-bin', type: 'BIN', col: 37, row: 19 },
+   442→    // ═══ QA LAB (cols 1-12, rows 21-29) ═══
+   443→    { uid: 'qa-shelf', type: 'DOUBLE_BOOKSHELF', col: 1, row: 20 },
+   444→    { uid: 'qa-wb', type: 'WHITEBOARD', col: 5, row: 20 },
+   445→    { uid: 'qa-clock', type: 'CLOCK', col: 9, row: 20 },
+   446→    { uid: 'desk-qa2', type: 'DESK_FRONT', col: 2, row: 23 },
+   447→    { uid: 'pc-qa2', type: 'PC_FRONT_OFF', col: 3, row: 23 },
+   448→    { uid: 'chair-qa2', type: 'WOODEN_CHAIR_BACK', col: 3, row: 25 },
+   449→    { uid: 'desk-qa3', type: 'DESK_FRONT', col: 7, row: 23 },
+   450→    { uid: 'pc-qa3', type: 'PC_FRONT_OFF', col: 8, row: 23 },
+   451→    { uid: 'chair-qa3', type: 'WOODEN_CHAIR_BACK', col: 8, row: 25 },
+   452→    { uid: 'qa-pc1', type: 'PC_FRONT_OFF', col: 10, row: 21 },
+   453→    { uid: 'qa-pc2', type: 'PC_FRONT_OFF', col: 11, row: 21 },
+   454→    { uid: 'qa-plant1', type: 'LARGE_PLANT', col: 1, row: 21 },
+   455→    { uid: 'qa-cactus', type: 'CACTUS', col: 12, row: 27 },
+   456→    { uid: 'qa-bin', type: 'BIN', col: 12, row: 29 },
+   457→    // ═══ OPERATIONS CENTER (cols 14-24, rows 21-29) ═══
+   458→    { uid: 'ops-shelf', type: 'DOUBLE_BOOKSHELF', col: 14, row: 20 },
+   459→    { uid: 'ops-wb', type: 'WHITEBOARD', col: 18, row: 20 },
+   460→    { uid: 'ops-paint', type: 'LARGE_PAINTING', col: 22, row: 20 },
+   461→    { uid: 'desk-ops', type: 'DESK_FRONT', col: 16, row: 23 },
+   462→    { uid: 'pc-ops', type: 'PC_FRONT_OFF', col: 17, row: 23 },
+   463→    { uid: 'chair-ops', type: 'WOODEN_CHAIR_BACK', col: 17, row: 25 },
+   464→    { uid: 'desk-ops2', type: 'DESK_FRONT', col: 21, row: 23 },
+   465→    { uid: 'pc-ops2', type: 'PC_FRONT_OFF', col: 22, row: 23 },
+   466→    { uid: 'chair-ops2', type: 'WOODEN_CHAIR_BACK', col: 22, row: 25 },
+   467→    { uid: 'ops-pc1', type: 'PC_FRONT_OFF', col: 14, row: 21 },
+   468→    { uid: 'ops-pc2', type: 'PC_FRONT_OFF', col: 15, row: 21 },
+   469→    { uid: 'ops-pc3', type: 'PC_FRONT_OFF', col: 23, row: 21 },
+   470→    { uid: 'ops-plant1', type: 'PLANT_2', col: 24, row: 27 },
+   471→    { uid: 'ops-pot', type: 'POT', col: 15, row: 28 },
+   472→    { uid: 'ops-bin', type: 'BIN', col: 23, row: 29 },
+   473→    // ═══ WORKSHOP (cols 26-38, rows 21-29) ═══
+   474→    { uid: 'ws-shelf', type: 'BOOKSHELF', col: 26, row: 20 },
+   475→    { uid: 'ws-hplant', type: 'HANGING_PLANT', col: 32, row: 20 },
+   476→    { uid: 'ws-paint', type: 'SMALL_PAINTING', col: 36, row: 20 },
+   477→    { uid: 'ws-table', type: 'TABLE_FRONT', col: 30, row: 24 },
+   478→    { uid: 'ws-bench1', type: 'CUSHIONED_BENCH', col: 29, row: 25 },
+   479→    { uid: 'ws-bench2', type: 'CUSHIONED_BENCH', col: 32, row: 25 },
+   480→    { uid: 'ws-wb', type: 'WHITEBOARD', col: 35, row: 20 },
+   481→    { uid: 'ws-plant1', type: 'LARGE_PLANT', col: 26, row: 21 },
+   482→    { uid: 'ws-cactus', type: 'CACTUS', col: 37, row: 27 },
+   483→    { uid: 'ws-bin', type: 'BIN', col: 37, row: 29 },
+   484→    // ═══ LOUNGE (cols 1-38, rows 31-34) ═══
+   485→    { uid: 'lng-paint1', type: 'LARGE_PAINTING', col: 12, row: 30 },
+   486→    { uid: 'lng-paint2', type: 'SMALL_PAINTING', col: 28, row: 30 },
+   487→    { uid: 'lng-clock', type: 'CLOCK', col: 20, row: 30 },
+   488→    { uid: 'lng-hplant1', type: 'HANGING_PLANT', col: 6, row: 30 },
+   489→    { uid: 'lng-hplant2', type: 'HANGING_PLANT', col: 35, row: 30 },
+   490→    { uid: 'lng-sofa1', type: 'SOFA_FRONT', col: 2, row: 32 },
+   491→    { uid: 'lng-sofa2', type: 'SOFA_FRONT', col: 5, row: 32 },
+   492→    { uid: 'lng-ctable', type: 'COFFEE_TABLE', col: 3, row: 31 },
+   493→    { uid: 'lng-coffee', type: 'COFFEE', col: 9, row: 31 },
+   494→    { uid: 'lng-pot', type: 'POT', col: 10, row: 31 },
+   495→    { uid: 'lng-table', type: 'TABLE_FRONT', col: 16, row: 32 },
+   496→    { uid: 'lng-bench1', type: 'CUSHIONED_BENCH', col: 15, row: 33 },
+   497→    { uid: 'lng-bench2', type: 'CUSHIONED_BENCH', col: 18, row: 33 },
+   498→    { uid: 'lng-rtable', type: 'SMALL_TABLE', col: 24, row: 32 },
+   499→    { uid: 'lng-rchair1', type: 'CUSHIONED_CHAIR_FRONT', col: 23, row: 33 },
+   500→    { uid: 'lng-rchair2', type: 'CUSHIONED_CHAIR_FRONT', col: 26, row: 33 },
+   501→    { uid: 'lng-rchair3', type: 'WOODEN_CHAIR_FRONT', col: 24, row: 31 },
+   502→    { uid: 'lng-tv', type: 'PC_FRONT_OFF', col: 32, row: 30 },
+   503→    { uid: 'lng-sofa3', type: 'SOFA_BACK', col: 31, row: 33 },
+   504→    { uid: 'lng-sofa4', type: 'SOFA_BACK', col: 34, row: 33 },
+   505→    { uid: 'lng-plant1', type: 'LARGE_PLANT', col: 1, row: 31 },
+   506→    { uid: 'lng-plant2', type: 'PLANT', col: 14, row: 31 },
+   507→    { uid: 'lng-plant3', type: 'PLANT_2', col: 29, row: 31 },
+   508→    { uid: 'lng-plant4', type: 'CACTUS', col: 37, row: 32 },
+   509→    { uid: 'lng-bin1', type: 'BIN', col: 12, row: 34 },
+   510→    { uid: 'lng-bin2', type: 'BIN', col: 37, row: 34 },
+   511→    { uid: 'lng-shelf', type: 'BOOKSHELF', col: 1, row: 30 },
+   512→  ],
+   513→};
+   514→
+   515→const ZONE_DESTINATIONS: Record<string, ZoneDestination[]> = {
+   516→  [BehaviorState.MEETING]: [
+   517→    { col: 17, row: 5 }, { col: 18, row: 5 }, { col: 19, row: 5 }, { col: 20, row: 5 },
+   518→    { col: 18, row: 7 }, { col: 19, row: 7 },
+   519→  ],
+   520→  [BehaviorState.BREAK]: [
+   521→    { col: 3, row: 33 }, { col: 6, row: 33 }, { col: 4, row: 31 },
+   522→    { col: 15, row: 32 }, { col: 19, row: 32 },
+   523→    { col: 25, row: 32 }, { col: 32, row: 32 }, { col: 35, row: 32 },
+   524→  ],
+   525→  [BehaviorState.RESEARCH]: [
+   526→    { col: 29, row: 11 }, { col: 30, row: 11 }, { col: 31, row: 11 },
+   527→    { col: 34, row: 14 }, { col: 27, row: 14 },
+   528→    { col: 30, row: 26 }, { col: 31, row: 26 },
+   529→  ],
+   530→};
+   531→
+   532→const ZONE_LABELS: ZoneLabel[] = [
+   533→  { text: '⚙ COMMAND CENTER', col: 6, row: 1, color: '#C4B5FD' },
+   534→  { text: '🤝 MEETING ROOM', col: 19, row: 1, color: '#93C5FD' },
+   535→  { text: '🎨 DESIGN', col: 32, row: 1, color: '#F9A8D4' },
+   536→  { text: '💻 DEVELOPMENT', col: 6, row: 11, color: '#6EE7B7' },
+   537→  { text: '🖥 SERVER ROOM', col: 19, row: 11, color: '#67E8F9' },
+   538→  { text: '📚 RESEARCH', col: 32, row: 11, color: '#FCD34D' },
+   539→  { text: '🛡️ QA LAB', col: 6, row: 21, color: '#FDA4AF' },
+   540→  { text: '🚀 OPS CENTER', col: 19, row: 21, color: '#FDBA74' },
+   541→  { text: '🔧 WORKSHOP', col: 32, row: 21, color: '#D8B4FE' },
+   542→  { text: '☕ LOUNGE', col: 19, row: 31, color: '#FED7AA' },
+   543→];
+   544→
+   545→// ─── Pixel Office Status Mapping ──────────────────────────────
+   546→
+   547→function mapAgentStatusToActive(status: string): boolean {
+   548→  const s = status?.toLowerCase() ?? 'idle';
+   549→  return !['offline', 'idle', 'done'].includes(s);
+   550→}
+   551→
+   552→function mapAgentStatusToTool(status: string): string | null {
+   553→  const s = status?.toLowerCase() ?? '';
+   554→  if (s.includes('thinking') || s.includes('working')) return 'Write';
+   555→  if (s.includes('review') || s.includes('reading') || s.includes('waiting_api')) return 'Read';
+   556→  return null;
+   557→}
+   558→
+   559→function mapAgentStatusToBubble(status: string): 'permission' | 'waiting' | null {
+   560→  const s = status?.toLowerCase() ?? '';
+   561→  if (s.includes('waiting_approval')) return 'permission';
+   562→  if (s.includes('waiting_api')) return 'waiting';
+   563→  return null;
+   564→}
+   565→
+   566→function mapAgentStatusToBehavior(status: string): BehaviorState {
+   567→  const s = status?.toLowerCase() ?? 'idle';
+   568→  if (s.includes('working') || s.includes('thinking')) return BehaviorState.WORKING;
+   569→  if (s.includes('reviewing')) return BehaviorState.MEETING;
+   570→  if (s.includes('waiting_approval')) return BehaviorState.MEETING;
+   571→  if (s.includes('waiting_api')) return BehaviorState.RESEARCH;
+   572→  if (s.includes('done')) return BehaviorState.IDLE;
+   573→  return BehaviorState.IDLE;
+   574→}
+   575→
+   576→// ─── Agent ID Hashing (for pixel office engine) ───────────────
+   577→
+   578→const idToNumeric = new Map<string, number>();
+   579→const numericToId = new Map<number, string>();
+   580→let nextNumericId = 1;
+   581→
+   582→function hashAgentId(id: string): number {
+   583→  const existing = idToNumeric.get(id);
+   584→  if (existing !== undefined) return existing;
+   585→  const num = nextNumericId++;
+   586→  idToNumeric.set(id, num);
+   587→  numericToId.set(num, id);
+   588→  return num;
+   589→}
+   590→
+   591→function unhashAgentId(num: number): string | undefined {
+   592→  return numericToId.get(num);
+   593→}
+   594→
+   595→// ─── Sub-components ───────────────────────────────────────────
+   596→
+   597→function StatusDot({ status }: { status: string }) {
+   598→  return (
+   599→    <span className="flex items-center gap-1.5">
+   600→      <span className={`w-2 h-2 rounded-full ${STATUS_COLORS[status] || 'bg-slate-500'}`} />
+   601→      <span className="text-[10px] text-slate-500">{STATUS_LABELS[status] || status}</span>
+   602→    </span>
+   603→  );
+   604→}
+   605→
+   606→// ─── Delegation Report (inline in chat) ───────────────────────
+   607→
+   608→function DelegationReport({
+   609→  tasks,
+   610→  totalDurationMs,
+   611→}: {
+   612→  tasks: DelegatedTask[];
+   613→  totalDurationMs: number;
+   614→}) {
+   615→  const [expanded, setExpanded] = useState(false);
+   616→  const completedCount = tasks.filter((t) => t.status === 'completed').length;
+   617→  const failedCount = tasks.filter((t) => t.status === 'failed').length;
+   618→
+   619→  return (
+   620→    <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-3 space-y-2">
+   621→      <button
+   622→        type="button"
+   623→        onClick={() => setExpanded(!expanded)}
+   624→        className="w-full flex items-center justify-between text-left"
+   625→      >
+   626→        <div className="flex items-center gap-2">
+   627→          <span className="text-sm">🔄</span>
+   628→          <span className="text-xs font-medium text-slate-300">
+   629→            Delegated to {tasks.length} agent{tasks.length !== 1 ? 's' : ''}
+   630→          </span>
+   631→          <span className="flex items-center gap-1">
+   632→            {completedCount > 0 && (
+   633→              <Badge className="bg-emerald-500/20 text-emerald-300 text-[9px] h-4 px-1.5">✓ {completedCount}</Badge>
+   634→            )}
+   635→            {failedCount > 0 && (
+   636→              <Badge className="bg-red-500/20 text-red-300 text-[9px] h-4 px-1.5">✗ {failedCount}</Badge>
+   637→            )}
+   638→          </span>
+   639→        </div>
+   640→        <div className="flex items-center gap-2">
+   641→          <span className="text-[10px] text-slate-500">
+   642→            {totalDurationMs > 0 ? `${(totalDurationMs / 1000).toFixed(1)}s` : ''}
+   643→          </span>
+   644→          {expanded ? <ChevronUp className="w-3.5 h-3.5 text-slate-500" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-500" />}
+   645→        </div>
+   646→      </button>
+   647→      <AnimatePresence>
+   648→        {expanded && (
+   649→          <motion.div
+   650→            initial={{ height: 0, opacity: 0 }}
+   651→            animate={{ height: 'auto', opacity: 1 }}
+   652→            exit={{ height: 0, opacity: 0 }}
+   653→            transition={{ duration: 0.2 }}
+   654→            className="overflow-hidden"
+   655→          >
+   656→            <div className="space-y-1.5 pt-1">
+   657→              {tasks.map((task, i) => (
+   658→                <motion.div
+   659→                  key={`${task.agentId}-${i}`}
+   660→                  initial={{ opacity: 0, x: -10 }}
+   661→                  animate={{ opacity: 1, x: 0 }}
+   662→                  transition={{ delay: i * 0.05 }}
+   663→                  className="flex items-start gap-2 p-2 rounded-lg bg-slate-800/40 border border-slate-700/30"
+   664→                >
+   665→                  <span className="mt-0.5">
+   666→                    {task.status === 'completed' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+   667→                      : task.status === 'failed' ? <XCircle className="w-3.5 h-3.5 text-red-400" />
+   668→                      : <Loader2 className="w-3.5 h-3.5 text-yellow-400 animate-spin" />}
+   669→                  </span>
+   670→                  <div className="flex-1 min-w-0">
+   671→                    <div className="flex items-center gap-1.5">
+   672→                      <span className="text-xs font-medium text-slate-300">{task.agentName}</span>
+   673→                      {task.durationMs !== undefined && (
+   674→                        <span className="text-[10px] text-slate-500">{(task.durationMs / 1000).toFixed(1)}s</span>
+   675→                      )}
+   676→                    </div>
+   677→                    <p className="text-[11px] text-slate-400 mt-0.5">{task.task}</p>
+   678→                    {task.result && expanded && (
+   679→                      <p className="text-[10px] text-slate-500 mt-1 line-clamp-3">{task.result}</p>
+   680→                    )}
+   681→                  </div>
+   682→                </motion.div>
+   683→              ))}
+   684→            </div>
+   685→          </motion.div>
+   686→        )}
+   687→      </AnimatePresence>
+   688→    </div>
+   689→  );
+   690→}
+   691→
+   692→// ─── Orchestrator Chat Panel (Floating) ───────────────────────
+   693→
+   694→function OrchestratorChatPanel({
+   695→  messages,
+   696→  onSend,
+   697→  loading,
+   698→  configured,
+   699→  orchestrator,
+   700→  delegatingAgentCount,
+   701→}: {
+   702→  messages: ChatMessage[];
+   703→  onSend: (msg: string) => void;
+   704→  loading: boolean;
+   705→  configured: boolean;
+   706→  orchestrator: RuntimeAgent | null;
+   707→  delegatingAgentCount: number;
+   708→}) {
+   709→  const [input, setInput] = useState('');
+   710→  const scrollRef = useRef<HTMLDivElement>(null);
+   711→  const inputRef = useRef<HTMLTextAreaElement>(null);
+   712→
+   713→  useEffect(() => {
+   714→    if (scrollRef.current) {
+   715→      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+   716→    }
+   717→  }, [messages, loading]);
+   718→
+   719→  const handleSend = () => {
+   720→    if (!input.trim() || loading) return;
+   721→    onSend(input.trim());
+   722→    setInput('');
+   723→  };
+   724→
+   725→  const handleKeyDown = (e: React.KeyboardEvent) => {
+   726→    if (e.key === 'Enter' && !e.shiftKey) {
+   727→      e.preventDefault();
+   728→      handleSend();
+   729→    }
+   730→  };
+   731→
+   732→  return (
+   733→    <div className="flex flex-col h-full bg-[#12122a]/95 backdrop-blur-md border border-slate-700/50 rounded-xl overflow-hidden">
+   734→      {/* Chat Header */}
+   735→      <div className="px-3 py-2.5 border-b border-slate-700/50 shrink-0 bg-[#12122a]/80">
+   736→        <div className="flex items-center gap-2.5">
+   737→          <div className="relative">
+   738→            <span className="text-xl leading-none">👑</span>
+   739→            <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 border-2 border-[#12122a]" />
+   740→          </div>
+   741→          <div className="flex-1 min-w-0">
+   742→            <h2 className="text-xs font-semibold text-slate-200">Orchestrator</h2>
+   743→            <p className="text-[10px] text-slate-500 flex items-center gap-1.5">
+   744→              <span>I coordinate all agents</span>
+   745→              {orchestrator && (
+   746→                <>
+   747→                  <span className="text-slate-700">·</span>
+   748→                  <span className="font-mono">{orchestrator.model.preferred.split('/').pop()}</span>
+   749→                </>
+   750→              )}
+   751→            </p>
+   752→          </div>
+   753→          {orchestrator && (
+   754→            <div className="flex items-center gap-1">
+   755→              {orchestrator.skills.filter((s) => s.enabled).map((s) => (
+   756→                <Badge key={s.skillId} className={`text-[7px] h-3.5 px-1 ${SKILL_COLORS[s.skillId] || DEFAULT_SKILL_COLOR} border`}>
+   757→                  {s.skillId}
+   758→                </Badge>
+   759→              ))}
+   760→            </div>
+   761→          )}
+   762→        </div>
+   763→      </div>
+   764→
+   765→      {/* Messages Area */}
+   766→      <div
+   767→        ref={scrollRef}
+   768→        className="flex-1 overflow-y-auto p-3 space-y-2.5 min-h-0 custom-scrollbar"
+   769→      >
+   770→        {messages.length === 0 && (
+   771→          <div className="text-center py-8">
+   772→            <div className="w-16 h-16 rounded-full bg-purple-500/10 border border-purple-500/20 flex items-center justify-center mx-auto mb-3">
+   773→              <Crown className="w-6 h-6 text-purple-400" />
+   774→            </div>
+   775→            <h3 className="text-sm font-medium text-slate-300 mb-1">Talk to the Orchestrator</h3>
+   776→            <p className="text-xs text-slate-500 max-w-xs mx-auto">
+   777→              Tell me what you need. I&apos;ll delegate to the right agents.
+   778→            </p>
+   779→            {!configured && (
+   780→              <div className="mt-3 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 max-w-xs mx-auto">
+   781→                <p className="text-[10px] text-amber-300 flex items-center gap-1 justify-center">
+   782→                  <AlertTriangle className="w-3 h-3" />
+   783→                  OPENROUTER_API_KEY not set
+   784→                </p>
+   785→              </div>
+   786→            )}
+   787→          </div>
+   788→        )}
+   789→
+   790→        <AnimatePresence>
+   791→          {messages.map((msg) => (
+   792→            <motion.div
+   793→              key={msg.id}
+   794→              initial={{ opacity: 0, y: 6 }}
+   795→              animate={{ opacity: 1, y: 0 }}
+   796→              exit={{ opacity: 0 }}
+   797→              transition={{ duration: 0.12 }}
+   798→              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+   799→            >
+   800→              <div
+   801→                className={`max-w-[90%] rounded-xl px-3 py-2 ${
+   802→                  msg.role === 'user'
+   803→                    ? 'bg-cyan-600/15 border border-cyan-500/20 text-slate-200'
+   804→                    : msg.error
+   805→                    ? 'bg-red-500/10 border border-red-500/20 text-red-300'
+   806→                    : 'bg-purple-500/[0.08] border border-purple-500/20 text-slate-300'
+   807→                }`}
+   808→              >
+   809→                {msg.role === 'delegation' && msg.delegatedTasks && (
+   810→                  <DelegationReport tasks={msg.delegatedTasks} totalDurationMs={msg.totalDurationMs || 0} />
+   811→                )}
+   812→                <p className="text-xs whitespace-pre-wrap break-words leading-relaxed">{msg.content}</p>
+   813→                {msg.role === 'assistant' && !msg.error && (
+   814→                  <div className="mt-1.5 pt-1 border-t border-slate-700/30 flex flex-wrap items-center gap-1.5 text-[9px] text-slate-500">
+   815→                    {msg.model && <span className="flex items-center gap-0.5"><Cpu className="w-2 h-2" />{msg.model.split('/').pop()}</span>}
+   816→                    {msg.usage && <span className="flex items-center gap-0.5"><Hash className="w-2 h-2" />{msg.usage.totalTokens} tok</span>}
+   817→                    {msg.durationMs !== undefined && <span className="flex items-center gap-0.5"><Clock className="w-2 h-2" />{(msg.durationMs / 1000).toFixed(1)}s</span>}
+   818→                  </div>
+   819→                )}
+   820→              </div>
+   821→            </motion.div>
+   822→          ))}
+   823→        </AnimatePresence>
+   824→
+   825→        {loading && (
+   826→          <div className="flex justify-start">
+   827→            <div className="bg-purple-500/[0.08] border border-purple-500/20 rounded-xl px-3 py-2.5">
+   828→              <div className="flex items-center gap-2 text-xs text-slate-400">
+   829→                <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-400" />
+   830→                <span>
+   831→                  {delegatingAgentCount > 0
+   832→                    ? `🔄 Delegating to ${delegatingAgentCount} agent${delegatingAgentCount !== 1 ? 's' : ''}...`
+   833→                    : '👑 Thinking...'}
+   834→                </span>
+   835→              </div>
+   836→            </div>
+   837→          </div>
+   838→        )}
+   839→      </div>
+   840→
+   841→      {/* Input Area */}
+   842→      <div className="p-2.5 border-t border-slate-700/50 shrink-0 bg-[#12122a]/80">
+   843→        <div className="flex gap-1.5 items-end">
+   844→          <Textarea
+   845→            ref={inputRef}
+   846→            value={input}
+   847→            onChange={(e) => setInput(e.target.value)}
+   848→            onKeyDown={handleKeyDown}
+   849→            placeholder={configured ? 'Message the orchestrator...' : 'AI not configured'}
+   850→            disabled={loading || !configured}
+   851→            className="bg-slate-800/50 border-slate-700/50 text-slate-200 placeholder:text-slate-600 text-xs resize-none min-h-[36px] max-h-[100px]"
+   852→            rows={1}
+   853→          />
+   854→          <Button
+   855→            size="sm"
+   856→            onClick={handleSend}
+   857→            disabled={loading || !input.trim() || !configured}
+   858→            className="bg-purple-600 hover:bg-purple-500 text-white shrink-0 h-9 w-9 p-0"
+   859→          >
+   860→            <Send className="w-3.5 h-3.5" />
+   861→          </Button>
+   862→        </div>
+   863→      </div>
+   864→    </div>
+   865→  );
+   866→}
+   867→
+   868→// ─── Agent Detail Sheet ───────────────────────────────────────
+   869→
+   870→function AgentDetailSheet({
+   871→  agent,
+   872→  open,
+   873→  onOpenChange,
+   874→  isHired,
+   875→  onFire,
+   876→}: {
+   877→  agent: RuntimeAgent | null;
+   878→  open: boolean;
+   879→  onOpenChange: (open: boolean) => void;
+   880→  isHired: boolean;
+   881→  onFire?: () => void;
+   882→}) {
+   883→  if (!agent) return null;
+   884→  const colors = ROLE_COLORS[agent.role] || DEFAULT_ROLE_COLORS;
+   885→
+   886→  return (
+   887→    <Sheet open={open} onOpenChange={onOpenChange}>
+   888→      <SheetContent className="bg-[#0f0f1a] border-slate-700/50 w-full sm:max-w-md overflow-y-auto">
+   889→        <SheetHeader>
+   890→          <SheetTitle className="flex items-center gap-3 text-slate-200">
+   891→            <span className="text-2xl">{agent.visualProfile.avatarEmoji}</span>
+   892→            <div>
+   893→              <span>{agent.name}</span>
+   894→              <Badge className={`${colors.badge} text-[9px] h-4 px-1.5 ml-2`}>
+   895→                {agent.role.replace(/_/g, ' ')}
+   896→              </Badge>
+   897→            </div>
+   898→          </SheetTitle>
+   899→        </SheetHeader>
+   900→
+   901→        <div className="mt-6 space-y-4">
+   902→          <div>
+   903→            <h4 className="text-xs font-medium text-slate-400 mb-1">Description</h4>
+   904→            <p className="text-sm text-slate-300">{agent.description}</p>
+   905→          </div>
+   906→          <div className="grid grid-cols-2 gap-3">
+   907→            <div className="p-3 rounded-lg bg-slate-800/30 border border-slate-700/30">
+   908→              <h4 className="text-[10px] text-slate-500 mb-1">Status</h4>
+   909→              <StatusDot status={agent.status} />
+   910→            </div>
+   911→            <div className="p-3 rounded-lg bg-slate-800/30 border border-slate-700/30">
+   912→              <h4 className="text-[10px] text-slate-500 mb-1">Model</h4>
+   913→              <span className="text-xs text-slate-300 font-mono">{agent.model.preferred.split('/').pop()}</span>
+   914→              {agent.model.fallback && (
+   915→                <span className="text-[10px] text-slate-500 block mt-0.5">fallback: {agent.model.fallback.split('/').pop()}</span>
+   916→              )}
+   917→            </div>
+   918→          </div>
+   919→          <div className="p-3 rounded-lg bg-slate-800/30 border border-slate-700/30">
+   920→            <h4 className="text-[10px] text-slate-500 mb-2">Execution Config</h4>
+   921→            <div className="flex items-center gap-4 text-xs text-slate-300">
+   922→              <span>Temperature: {agent.execution.temperature}</span>
+   923→              <span>Max Tokens: {agent.execution.maxTokens}</span>
+   924→            </div>
+   925→          </div>
+   926→          <div>
+   927→            <h4 className="text-xs font-medium text-slate-400 mb-2">Bound Skills</h4>
+   928→            {agent.skills.length === 0 ? (
+   929→              <p className="text-xs text-slate-600 italic">No skills configured</p>
+   930→            ) : (
+   931→              <div className="space-y-1.5">
+   932→                {agent.skills.map((s) => (
+   933→                  <div key={s.skillId} className={`flex items-center gap-2 px-2.5 py-1.5 rounded text-xs ${s.enabled ? 'bg-purple-500/10 border border-purple-500/20' : 'bg-slate-800/30 border border-slate-700/30 opacity-50'}`}>
+   934→                    <Sparkles className="w-3 h-3" />
+   935→                    <span className={s.enabled ? 'text-slate-300' : 'text-slate-500'}>{s.skillId}</span>
+   936→                    {!s.enabled && <span className="text-slate-600">(disabled)</span>}
+   937→                    {s.hasConfig && <Badge className="bg-purple-500/20 text-purple-300 text-[8px] h-3 px-1">configured</Badge>}
+   938→                  </div>
+   939→                ))}
+   940→              </div>
+   941→            )}
+   942→          </div>
+   943→          <div>
+   944→            <h4 className="text-xs font-medium text-slate-400 mb-2">Bound Tools</h4>
+   945→            {agent.tools.length === 0 ? (
+   946→              <p className="text-xs text-slate-600 italic">No tools configured</p>
+   947→            ) : (
+   948→              <div className="space-y-1.5">
+   949→                {agent.tools.map((t) => (
+   950→                  <div key={t.toolId} className={`flex items-center gap-2 px-2.5 py-1.5 rounded text-xs ${t.enabled ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-slate-800/30 border border-slate-700/30 opacity-50'}`}>
+   951→                    <Wrench className="w-3 h-3" />
+   952→                    <span className={t.enabled ? 'text-slate-300' : 'text-slate-500'}>{t.toolId}</span>
+   953→                    {!t.enabled && <span className="text-slate-600">(disabled)</span>}
+   954→                    <Badge className={`text-[8px] h-3 px-1 ml-auto ${t.requiredPermission === 'none' ? 'bg-slate-500/20 text-slate-400' : t.requiredPermission === 'read' ? 'bg-cyan-500/20 text-cyan-300' : t.requiredPermission === 'write' ? 'bg-amber-500/20 text-amber-300' : 'bg-red-500/20 text-red-300'}`}>
+   955→                      {t.requiredPermission}
+   956→                    </Badge>
+   957→                  </div>
+   958→                ))}
+   959→              </div>
+   960→            )}
+   961→          </div>
+   962→          {agent.hooks.length > 0 && (
+   963→            <div>
+   964→              <h4 className="text-xs font-medium text-slate-400 mb-2">Hooks</h4>
+   965→              <div className="flex flex-wrap gap-1.5">
+   966→                {agent.hooks.map((h) => (
+   967→                  <Badge key={h} className="bg-slate-700/30 text-slate-400 text-[10px] h-5 px-2">{h}</Badge>
+   968→                ))}
+   969→              </div>
+   970→            </div>
+   971→          )}
+   972→          <div className="p-3 rounded-lg bg-slate-800/30 border border-slate-700/30">
+   973→            <div className="flex items-center justify-between text-xs text-slate-400">
+   974→              <span className="flex items-center gap-1"><Zap className="w-3 h-3" /> Executions: {agent.executionCount}</span>
+   975→              <span className="flex items-center gap-1"><Cpu className="w-3 h-3" /> Type: {agent.type}</span>
+   976→            </div>
+   977→          </div>
+   978→          {isHired && onFire && (
+   979→            <Button variant="destructive" size="sm" className="w-full" onClick={onFire}>
+   980→              <Trash2 className="w-3 h-3 mr-1.5" /> Fire Agent
+   981→            </Button>
+   982→          )}
+   983→        </div>
+   984→      </SheetContent>
+   985→    </Sheet>
+   986→  );
+   987→}
+   988→
+   989→// ─── Hire Agent Dialog ────────────────────────────────────────
+   990→
+   991→function HireAgentDialog({
+   992→  onHire,
+   993→  hiring,
+   994→}: {
+   995→  onHire: (role: string, task: string, capabilities: string[]) => void;
+   996→  hiring: boolean;
+   997→}) {
+   998→  const [role, setRole] = useState('');
+   999→  const [task, setTask] = useState('');
+  1000→  const [capabilities, setCapabilities] = useState<string[]>([]);
+  1001→  const [open, setOpen] = useState(false);
+  1002→
+  1003→  const toggleCapability = (cap: string) => {
+  1004→    setCapabilities((prev) => prev.includes(cap) ? prev.filter((c) => c !== cap) : [...prev, cap]);
+  1005→  };
+  1006→
+  1007→  const handleSubmit = () => {
+  1008→    if (!role.trim() || !task.trim() || capabilities.length === 0) return;
+  1009→    onHire(role.trim(), task.trim(), capabilities);
+  1010→    setRole('');
+  1011→    setTask('');
+  1012→    setCapabilities([]);
+  1013→    setOpen(false);
+  1014→  };
+  1015→
+  1016→  return (
+  1017→    <Dialog open={open} onOpenChange={setOpen}>
+  1018→      <DialogTrigger asChild>
+  1019→        <Button size="sm" className="bg-purple-600 hover:bg-purple-500 text-white h-7 text-[10px] px-2">
+  1020→          <UserPlus className="w-3 h-3 mr-1" /> Hire
+  1021→        </Button>
+  1022→      </DialogTrigger>
+  1023→      <DialogContent className="bg-[#0f0f1a] border-slate-700/50 sm:max-w-md">
+  1024→        <DialogHeader>
+  1025→          <DialogTitle className="text-slate-200 flex items-center gap-2">
+  1026→            <UserPlus className="w-5 h-5 text-purple-400" /> Hire a Temporary Agent
+  1027→          </DialogTitle>
+  1028→        </DialogHeader>
+  1029→        <div className="space-y-4 mt-4">
+  1030→          <div>
+  1031→            <Label className="text-slate-400 text-xs">Role</Label>
+  1032→            <Input value={role} onChange={(e) => setRole(e.target.value)} placeholder="e.g., code_reviewer, data_analyst" className="mt-1 bg-slate-800/50 border-slate-700/50 text-slate-200 text-sm" />
+  1033→          </div>
+  1034→          <div>
+  1035→            <Label className="text-slate-400 text-xs">Task Description</Label>
+  1036→            <Textarea value={task} onChange={(e) => setTask(e.target.value)} placeholder="Describe what this agent should do..." className="mt-1 bg-slate-800/50 border-slate-700/50 text-slate-200 text-sm resize-none" rows={3} />
+  1037→          </div>
+  1038→          <div>
+  1039→            <Label className="text-slate-400 text-xs">Capabilities</Label>
+  1040→            <div className="flex flex-wrap gap-1.5 mt-2">
+  1041→              {CAPABILITY_OPTIONS.map((cap) => (
+  1042→                <button key={cap} type="button" onClick={() => toggleCapability(cap)} className={`px-2 py-1 rounded-lg text-[11px] border transition-all ${capabilities.includes(cap) ? 'bg-purple-500/20 border-purple-500/40 text-purple-300' : 'bg-slate-800/30 border-slate-700/30 text-slate-500 hover:border-slate-600'}`}>
+  1043→                  {cap.replace(/_/g, ' ')}
+  1044→                </button>
+  1045→              ))}
+  1046→            </div>
+  1047→          </div>
+  1048→        </div>
+  1049→        <DialogFooter className="mt-4">
+  1050→          <DialogClose asChild><Button variant="ghost" size="sm" className="text-slate-400">Cancel</Button></DialogClose>
+  1051→          <Button size="sm" onClick={handleSubmit} disabled={!role.trim() || !task.trim() || capabilities.length === 0 || hiring} className="bg-purple-600 hover:bg-purple-500 text-white">
+  1052→            {hiring ? <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" />Hiring...</> : <><UserPlus className="w-3 h-3 mr-1.5" />Hire</>}
+  1053→          </Button>
+  1054→        </DialogFooter>
+  1055→      </DialogContent>
+  1056→    </Dialog>
+  1057→  );
+  1058→}
+  1059→
+  1060→// ─── Main Page ────────────────────────────────────────────────
+  1061→
+  1062→export default function Home() {
+  1063→  const { breakpoint, isMobile, isTablet, isDesktop, isMobileOrTablet } = useResponsive();
+  1064→
+  1065→  // ─── Data state ───
+  1066→  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  1067→  const [agents, setAgents] = useState<RuntimeAgent[]>([]);
+  1068→  const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus | null>(null);
+  1069→  const [aiStatus, setAIStatus] = useState<AIStatus | null>(null);
+  1070→  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  1071→  const [chatLoading, setChatLoading] = useState(false);
+  1072→  const [delegatingAgentCount, setDelegatingAgentCount] = useState(0);
+  1073→  const [loading, setLoading] = useState(true);
+  1074→  const [refreshing, setRefreshing] = useState(false);
+  1075→  const [hiredAgents, setHiredAgents] = useState<HiredAgent[]>([]);
+  1076→  const [hiring, setHiring] = useState(false);
+  1077→  const [detailAgent, setDetailAgent] = useState<RuntimeAgent | null>(null);
+  1078→  const [detailOpen, setDetailOpen] = useState(false);
+  1079→  const [chatPanelOpen, setChatPanelOpen] = useState(false);
+  1080→  const [chatSheetOpen, setChatSheetOpen] = useState(false);
+  1081→  const [browserOpOpen, setBrowserOpOpen] = useState(false);
+  1082→
+  1083→  const orchestrator = agents.find((a) => a.role === 'orchestrator') || null;
+  1084→  const hiredAgentIds = new Set(hiredAgents.map((h) => h.id));
+  1085→
+  1086→  // ─── Pixel Office State ───
+  1087→  const [assetsLoaded, setAssetsLoaded] = useState(false);
+  1088→  const [zoom, setZoom] = useState(2);
+  1089→  const panRef = useRef({ x: 0, y: 0 });
+  1090→
+  1091→  const [officeState] = useState(() => {
+  1092→    const os = new OfficeState(DEFAULT_AGENT_OS_LAYOUT);
+  1093→    os.setZoneDestinations(ZONE_DESTINATIONS);
+  1094→    os.setZoneLabels(ZONE_LABELS);
+  1095→    return os;
+  1096→  });
+  1097→
+  1098→  // ─── Office data hooks ───
+  1099→  const { state: officeData, loading: officeLoading, error: officeError, refetch: refetchOffice } = useOfficeData(workspaceId, 5000);
+  1100→  const { newEvents, clearNewEvents } = useEventStream(workspaceId, 4000);
+  1101→
+  1102→  // ─── Load assets on mount ───
+  1103→  useEffect(() => {
+  1104→    let mounted = true;
+  1105→    loadAllAssets().then((success) => {
+  1106→      if (mounted && success) {
+  1107→        setAssetsLoaded(true);
+  1108→        const layout = DEFAULT_AGENT_OS_LAYOUT;
+  1109→        officeState.rebuildFromLayout(layout);
+  1110→        officeState.setZoneDestinations(ZONE_DESTINATIONS);
+  1111→        officeState.setZoneLabels(ZONE_LABELS);
+  1112→      }
+  1113→    });
+  1114→    return () => { mounted = false; };
+  1115→  }, [officeState]);
+  1116→
+  1117→  // ─── Sync office agents from office data ───
+  1118→  useEffect(() => {
+  1119→    if (!officeData?.agents) return;
+  1120→    const currentAgentIds = new Set(officeData.agents.map((a) => a.id));
+  1121→
+  1122→    for (const agent of officeData.agents) {
+  1123→      const numericId = hashAgentId(agent.id);
+  1124→      if (!officeState.characters.has(numericId)) {
+  1125→        const status = agent.runtimeState?.status ?? agent.status;
+  1126→        const preferredSeatId = ROLE_SEAT_MAP[agent.role];
+  1127→        officeState.addAgent(numericId, undefined, undefined, preferredSeatId);
+  1128→        const ch = officeState.characters.get(numericId);
+  1129→        if (ch) {
+  1130→          ch.name = agent.name || agent.role;
+  1131→          ch.role = agent.role;
+  1132→        }
+  1133→        officeState.setAgentActive(numericId, mapAgentStatusToActive(status));
+  1134→        officeState.setAgentTool(numericId, mapAgentStatusToTool(status));
+  1135→        const behavior = mapAgentStatusToBehavior(status);
+  1136→        if (behavior !== BehaviorState.WORKING) {
+  1137→          officeState.setAgentBehavior(numericId, behavior);
+  1138→        }
+  1139→        const bubble = mapAgentStatusToBubble(status);
+  1140→        if (bubble === 'permission') officeState.showPermissionBubble(numericId);
+  1141→        else if (bubble === 'waiting') officeState.showWaitingBubble(numericId);
+  1142→      } else {
+  1143→        const status = agent.runtimeState?.status ?? agent.status;
+  1144→        const ch = officeState.characters.get(numericId);
+  1145→        if (ch) {
+  1146→          const isActive = mapAgentStatusToActive(status);
+  1147→          if (ch.isActive !== isActive) officeState.setAgentActive(numericId, isActive);
+  1148→          officeState.setAgentTool(numericId, mapAgentStatusToTool(status));
+  1149→          officeState.setAgentStatus(numericId, status);
+  1150→          ch.name = agent.name || agent.role;
+  1151→          ch.role = agent.role;
+  1152→          const bubble = mapAgentStatusToBubble(status);
+  1153→          if (bubble === 'permission' && ch.bubbleType !== 'permission') officeState.showPermissionBubble(numericId);
+  1154→          else if (bubble === 'waiting' && ch.bubbleType !== 'waiting') officeState.showWaitingBubble(numericId);
+  1155→          else if (!bubble && ch.bubbleType && ch.bubbleType !== 'done') officeState.dismissBubble(numericId);
+  1156→        }
+  1157→      }
+  1158→    }
+  1159→    for (const [id] of officeState.characters) {
+  1160→      const idStr = unhashAgentId(id);
+  1161→      if (idStr && !currentAgentIds.has(idStr)) officeState.removeAgent(id);
+  1162→    }
+  1163→  }, [officeData?.agents, officeState]);
+  1164→
+  1165→  // ─── Handle event-driven visual reactions ───
+  1166→  useEffect(() => {
+  1167→    if (!newEvents.length) return;
+  1168→    for (const event of newEvents) {
+  1169→      if (event.entityType === 'agent' && event.entityId) {
+  1170→        const numericId = hashAgentId(event.entityId);
+  1171→        const ch = officeState.characters.get(numericId);
+  1172→        if (!ch) continue;
+  1173→        switch (event.eventType) {
+  1174→          case 'agent.status_changed':
+  1175→            if (event.payload?.newStatus) {
+  1176→              const newStatus = event.payload.newStatus as string;
+  1177→              officeState.setAgentActive(numericId, mapAgentStatusToActive(newStatus));
+  1178→              officeState.setAgentTool(numericId, mapAgentStatusToTool(newStatus));
+  1179→              officeState.setAgentBehavior(numericId, mapAgentStatusToBehavior(newStatus));
+  1180→            }
+  1181→            break;
+  1182→          case 'task.assigned':
+  1183→          case 'task.started':
+  1184→            officeState.setAgentBehavior(numericId, BehaviorState.WORKING);
+  1185→            break;
+  1186→          case 'task.completed':
+  1187→            officeState.showDoneBubble(numericId);
+  1188→            officeState.setAgentBehavior(numericId, BehaviorState.IDLE, 5);
+  1189→            break;
+  1190→          case 'task.failed':
+  1191→            officeState.setAgentBehavior(numericId, BehaviorState.IDLE, 5);
+  1192→            break;
+  1193→          case 'tool.execution_started':
+  1194→            officeState.setAgentBehavior(numericId, BehaviorState.WORKING);
+  1195→            officeState.setAgentTool(numericId, event.payload?.toolKey as string || 'Write');
+  1196→            break;
+  1197→          case 'tool.execution_succeeded':
+  1198→          case 'tool.execution_failed':
+  1199→            officeState.setAgentTool(numericId, null);
+  1200→            break;
+  1201→          case 'approval.requested':
+  1202→            officeState.showPermissionBubble(numericId);
+  1203→            officeState.setAgentBehavior(numericId, BehaviorState.MEETING, 15);
+  1204→            break;
+  1205→          case 'approval.approved':
+  1206→          case 'approval.rejected':
+  1207→            officeState.dismissBubble(numericId);
+  1208→            officeState.setAgentBehavior(numericId, BehaviorState.WORKING);
+  1209→            break;
+  1210→        }
+  1211→      }
+  1212→    }
+  1213→    clearNewEvents();
+  1214→  }, [newEvents, clearNewEvents, officeState]);
+  1215→
+  1216→  // ─── Fetch runtime data ───
+  1217→
+  1218→  const fetchRuntimeStatus = useCallback(async () => {
+  1219→    try {
+  1220→      const res = await fetch('/api/runtime/status');
+  1221→      if (!res.ok) throw new Error('Failed');
+  1222→      const data: RuntimeStatus = await res.json();
+  1223→      setRuntimeStatus(data);
+  1224→      setAgents(data.agents);
+  1225→      return data;
+  1226→    } catch (err) {
+  1227→      console.error('Failed to fetch runtime status:', err);
+  1228→      return null;
+  1229→    }
+  1230→  }, []);
+  1231→
+  1232→  const fetchAIStatus = useCallback(async () => {
+  1233→    try {
+  1234→      const res = await fetch('/api/ai/status');
+  1235→      if (!res.ok) throw new Error('Failed');
+  1236→      const data: AIStatus = await res.json();
+  1237→      setAIStatus(data);
+  1238→      return data;
+  1239→    } catch (err) {
+  1240→      console.error('Failed to fetch AI status:', err);
+  1241→      return null;
+  1242→    }
+  1243→  }, []);
+  1244→
+  1245→  const fetchHiredAgents = useCallback(async () => {
+  1246→    try {
+  1247→      const res = await fetch('/api/orchestrator/hire');
+  1248→      if (!res.ok) throw new Error('Failed');
+  1249→      const data = await res.json();
+  1250→      setHiredAgents(data.agents || []);
+  1251→    } catch (err) {
+  1252→      console.error('Failed to fetch hired agents:', err);
+  1253→    }
+  1254→  }, []);
+  1255→
+  1256→  const fetchWorkspace = useCallback(async () => {
+  1257→    try {
+  1258→      const res = await fetch('/api/seed');
+  1259→      if (!res.ok) throw new Error('Failed');
+  1260→      const data = await res.json();
+  1261→      if (data.initialized) {
+  1262→        // Get workspace from status - we need the actual workspace ID
+  1263→        const agentsRes = await fetch('/api/agents?limit=1');
+  1264→        if (agentsRes.ok) {
+  1265→          const agentsData = await agentsRes.json();
+  1266→          if (agentsData.agents?.length > 0) {
+  1267→            setWorkspaceId(agentsData.agents[0].workspaceId);
+  1268→          }
+  1269→        }
+  1270→      }
+  1271→    } catch (err) {
+  1272→      console.error('Failed to fetch workspace:', err);
+  1273→    }
+  1274→  }, []);
+  1275→
+  1276→  const seedSystem = useCallback(async () => {
+  1277→    try {
+  1278→      const res = await fetch('/api/seed', { method: 'POST' });
+  1279→      if (res.ok) {
+  1280→        const data = await res.json();
+  1281→        setWorkspaceId(data.workspace?.id);
+  1282→        await refreshAll();
+  1283→      }
+  1284→    } catch (err) {
+  1285→      console.error('Failed to seed system:', err);
+  1286→    }
+  1287→  }, []);
+  1288→
+  1289→  const refreshAll = useCallback(async () => {
+  1290→    setRefreshing(true);
+  1291→    await Promise.all([fetchRuntimeStatus(), fetchAIStatus(), fetchHiredAgents()]);
+  1292→    setRefreshing(false);
+  1293→  }, [fetchRuntimeStatus, fetchAIStatus, fetchHiredAgents]);
+  1294→
+  1295→  useEffect(() => {
+  1296→    const init = async () => {
+  1297→      setLoading(true);
+  1298→      await fetchWorkspace();
+  1299→      await Promise.all([fetchRuntimeStatus(), fetchAIStatus(), fetchHiredAgents()]);
+  1300→      setLoading(false);
+  1301→    };
+  1302→    init();
+  1303→  }, [fetchRuntimeStatus, fetchAIStatus, fetchHiredAgents, fetchWorkspace]);
+  1304→
+  1305→  // Auto-refresh agent statuses every 8 seconds
+  1306→  useEffect(() => {
+  1307→    const interval = setInterval(fetchRuntimeStatus, 8000);
+  1308→    return () => clearInterval(interval);
+  1309→  }, [fetchRuntimeStatus]);
+  1310→
+  1311→  // ─── Chat Handler ───
+  1312→
+  1313→  const handleSendMessage = useCallback(
+  1314→    async (message: string) => {
+  1315→      const userMsg: ChatMessage = {
+  1316→        id: `user-${Date.now()}`,
+  1317→        role: 'user',
+  1318→        content: message,
+  1319→        timestamp: Date.now(),
+  1320→      };
+  1321→      setMessages((prev) => [...prev, userMsg]);
+  1322→      setChatLoading(true);
+  1323→      setDelegatingAgentCount(0);
+  1324→
+  1325→      try {
+  1326→        const history = messages
+  1327→          .filter((m) => !m.error)
+  1328→          .map((m) => ({ role: m.role === 'delegation' ? 'assistant' as const : m.role, content: m.content }));
+  1329→
+  1330→        const res = await fetch('/api/orchestrator/chat', {
+  1331→          method: 'POST',
+  1332→          headers: { 'Content-Type': 'application/json' },
+  1333→          body: JSON.stringify({ message, history, mode: 'auto' }),
+  1334→        });
+  1335→
+  1336→        const data: OrchestratorChatResponse = await res.json();
+  1337→
+  1338→        if (data.delegatedTasks && data.delegatedTasks.length > 0) {
+  1339→          setDelegatingAgentCount(data.delegatedTasks.length);
+  1340→          const delegationMsg: ChatMessage = {
+  1341→            id: `delegation-${Date.now()}`,
+  1342→            role: 'delegation',
+  1343→            content: '',
+  1344→            delegatedTasks: data.delegatedTasks,
+  1345→            totalDurationMs: data.totalDurationMs,
+  1346→            timestamp: Date.now(),
+  1347→          };
+  1348→          const orchestratorMsg: ChatMessage = {
+  1349→            id: `asst-${Date.now()}`,
+  1350→            role: 'assistant',
+  1351→            content: data.orchestratorResponse || 'Task completed.',
+  1352→            model: data.modelUsed,
+  1353→            usage: data.usage,
+  1354→            durationMs: data.totalDurationMs,
+  1355→            timestamp: Date.now(),
+  1356→            error: !res.ok,
+  1357→          };
+  1358→          setMessages((prev) => [...prev, delegationMsg, orchestratorMsg]);
+  1359→        } else {
+  1360→          const assistantMsg: ChatMessage = {
+  1361→            id: `asst-${Date.now()}`,
+  1362→            role: 'assistant',
+  1363→            content: data.orchestratorResponse || data.error || 'No response',
+  1364→            model: data.modelUsed,
+  1365→            usage: data.usage,
+  1366→            durationMs: data.totalDurationMs,
+  1367→            timestamp: Date.now(),
+  1368→            error: !res.ok,
+  1369→          };
+  1370→          setMessages((prev) => [...prev, assistantMsg]);
+  1371→        }
+  1372→      } catch (error) {
+  1373→        const errorMsg: ChatMessage = {
+  1374→          id: `err-${Date.now()}`,
+  1375→          role: 'assistant',
+  1376→          content: error instanceof Error ? error.message : 'Failed to get response',
+  1377→          timestamp: Date.now(),
+  1378→          error: true,
+  1379→        };
+  1380→        setMessages((prev) => [...prev, errorMsg]);
+  1381→      } finally {
+  1382→        setChatLoading(false);
+  1383→        setDelegatingAgentCount(0);
+  1384→        fetchRuntimeStatus();
+  1385→      }
+  1386→    },
+  1387→    [messages, fetchRuntimeStatus],
+  1388→  );
+  1389→
+  1390→  // ─── Hire Handler ───
+  1391→
+  1392→  const handleHireAgent = useCallback(
+  1393→    async (role: string, task: string, capabilities: string[]) => {
+  1394→      setHiring(true);
+  1395→      try {
+  1396→        const res = await fetch('/api/orchestrator/hire', {
+  1397→          method: 'POST',
+  1398→          headers: { 'Content-Type': 'application/json' },
+  1399→          body: JSON.stringify({ role, task, capabilities }),
+  1400→        });
+  1401→        const data = await res.json();
+  1402→        if (res.ok && data.success) {
+  1403→          const systemMsg: ChatMessage = {
+  1404→            id: `hire-${Date.now()}`,
+  1405→            role: 'assistant',
+  1406→            content: `🆕 Hired **${data.agentName}** as ${data.role}. Assigned skills: ${data.assignedSkills.join(', ') || 'none'}. Assigned tools: ${data.assignedTools.join(', ') || 'none'}. Model: ${data.model.split('/').pop()}`,
+  1407→            timestamp: Date.now(),
+  1408→          };
+  1409→          setMessages((prev) => [...prev, systemMsg]);
+  1410→          await Promise.all([fetchRuntimeStatus(), fetchHiredAgents()]);
+  1411→        }
+  1412→      } catch (error) {
+  1413→        console.error('Failed to hire agent:', error);
+  1414→      } finally {
+  1415→        setHiring(false);
+  1416→      }
+  1417→    },
+  1418→    [fetchRuntimeStatus, fetchHiredAgents],
+  1419→  );
+  1420→
+  1421→  // ─── Fire Handler ───
+  1422→
+  1423→  const handleFireAgent = useCallback(
+  1424→    async (agentId: string) => {
+  1425→      try {
+  1426→        const res = await fetch(`/api/orchestrator/hire/${agentId}`, { method: 'DELETE' });
+  1427→        if (res.ok) {
+  1428→          setDetailOpen(false);
+  1429→          setDetailAgent(null);
+  1430→          const fireMsg: ChatMessage = {
+  1431→            id: `fire-${Date.now()}`,
+  1432→            role: 'assistant',
+  1433→            content: `🗑️ Agent **${agentId}** has been fired.`,
+  1434→            timestamp: Date.now(),
+  1435→          };
+  1436→          setMessages((prev) => [...prev, fireMsg]);
+  1437→          await Promise.all([fetchRuntimeStatus(), fetchHiredAgents()]);
+  1438→        }
+  1439→      } catch (error) {
+  1440→        console.error('Failed to fire agent:', error);
+  1441→      }
+  1442→    },
+  1443→    [fetchRuntimeStatus, fetchHiredAgents],
+  1444→  );
+  1445→
+  1446→  // ─── Agent Click from pixel office ───
+  1447→
+  1448→  const handlePixelAgentClick = useCallback((numericId: number) => {
+  1449→    // Find the runtime agent matching this pixel agent
+  1450→    const agentIdStr = unhashAgentId(numericId);
+  1451→    if (agentIdStr) {
+  1452→      const agent = agents.find((a) => a.id === agentIdStr);
+  1453→      if (agent) {
+  1454→        setDetailAgent(agent);
+  1455→        setDetailOpen(true);
+  1456→      }
+  1457→    }
+  1458→  }, [agents]);
+  1459→
+  1460→  // ─── Stats ───
+  1461→  const totalSkills = runtimeStatus?.skills.totalSkills ?? 0;
+  1462→  const totalTools = runtimeStatus?.tools.totalTools ?? 0;
+  1463→  const totalAgents = agents.length;
+  1464→  const activeAgentCount = agents.filter(a => a.status !== 'offline').length;
+  1465→
+  1466→  // ─── Loading State ───
+  1467→
+  1468→  if (loading) {
+  1469→    return (
+  1470→      <div className="min-h-screen bg-[#0a0a1a] flex items-center justify-center">
+  1471→        <div className="text-center">
+  1472→          <div className="relative w-20 h-20 mx-auto mb-4">
+  1473→            <div className="absolute inset-0 rounded-full bg-purple-500/20 animate-ping" />
+  1474→            <div className="relative w-20 h-20 rounded-full bg-purple-500/10 border border-purple-500/30 flex items-center justify-center">
+  1475→              <Crown className="w-8 h-8 text-purple-400" />
+  1476→            </div>
+  1477→          </div>
+  1478→          <h2 className="text-lg font-semibold text-slate-300 mb-1">Loading Agent OS</h2>
+  1479→          <p className="text-sm text-slate-500">Initializing pixel office...</p>
+  1480→        </div>
+  1481→      </div>
+  1482→    );
+  1483→  }
+  1484→
+  1485→  // ─── No workspace — show seed prompt ───
+  1486→  if (!workspaceId || agents.length === 0) {
+  1487→    return (
+  1488→      <div className="min-h-screen bg-[#0a0a1a] flex items-center justify-center">
+  1489→        <div className="text-center space-y-4 max-w-md">
+  1490→          <div className="text-6xl">🏢</div>
+  1491→          <h2 className="text-2xl font-bold text-white">Welcome to Agent OS</h2>
+  1492→          <p className="text-sm text-slate-400">
+  1493→            Initialize your workspace to see the Pixel Agent Office with 11 AI specialists.
+  1494→          </p>
+  1495→          <Button onClick={seedSystem} size="lg" className="bg-violet-600 hover:bg-violet-700">
+  1496→            🚀 Initialize System
+  1497→          </Button>
+  1498→        </div>
+  1499→      </div>
+  1500→    );
+  1501→  }
+  1502→
+  1503→  // ─── Main Render ───
+  1504→
+  1505→  return (
+  1506→    <div className="h-screen flex flex-col overflow-hidden bg-[#1a1a2e]">
+  1507→      {/* ─── Minimal Top Bar ─── */}
+  1508→      <div className="flex items-center justify-between px-2 md:px-3 py-1.5 bg-black/60 backdrop-blur-md border-b border-white/10 z-30 flex-shrink-0">
+  1509→        <div className="flex items-center gap-1.5 md:gap-2">
+  1510→          <Building2 className="w-3.5 h-3.5 md:w-4 md:h-4 text-violet-400" />
+  1511→          <h1 className="text-xs md:text-sm font-bold text-white">Agent OS</h1>
+  1512→          <Badge variant="outline" className="text-[8px] md:text-[9px] h-3.5 md:h-4 px-1 md:px-1.5 border-white/20 text-slate-300">
+  1513→            Pixel Office
+  1514→          </Badge>
+  1515→          <span className="text-[8px] md:text-[9px] text-slate-400 ml-0.5 md:ml-1">
+  1516→            {activeAgentCount}/{totalAgents} active
+  1517→          </span>
+  1518→        </div>
+  1519→
+  1520→        <div className="flex items-center gap-1.5 md:gap-2">
+  1521→          <Badge className="bg-purple-500/15 text-purple-300 border-purple-500/20 text-[9px] h-4 px-1.5 hidden sm:inline-flex">
+  1522→            <Crown className="w-2 h-2 mr-0.5" />{totalAgents}
+  1523→          </Badge>
+  1524→          <Badge className="bg-rose-500/15 text-rose-300 border-rose-500/20 text-[9px] h-4 px-1.5 hidden sm:inline-flex">
+  1525→            <Sparkles className="w-2 h-2 mr-0.5" />{totalSkills}
+  1526→          </Badge>
+  1527→          <Badge className="bg-amber-500/15 text-amber-300 border-amber-500/20 text-[9px] h-4 px-1.5 hidden sm:inline-flex">
+  1528→            <Wrench className="w-2 h-2 mr-0.5" />{totalTools}
+  1529→          </Badge>
+  1530→          {aiStatus && (
+  1531→            <Badge className={`text-[9px] h-4 px-1.5 ${aiStatus.configured ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/20' : 'bg-amber-500/15 text-amber-300 border-amber-500/20'}`}>
+  1532→              <span className={`w-1.5 h-1.5 rounded-full mr-0.5 ${aiStatus.configured ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+  1533→              {aiStatus.configured ? 'AI' : 'No AI'}
+  1534→            </Badge>
+  1535→          )}
+  1536→          <HireAgentDialog onHire={handleHireAgent} hiring={hiring} />
+  1537→          <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-slate-400 hover:text-white" onClick={refreshAll} disabled={refreshing}>
+  1538→            <RefreshCw className={`w-3 h-3 ${refreshing ? 'animate-spin' : ''}`} />
+  1539→          </Button>
+  1540→        </div>
+  1541→      </div>
+  1542→
+  1543→      {/* ─── Main Content: Pixel Office + Chat Panel ─── */}
+  1544→      <div className="flex-1 min-h-0 flex relative">
+  1545→        {/* Pixel Office Canvas — Full width, always visible */}
+  1546→        <div className="flex-1 min-h-0 min-w-0 relative pixel-office-container">
+  1547→          <PixelOfficeCanvas
+  1548→            officeState={officeState}
+  1549→            onAgentClick={handlePixelAgentClick}
+  1550→            zoom={zoom}
+  1551→            onZoomChange={setZoom}
+  1552→            panRef={panRef}
+  1553→          />
+  1554→
+  1555→          {/* Asset loading overlay */}
+  1556→          {!assetsLoaded && (
+  1557→            <div className="absolute inset-0 flex items-center justify-center bg-[#1a1a2e]/80 z-20 pointer-events-none">
+  1558→              <div className="text-center space-y-2">
+  1559→                <Loader2 className="w-6 h-6 animate-spin mx-auto text-violet-400" />
+  1560→                <p className="text-xs text-slate-400">Loading pixel assets...</p>
+  1561→              </div>
+  1562→            </div>
+  1563→          )}
+  1564→
+  1565→          {/* ─── Mobile/Tablet: Floating Chat Toggle FAB ─── */}
+  1566→          {isMobileOrTablet && (
+  1567→            <button
+  1568→              onClick={() => setChatSheetOpen(true)}
+  1569→              className="absolute bottom-3 right-3 z-10 w-12 h-12 rounded-full bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white shadow-lg shadow-purple-900/40 flex items-center justify-center transition-colors touch-manipulation"
+  1570→              aria-label="Open chat"
+  1571→            >
+  1572→              <MessageSquare className="w-5 h-5" />
+  1573→              {messages.length > 0 && (
+  1574→                <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-rose-500 text-[10px] font-bold flex items-center justify-center">
+  1575→                  {messages.length > 9 ? '9+' : messages.length}
+  1576→                </span>
+  1577→              )}
+  1578→            </button>
+  1579→          )}
+  1580→
+  1581→          {/* ─── Zoom Controls (pixel-art safe) ─── */}
+  1582→          {isMobileOrTablet && (
+  1583→            <div className="absolute bottom-3 left-3 z-10 flex flex-col gap-1">
+  1584→              <button
+  1585→                onClick={() => setZoom(Math.min(10, zoom + 1))}
+  1586→                className="w-9 h-9 rounded-lg bg-black/60 backdrop-blur-sm text-white/70 hover:text-white flex items-center justify-center text-lg font-bold border border-white/10 transition-colors touch-manipulation"
+  1587→                aria-label="Zoom in"
+  1588→              >+</button>
+  1589→              <button
+  1590→                onClick={() => setZoom(Math.max(1, zoom - 1))}
+  1591→                className="w-9 h-9 rounded-lg bg-black/60 backdrop-blur-sm text-white/70 hover:text-white flex items-center justify-center text-lg font-bold border border-white/10 transition-colors touch-manipulation"
+  1592→                aria-label="Zoom out"
+  1593→              >−</button>
+  1594→            </div>
+  1595→          )}
+  1596→        </div>
+  1597→
+  1598→        {/* ─── Desktop: Inline Chat Panel ─── */}
+  1599→        {isDesktop && (
+  1600→          <AnimatePresence>
+  1601→            {chatPanelOpen && (
+  1602→              <motion.div
+  1603→                initial={{ width: 0, opacity: 0 }}
+  1604→                animate={{ width: 380, opacity: 1 }}
+  1605→                exit={{ width: 0, opacity: 0 }}
+  1606→                transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+  1607→                className="relative border-l border-slate-700/30 flex-shrink-0 overflow-hidden"
+  1608→              >
+  1609→                <OrchestratorChatPanel
+  1610→                  messages={messages}
+  1611→                  onSend={handleSendMessage}
+  1612→                  loading={chatLoading}
+  1613→                  configured={aiStatus?.configured ?? false}
+  1614→                  orchestrator={orchestrator}
+  1615→                  delegatingAgentCount={delegatingAgentCount}
+  1616→                />
+  1617→              </motion.div>
+  1618→            )}
+  1619→          </AnimatePresence>
+  1620→        )}
+  1621→      </div>
+  1622→
+  1623→      {/* ─── Mobile/Tablet: Chat Sheet (slide-up drawer) ─── */}
+  1624→      {isMobileOrTablet && (
+  1625→        <Sheet open={chatSheetOpen} onOpenChange={setChatSheetOpen}>
+  1626→          <SheetContent
+  1627→            side={isMobile ? 'bottom' : 'right'}
+  1628→            className={`bg-[#12122a] border-slate-700/50 p-0 ${isMobile ? 'h-[85vh] rounded-t-xl' : 'w-[400px]'}`}
+  1629→          >
+  1630→            <SheetHeader className="px-3 py-2 border-b border-slate-700/50 shrink-0">
+  1631→              <div className="flex items-center justify-between">
+  1632→                <SheetTitle className="flex items-center gap-2 text-slate-200 text-sm">
+  1633→                  <span className="text-lg">👑</span>
+  1634→                  <span>Orchestrator Chat</span>
+  1635→                </SheetTitle>
+  1636→                <button
+  1637→                  onClick={() => setChatSheetOpen(false)}
+  1638→                  className="w-7 h-7 rounded-md bg-slate-800/60 text-slate-400 hover:text-white flex items-center justify-center"
+  1639→                  aria-label="Close chat"
+  1640→                >
+  1641→                  <XCircle className="w-4 h-4" />
+  1642→                </button>
+  1643→              </div>
+  1644→            </SheetHeader>
+  1645→            <div className="flex-1 min-h-0 overflow-hidden" style={{ height: isMobile ? 'calc(85vh - 52px)' : 'calc(100vh - 52px)' }}>
+  1646→              <OrchestratorChatPanel
+  1647→                messages={messages}
+  1648→                onSend={handleSendMessage}
+  1649→                loading={chatLoading}
+  1650→                configured={aiStatus?.configured ?? false}
+  1651→                orchestrator={orchestrator}
+  1652→                delegatingAgentCount={delegatingAgentCount}
+  1653→              />
+  1654→            </div>
+  1655→          </SheetContent>
+  1656→        </Sheet>
+  1657→      )}
+  1658→
+  1659→      {/* ─── Bottom Floating Bar ─── */}
+  1660→      <div className="flex-shrink-0 bg-black/60 backdrop-blur-md border-t border-white/10 z-30">
+  1661→        <div className="flex items-center justify-between px-2 md:px-3 py-1.5">
+  1662→          <div className="flex items-center gap-1.5 md:gap-2">
+  1663→            {/* Desktop: Toggle chat panel inline */}
+  1664→            {isDesktop && (
+  1665→              <Button
+  1666→                variant="ghost"
+  1667→                size="sm"
+  1668→                className={`h-7 text-[10px] gap-1 ${chatPanelOpen ? 'bg-purple-500/20 text-purple-300' : 'text-slate-400 hover:text-white'}`}
+  1669→                onClick={() => setChatPanelOpen(!chatPanelOpen)}
+  1670→              >
+  1671→                {chatPanelOpen ? <PanelLeftClose className="w-3 h-3" /> : <PanelLeftOpen className="w-3 h-3" />}
+  1672→                <span>{chatPanelOpen ? 'Hide Chat' : 'Show Chat'}</span>
+  1673→              </Button>
+  1674→            )}
+  1675→            {/* Mobile/Tablet: Toggle chat sheet */}
+  1676→            {isMobileOrTablet && (
+  1677→              <Button
+  1678→                variant="ghost"
+  1679→                size="sm"
+  1680→                className="h-7 text-[10px] gap-1 text-purple-300 hover:text-purple-200"
+  1681→                onClick={() => setChatSheetOpen(true)}
+  1682→              >
+  1683→                <MessageSquare className="w-3 h-3" />
+  1684→                <span>Chat{messages.length > 0 && ` (${messages.length})`}</span>
+  1685→              </Button>
+  1686→            )}
+  1687→            <Button
+  1688→              variant="ghost"
+  1689→              size="sm"
+  1690→              onClick={() => setBrowserOpOpen(true)}
+  1691→              className="text-slate-400 hover:text-slate-200 gap-1"
+  1692→            >
+  1693→              <Globe className="w-3.5 h-3.5" />
+  1694→              <span className="text-[10px]">Browser Op</span>
+  1695→            </Button>
+  1696→            <Separator orientation="vertical" className="h-4 bg-slate-700/50" />
+  1697→            {/* Quick agent count — compact on mobile */}
+  1698→            <div className="flex items-center gap-1 md:gap-1.5 text-[10px] text-slate-500">
+  1699→              <span className="flex items-center gap-0.5"><Crown className="w-2.5 h-2.5 text-purple-400" />{totalAgents}</span>
+  1700→              <span className="hidden sm:inline">agents</span>
+  1701→              <span className="hidden sm:inline">·</span>
+  1702→              <span className="hidden sm:inline-flex items-center gap-0.5"><Sparkles className="w-2.5 h-2.5 text-rose-400" />{totalSkills} skills</span>
+  1703→              <span className="hidden sm:inline">·</span>
+  1704→              <span className="hidden sm:inline-flex items-center gap-0.5"><Wrench className="w-2.5 h-2.5 text-amber-400" />{totalTools} tools</span>
+  1705→            </div>
+  1706→          </div>
+  1707→          <div className="flex items-center gap-1.5">
+  1708→            <Badge className="bg-slate-700/30 text-slate-400 text-[8px] h-4 px-1.5 border border-slate-600/30">
+  1709→              <MessageSquare className="w-2 h-2 mr-0.5" />
+  1710→              {messages.length}
+  1711→            </Badge>
+  1712→          </div>
+  1713→        </div>
+  1714→      </div>
+  1715→
+  1716→      {/* ─── Agent Detail Sheet ─── */}
+  1717→      <AgentDetailSheet
+  1718→        agent={detailAgent}
+  1719→        open={detailOpen}
+  1720→        onOpenChange={setDetailOpen}
+  1721→        isHired={detailAgent ? hiredAgentIds.has(detailAgent.id) : false}
+  1722→        onFire={detailAgent ? () => handleFireAgent(detailAgent.id) : undefined}
+  1723→      />
+  1724→
+  1725→      {/* ─── Browser Operator Panel ─── */}
+  1726→      <BrowserOperatorPanel open={browserOpOpen} onOpenChange={setBrowserOpOpen} />
+  1727→    </div>
+  1728→  );
+  1729→}
+  1730→
