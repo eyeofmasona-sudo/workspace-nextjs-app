@@ -43,6 +43,16 @@ export const AgentRoles = {
   CONTENT_STRATEGIST: 'content_strategist',
   GROWTH_MANAGER: 'growth_manager',
   MARKETING_ANALYST: 'marketing_analyst',
+  // New full marketing team
+  TREND_ANALYST: 'trend_analyst',
+  COPYWRITER: 'copywriter',
+  VISUAL_DESIGNER: 'visual_designer',
+  VIDEO_EDITOR: 'video_editor',
+  PUBLISHER: 'publisher',
+  COMMUNITY_MANAGER: 'community_manager',
+  MESSENGER_SUPPORT: 'messenger_support',
+  SALES_AGENT: 'sales_agent',
+  BRAND_GUARDIAN: 'brand_guardian',
 } as const;
 
 export type AgentRole = (typeof AgentRoles)[keyof typeof AgentRoles];
@@ -58,7 +68,8 @@ export const ZoneDefaultAgents: Record<OfficeZone, string[]> = {
   server_room: [AgentRoles.DEVOPS_ENGINEER, AgentRoles.DATA_ENGINEER, AgentRoles.SECURITY_ENGINEER],
   meeting_room: [AgentRoles.ARCHITECT, AgentRoles.ANALYST],
   lounge_area: [],
-  marketing_area: [AgentRoles.MARKETING_LEAD, AgentRoles.MARKET_RESEARCHER],
+  marketing_area: [AgentRoles.MARKETING_LEAD, AgentRoles.MARKET_RESEARCHER, AgentRoles.TREND_ANALYST],
   content_studio: [AgentRoles.CONTENT_STRATEGIST],
-  growth_lab: [AgentRoles.GROWTH_MANAGER, AgentRoles.MARKETING_ANALYST],
+  growth_lab: [AgentRoles.GROWTH_MANAGER, AgentRoles.MARKETING_ANALYST, AgentRoles.PUBLISHER, AgentRoles.SALES_AGENT],
+  brand_studio: [AgentRoles.BRAND_GUARDIAN, AgentRoles.COPYWRITER, AgentRoles.VISUAL_DESIGNER, AgentRoles.VIDEO_EDITOR, AgentRoles.COMMUNITY_MANAGER, AgentRoles.MESSENGER_SUPPORT],
 };

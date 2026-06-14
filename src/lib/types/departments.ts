@@ -29,10 +29,25 @@ export const DepartmentAgents: Record<Department, string[]> = {
     'researcher',
   ],
   marketing_department: [
+    // Strategy & Intelligence
     'marketing_lead',
     'market_researcher',
+    'trend_analyst',
+    // Content Production
     'content_strategist',
+    'copywriter',
+    'visual_designer',
+    'video_editor',
+    // Brand & Quality
+    'brand_guardian',
+    // Distribution & Growth
+    'publisher',
     'growth_manager',
+    // Community & Sales
+    'community_manager',
+    'messenger_support',
+    'sales_agent',
+    // Measurement
     'marketing_analyst',
   ],
 };
@@ -54,6 +69,7 @@ export const DepartmentZones: Record<Department, string[]> = {
     'marketing_area',
     'content_studio',
     'growth_lab',
+    'brand_studio',
   ],
 };
 

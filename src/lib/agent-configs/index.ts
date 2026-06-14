@@ -19,6 +19,15 @@ import { marketResearcherConfig } from './market-researcher';
 import { contentStrategistConfig } from './content-strategist';
 import { growthManagerConfig } from './growth-manager';
 import { marketingAnalystConfig } from './marketing-analyst';
+import { trendAnalystConfig } from './trend-analyst';
+import { copywriterConfig } from './copywriter';
+import { visualDesignerMarketingConfig } from './visual-designer-marketing';
+import { videoEditorConfig } from './video-editor';
+import { publisherConfig } from './publisher';
+import { communityManagerConfig } from './community-manager';
+import { messengerSupportConfig } from './messenger-support';
+import { salesAgentConfig } from './sales-agent';
+import { brandGuardianConfig } from './brand-guardian';
 
 /**
  * All built-in agent config definitions.
@@ -41,6 +50,16 @@ export const AGENT_CONFIGS: AgentConfig[] = [
   contentStrategistConfig,
   growthManagerConfig,
   marketingAnalystConfig,
+  // Full marketing team expansion
+  trendAnalystConfig,
+  copywriterConfig,
+  visualDesignerMarketingConfig,
+  videoEditorConfig,
+  publisherConfig,
+  communityManagerConfig,
+  messengerSupportConfig,
+  salesAgentConfig,
+  brandGuardianConfig,
 ];
 
 /**

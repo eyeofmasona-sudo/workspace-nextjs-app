@@ -26,6 +26,15 @@ export type AgentRole =
   | 'content_strategist'
   | 'growth_manager'
   | 'marketing_analyst'
+  | 'trend_analyst'
+  | 'copywriter'
+  | 'visual_designer'
+  | 'video_editor'
+  | 'publisher'
+  | 'community_manager'
+  | 'messenger_support'
+  | 'sales_agent'
+  | 'brand_guardian'
   | 'custom';
 
 export type AgentType = 'permanent' | 'temporary';

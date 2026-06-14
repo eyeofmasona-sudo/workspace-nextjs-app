@@ -139,6 +139,109 @@ const MARKETING_AGENT_SPECS: MarketingAgentCapability[] = [
       { condition: 'product_feedback_urgent', escalateTo: 'orchestrator', severity: 'critical' },
     ],
   },
+  // ─── New Full Marketing Team ──────────────────────────────
+  {
+    agentId: 'trend_analyst',
+    role: 'trend_analyst',
+    capabilities: ['trend_research', 'platform_monitoring', 'hashtag_analysis', 'viral_detection'],
+    memoryScope: ['department', 'workspace'],
+    toolPermissions: ['browser:read', 'http:read'],
+    successMetrics: ['trend_relevance_score', 'lead_time_on_trend'],
+    escalationRules: [
+      { condition: 'trend_is_sensitive_topic', escalateTo: 'marketing_lead', severity: 'high' },
+    ],
+  },
+  {
+    agentId: 'copywriter',
+    role: 'copywriter',
+    capabilities: ['copywriting', 'social_copy', 'email_copy', 'cta_writing'],
+    memoryScope: ['department', 'project'],
+    toolPermissions: ['files:read'],
+    successMetrics: ['copy_approval_rate', 'engagement_rate_on_copy'],
+    escalationRules: [
+      { condition: 'brand_voice_ambiguous', escalateTo: 'brand_guardian', severity: 'medium' },
+    ],
+  },
+  {
+    agentId: 'visual_designer',
+    role: 'visual_designer',
+    capabilities: ['image_prompt_creation', 'layout_design', 'brand_visual_compliance'],
+    memoryScope: ['department', 'project'],
+    toolPermissions: ['files:read', 'http:read'],
+    successMetrics: ['visual_approval_rate', 'brand_consistency_score'],
+    escalationRules: [],
+  },
+  {
+    agentId: 'video_editor',
+    role: 'video_editor',
+    capabilities: ['video_scripting', 'production_package', 'hook_creation'],
+    memoryScope: ['department', 'project'],
+    toolPermissions: ['files:read'],
+    successMetrics: ['production_package_completeness'],
+    escalationRules: [
+      { condition: 'source_footage_missing', escalateTo: 'human', severity: 'high' },
+    ],
+  },
+  {
+    agentId: 'publisher',
+    role: 'publisher',
+    capabilities: ['schedule_management', 'publication_queue', 'channel_coordination'],
+    memoryScope: ['department', 'workspace'],
+    toolPermissions: ['browser:write', 'http:write'],
+    successMetrics: ['on_time_publish_rate', 'zero_missing_assets'],
+    escalationRules: [
+      { condition: 'content_not_approved', escalateTo: 'brand_guardian', severity: 'high' },
+      { condition: 'platform_api_failure', escalateTo: 'human', severity: 'critical' },
+    ],
+  },
+  {
+    agentId: 'community_manager',
+    role: 'community_manager',
+    capabilities: ['comment_response', 'community_moderation', 'sentiment_monitoring'],
+    memoryScope: ['department', 'workspace'],
+    toolPermissions: [],
+    successMetrics: ['response_rate', 'sentiment_score', 'escalation_accuracy'],
+    escalationRules: [
+      { condition: 'legal_or_financial_mention', escalateTo: 'human', severity: 'critical' },
+      { condition: 'pr_crisis_detected', escalateTo: 'marketing_lead', severity: 'critical' },
+    ],
+  },
+  {
+    agentId: 'messenger_support',
+    role: 'messenger_support',
+    capabilities: ['lead_qualification', 'faq_response', 'contact_collection', 'inbox_triage'],
+    memoryScope: ['department', 'workspace'],
+    toolPermissions: [],
+    successMetrics: ['lead_qualification_rate', 'response_time', 'escalation_accuracy'],
+    escalationRules: [
+      { condition: 'high_risk_message', escalateTo: 'human', severity: 'critical' },
+      { condition: 'qualified_lead', escalateTo: 'sales_agent', severity: 'low' },
+    ],
+  },
+  {
+    agentId: 'sales_agent',
+    role: 'sales_agent',
+    capabilities: ['lead_conversion', 'objection_handling', 'appointment_booking'],
+    memoryScope: ['department', 'workspace'],
+    toolPermissions: [],
+    successMetrics: ['conversion_rate', 'appointment_booking_rate'],
+    escalationRules: [
+      { condition: 'pricing_negotiation', escalateTo: 'human', severity: 'high' },
+      { condition: 'contract_question', escalateTo: 'human', severity: 'critical' },
+      { condition: 'payment_processing', escalateTo: 'human', severity: 'critical' },
+    ],
+  },
+  {
+    agentId: 'brand_guardian',
+    role: 'brand_guardian',
+    capabilities: ['brand_review', 'tone_check', 'legal_flag', 'content_approval'],
+    memoryScope: ['department', 'workspace'],
+    toolPermissions: ['files:read'],
+    successMetrics: ['approval_accuracy', 'time_to_review'],
+    escalationRules: [
+      { condition: 'legal_claim_in_content', escalateTo: 'human', severity: 'critical' },
+    ],
+  },
 ];
 
 // ─── Default Handoff Contracts ───────────────────────────────

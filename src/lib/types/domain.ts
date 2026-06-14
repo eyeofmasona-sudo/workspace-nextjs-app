@@ -43,6 +43,7 @@ export const OfficeZone = {
   MARKETING_AREA: 'marketing_area',
   CONTENT_STUDIO: 'content_studio',
   GROWTH_LAB: 'growth_lab',
+  BRAND_STUDIO: 'brand_studio',
 } as const;
 
 export type OfficeZone = (typeof OfficeZone)[keyof typeof OfficeZone];

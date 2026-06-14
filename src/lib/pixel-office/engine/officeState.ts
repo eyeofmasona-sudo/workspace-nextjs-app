@@ -72,6 +72,16 @@ export const ROLE_SEAT_MAP: Record<string, string> = {
   content_strategist: 'chair-cnts',
   growth_manager: 'chair-grwm',
   marketing_analyst: 'chair-mkta',
+  // New marketing team — assigned to content_studio / growth_lab chairs
+  trend_analyst: 'chair-trnd',
+  copywriter: 'chair-cpyw',
+  visual_designer: 'chair-visd',
+  video_editor: 'chair-vide',
+  publisher: 'chair-pub',
+  community_manager: 'chair-comm',
+  messenger_support: 'chair-msg',
+  sales_agent: 'chair-sal',
+  brand_guardian: 'chair-brnd',
 };
 
 // ── syncAgents input type ─────────────────────────────────────────

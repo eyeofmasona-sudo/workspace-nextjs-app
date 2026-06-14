@@ -542,10 +542,10 @@ const DEFAULT_AGENT_OS_LAYOUT = {
     { uid: 'desk-mktr', type: 'DESK_FRONT', col: 7, row: 22 },
     { uid: 'pc-mktr', type: 'PC_FRONT_OFF', col: 8, row: 22 },
     { uid: 'chair-mktr', type: 'WOODEN_CHAIR_BACK', col: 8, row: 24 },
-    // Collaboration area
-    { uid: 'mkt-table', type: 'COFFEE_TABLE', col: 5, row: 27 },
-    { uid: 'mkt-bench1', type: 'CUSHIONED_BENCH', col: 4, row: 28 },
-    { uid: 'mkt-bench2', type: 'CUSHIONED_BENCH', col: 7, row: 28 },
+    // Trend Analyst workstation (row 26)
+    { uid: 'desk-trnd', type: 'DESK_FRONT', col: 2, row: 26 },
+    { uid: 'pc-trnd', type: 'PC_FRONT_OFF', col: 3, row: 26 },
+    { uid: 'chair-trnd', type: 'WOODEN_CHAIR_BACK', col: 3, row: 28 },
     // Decor
     { uid: 'mkt-plant1', type: 'LARGE_PLANT', col: 1, row: 21 },
     { uid: 'mkt-cactus', type: 'CACTUS', col: 12, row: 27 },
@@ -559,14 +559,26 @@ const DEFAULT_AGENT_OS_LAYOUT = {
     { uid: 'cnt-shelf', type: 'BOOKSHELF', col: 14, row: 20 },
     { uid: 'cnt-wb', type: 'WHITEBOARD', col: 18, row: 20 },
     { uid: 'cnt-paint', type: 'LARGE_PAINTING', col: 23, row: 20 },
-    // Content Strategist workstation
-    { uid: 'desk-cnts', type: 'DESK_FRONT', col: 17, row: 22 },
-    { uid: 'pc-cnts', type: 'PC_FRONT_OFF', col: 18, row: 22 },
-    { uid: 'chair-cnts', type: 'WOODEN_CHAIR_BACK', col: 18, row: 24 },
-    // Content review area
-    { uid: 'cnt-table', type: 'TABLE_FRONT', col: 19, row: 27 },
-    { uid: 'cnt-bench1', type: 'CUSHIONED_BENCH', col: 18, row: 28 },
-    { uid: 'cnt-bench2', type: 'CUSHIONED_BENCH', col: 21, row: 28 },
+    // Content Strategist workstation (row 22, col 15)
+    { uid: 'desk-cnts', type: 'DESK_FRONT', col: 15, row: 22 },
+    { uid: 'pc-cnts', type: 'PC_FRONT_OFF', col: 16, row: 22 },
+    { uid: 'chair-cnts', type: 'WOODEN_CHAIR_BACK', col: 16, row: 24 },
+    // Copywriter workstation (row 22, col 20)
+    { uid: 'desk-cpyw', type: 'DESK_FRONT', col: 20, row: 22 },
+    { uid: 'pc-cpyw', type: 'PC_FRONT_OFF', col: 21, row: 22 },
+    { uid: 'chair-cpyw', type: 'WOODEN_CHAIR_BACK', col: 21, row: 24 },
+    // Visual Designer workstation (row 26, col 15)
+    { uid: 'desk-visd', type: 'DESK_FRONT', col: 15, row: 26 },
+    { uid: 'pc-visd', type: 'PC_FRONT_OFF', col: 16, row: 26 },
+    { uid: 'chair-visd', type: 'WOODEN_CHAIR_BACK', col: 16, row: 28 },
+    // Video Editor workstation (row 26, col 20)
+    { uid: 'desk-vide', type: 'DESK_FRONT', col: 20, row: 26 },
+    { uid: 'pc-vide', type: 'PC_FRONT_OFF', col: 21, row: 26 },
+    { uid: 'chair-vide', type: 'WOODEN_CHAIR_BACK', col: 21, row: 28 },
+    // Brand Guardian — standalone desk col 23 (guardian post)
+    { uid: 'desk-brnd', type: 'DESK_SIDE', col: 23, row: 24 },
+    { uid: 'pc-brnd', type: 'PC_FRONT_OFF', col: 23, row: 22 },
+    { uid: 'chair-brnd', type: 'WOODEN_CHAIR_BACK', col: 23, row: 24 },
     // Decor
     { uid: 'cnt-plant1', type: 'PLANT_2', col: 14, row: 21 },
     { uid: 'cnt-plant2', type: 'PLANT', col: 24, row: 25 },
@@ -584,18 +596,33 @@ const DEFAULT_AGENT_OS_LAYOUT = {
     { uid: 'desk-grwm', type: 'DESK_FRONT', col: 29, row: 22 },
     { uid: 'pc-grwm', type: 'PC_FRONT_OFF', col: 30, row: 22 },
     { uid: 'chair-grwm', type: 'WOODEN_CHAIR_BACK', col: 30, row: 24 },
-    // Marketing Analyst workstation
-    { uid: 'desk-mkta', type: 'DESK_FRONT', col: 34, row: 22 },
-    { uid: 'pc-mkta', type: 'PC_FRONT_OFF', col: 35, row: 22 },
-    { uid: 'chair-mkta', type: 'WOODEN_CHAIR_BACK', col: 35, row: 24 },
+    // Marketing Analyst workstation (row 22, col 33)
+    { uid: 'desk-mkta', type: 'DESK_FRONT', col: 33, row: 22 },
+    { uid: 'pc-mkta', type: 'PC_FRONT_OFF', col: 34, row: 22 },
+    { uid: 'chair-mkta', type: 'WOODEN_CHAIR_BACK', col: 34, row: 24 },
+    // Publisher workstation (row 22, col 36)
+    { uid: 'desk-pub', type: 'DESK_FRONT', col: 36, row: 22 },
+    { uid: 'pc-pub', type: 'PC_FRONT_OFF', col: 37, row: 22 },
+    { uid: 'chair-pub', type: 'WOODEN_CHAIR_BACK', col: 37, row: 24 },
+    // Sales Agent workstation (row 26, col 29)
+    { uid: 'desk-sal', type: 'DESK_FRONT', col: 29, row: 26 },
+    { uid: 'pc-sal', type: 'PC_FRONT_OFF', col: 30, row: 26 },
+    { uid: 'chair-sal', type: 'WOODEN_CHAIR_BACK', col: 30, row: 28 },
+    // Community Manager workstation (row 26, col 33)
+    { uid: 'desk-comm', type: 'DESK_FRONT', col: 33, row: 26 },
+    { uid: 'pc-comm', type: 'PC_FRONT_OFF', col: 34, row: 26 },
+    { uid: 'chair-comm', type: 'WOODEN_CHAIR_BACK', col: 34, row: 28 },
+    // Messenger Support workstation (row 26, col 36)
+    { uid: 'desk-msg', type: 'DESK_FRONT', col: 36, row: 26 },
+    { uid: 'pc-msg', type: 'PC_FRONT_OFF', col: 37, row: 26 },
+    { uid: 'chair-msg', type: 'WOODEN_CHAIR_BACK', col: 37, row: 28 },
     // Analytics displays
     { uid: 'grw-pc1', type: 'PC_FRONT_OFF', col: 28, row: 21 },
     { uid: 'grw-pc2', type: 'PC_FRONT_OFF', col: 37, row: 21 },
     // Decor
     { uid: 'grw-plant1', type: 'LARGE_PLANT', col: 27, row: 21 },
-    { uid: 'grw-plant2', type: 'PLANT', col: 38, row: 25 },
-    { uid: 'grw-cactus', type: 'CACTUS', col: 37, row: 27 },
-    { uid: 'grw-bin', type: 'BIN', col: 37, row: 29 },
+    { uid: 'grw-cactus', type: 'CACTUS', col: 38, row: 27 },
+    { uid: 'grw-bin', type: 'BIN', col: 38, row: 29 },
   ],
 };
 
@@ -631,8 +658,8 @@ const ZONE_LABELS: ZoneLabel[] = [
   { text: '💻 DEVELOPMENT', col: 5, row: 11, color: '#6EE7B7' },
   { text: '🖥 SERVER', col: 18, row: 11, color: '#67E8F9' },
   { text: '📚 RESEARCH', col: 31, row: 11, color: '#FCD34D' },
-  { text: '📢 MARKETING', col: 5, row: 21, color: '#E879F9' },
-  { text: '✍️ CONTENT', col: 18, row: 21, color: '#FCD34D' },
+  { text: '📢 MKT HQ', col: 3, row: 21, color: '#E879F9' },
+  { text: '✍️ STUDIO', col: 17, row: 21, color: '#FCD34D' },
   { text: '📈 GROWTH', col: 31, row: 21, color: '#22D3EE' },
 ];
 

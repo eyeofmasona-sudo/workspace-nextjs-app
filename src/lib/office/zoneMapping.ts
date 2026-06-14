@@ -115,6 +115,16 @@ export const ZONE_VISUAL_MAP: Record<OfficeZone, ZoneVisual> = {
     description: 'Messaging, content creation, and copywriting',
     gridArea: 'content',
   },
+  brand_studio: {
+    key: 'brand_studio',
+    label: 'Brand Studio',
+    icon: 'Shield',
+    emoji: '🛡️',
+    color: 'bg-violet-50',
+    borderColor: 'border-violet-200',
+    description: 'Brand consistency, creative production, community & support',
+    gridArea: 'brand',
+  },
   growth_lab: {
     key: 'growth_lab',
     label: 'Growth Lab',

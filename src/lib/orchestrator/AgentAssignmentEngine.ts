@@ -149,6 +149,95 @@ const ROLE_KEYWORDS: RoleKeywordMap[] = [
     priority: 9,
   },
   {
+    role: 'trend_analyst',
+    keywords: [
+      'trend', 'trending', 'viral', 'tiktok trend', 'instagram trend',
+      'reels trend', 'shorts trend', 'hashtag', 'viral idea', 'hot topic',
+      'google trends', 'social trend', 'what is trending',
+      'popular content', 'viral format', 'content trend',
+    ],
+    priority: 9,
+  },
+  {
+    role: 'copywriter',
+    keywords: [
+      'post text', 'caption', 'write post', 'telegram post', 'instagram caption',
+      'cta', 'call to action', 'ad copy', 'email copy', 'whatsapp message',
+      'story text', 'reel script', 'tiktok script', 'broadcast message',
+      'newsletter', 'subject line', 'headline copy',
+    ],
+    priority: 9,
+  },
+  {
+    role: 'visual_designer',
+    keywords: [
+      'banner', 'carousel', 'story cover', 'social graphic', 'visual',
+      'image for post', 'instagram image', 'thumbnail', 'brand visual',
+      'image generation', 'midjourney prompt', 'canva', 'design post',
+      'stories template', 'visual asset',
+    ],
+    priority: 9,
+  },
+  {
+    role: 'video_editor',
+    keywords: [
+      'reel', 'reels', 'short video', 'tiktok video', 'youtube short',
+      'video edit', 'video script', 'hook video', 'subtitle', 'montage',
+      'cut video', 'video production', 'shorts video', 'video content',
+    ],
+    priority: 9,
+  },
+  {
+    role: 'publisher',
+    keywords: [
+      'publish', 'schedule post', 'posting schedule', 'auto post',
+      'publication queue', 'content calendar execution', 'post timing',
+      'when to post', 'schedule instagram', 'schedule telegram',
+      'schedule tiktok', 'buffer', 'later', 'postiz',
+    ],
+    priority: 9,
+  },
+  {
+    role: 'community_manager',
+    keywords: [
+      'comment reply', 'respond to comments', 'community reply',
+      'instagram comment', 'telegram comment', 'react to comments',
+      'manage comments', 'handle reactions', 'community management',
+      'user complaint', 'negative comment', 'review response',
+    ],
+    priority: 9,
+  },
+  {
+    role: 'messenger_support',
+    keywords: [
+      'dm reply', 'direct message', 'whatsapp', 'telegram dm',
+      'instagram direct', 'messenger support', 'qualify lead',
+      'incoming message', 'inbox reply', 'lead qualification',
+      'collect contact', 'book appointment dm', 'messenger bot',
+    ],
+    priority: 9,
+  },
+  {
+    role: 'sales_agent',
+    keywords: [
+      'close deal', 'inbound lead', 'sales follow up', 'lead conversion',
+      'offer service', 'sales pitch', 'handle objection', 'proposal',
+      'consultation booking', 'sales script', 'convert lead',
+      'move to sale', 'lead to payment',
+    ],
+    priority: 9,
+  },
+  {
+    role: 'brand_guardian',
+    keywords: [
+      'brand review', 'check tone of voice', 'brand consistency',
+      'approve content', 'brand guidelines', 'content review',
+      'visual consistency', 'brand audit', 'tone check', 'logo usage',
+      'content approval', 'brand compliance',
+    ],
+    priority: 9,
+  },
+  {
     role: 'marketing_analyst',
     keywords: [
       'analytics', 'kpi', 'metrics', 'dashboard', 'reporting',
