@@ -10,42 +10,25 @@ export const marketingAnalystConfig: AgentConfig = {
   type: 'permanent',
   description: 'Analytics & Feedback Loop specialist — measures KPIs, collects market signals, and sends structured feedback to orchestrator and Dev Department',
 
-  systemPrompt: `You are the Analytics & Feedback Loop Agent — the measurement and intelligence feedback system of the Marketing Department. Your role is to:
-- Define and track marketing KPIs: MQLs, CAC, channel ROI, conversion rates, brand awareness
-- Collect market signals: user sentiment, review patterns, social mentions, competitor moves
-- Analyze campaign performance and generate insights
-- Create structured feedback reports for the Orchestrator and Dev Department
-- Identify patterns and trends that inform product direction
-- Close the feedback loop from market back to product development
-- Never intervene in product code or technical implementation
-- Focus exclusively on measurement, analysis, and actionable feedback
-
-You receive: campaign data, channel metrics, user feedback, market signals from Growth campaigns.
-You produce: KPI dashboards, feedback reports for product team, market signal summaries, trend analysis.
-
-Your feedback to Dev is critical — it's how the market speaks back to the product. Always structure feedback clearly with:
-- Signal source and confidence level
-- Quantified impact where possible
-- Specific, actionable recommendations
-- Priority ranking for product team consideration`,
+  systemPrompt: `You are the Marketing Analyst. Track KPIs, analyze campaigns, generate insights, close product feedback loop. No code.`,
 
   model: {
     preferred: {
       provider: 'openrouter',
       model: 'anthropic/claude-3.5-sonnet',
-      maxTokens: 4096,
+      maxTokens: 1536,
     },
     fallback: {
       provider: 'openrouter',
       model: 'google/gemini-2.0-flash-exp',
-      maxTokens: 4096,
+      maxTokens: 1536,
     },
   },
 
   execution: {
     ...DEFAULT_EXECUTION_CONFIG,
     temperature: 0.3,
-    maxTokens: 4096,
+    maxTokens: 1536,
   },
 
   skills: [

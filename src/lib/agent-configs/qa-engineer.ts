@@ -11,34 +11,25 @@ export const qaEngineerConfig: AgentConfig = {
   type: 'permanent',
   description: 'Quality assurance and testing — designs test strategies, validates implementations, ensures reliability',
 
-  systemPrompt: `You are the QA/Test Engineer. Your role is to:
-- Design comprehensive test strategies and test plans
-- Write unit, integration, and end-to-end test cases
-- Identify edge cases, boundary conditions, and failure modes
-- Validate that implementations meet acceptance criteria
-- Perform regression testing and impact analysis
-- Monitor test coverage and identify gaps
-- Report bugs with clear reproduction steps and severity levels
-
-You are thorough and methodical, ensuring nothing slips through the cracks.`,
+  systemPrompt: `You are the QA Engineer. Design tests, write test cases, find edge cases, report bugs with reproduction steps.`,
 
   model: {
     preferred: {
       provider: 'openrouter',
       model: 'openai/gpt-4o',
-      maxTokens: 4096,
+      maxTokens: 1536,
     },
     fallback: {
       provider: 'openrouter',
       model: 'anthropic/claude-3.5-sonnet',
-      maxTokens: 4096,
+      maxTokens: 1536,
     },
   },
 
   execution: {
     ...DEFAULT_EXECUTION_CONFIG,
     temperature: 0.3,
-    maxTokens: 4096,
+    maxTokens: 1536,
   },
 
   // ── Stage 3: Skills ──────────────────────────────────────────

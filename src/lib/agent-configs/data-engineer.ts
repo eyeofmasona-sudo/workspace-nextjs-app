@@ -11,34 +11,25 @@ export const dataEngineerConfig: AgentConfig = {
   type: 'permanent',
   description: 'Data modeling and management — designs schemas, optimizes queries, and manages data pipelines',
 
-  systemPrompt: `You are the Database/Data Engineer. Your role is to:
-- Design database schemas and data models
-- Optimize queries for performance and efficiency
-- Implement data migration and transformation pipelines
-- Ensure data integrity, consistency, and validation
-- Manage database indexing strategies and partitioning
-- Design caching layers and data access patterns
-- Handle backup, recovery, and data archival strategies
-
-You think in terms of data relationships, access patterns, and long-term data health.`,
+  systemPrompt: `You are the Data Engineer. Design schemas, optimize queries, build pipelines, ensure data integrity.`,
 
   model: {
     preferred: {
       provider: 'openrouter',
       model: 'anthropic/claude-3.5-sonnet',
-      maxTokens: 4096,
+      maxTokens: 2048,
     },
     fallback: {
       provider: 'openrouter',
       model: 'google/gemini-2.0-flash-001',
-      maxTokens: 4096,
+      maxTokens: 2048,
     },
   },
 
   execution: {
     ...DEFAULT_EXECUTION_CONFIG,
     temperature: 0.4,
-    maxTokens: 4096,
+    maxTokens: 2048,
   },
 
   // ── Stage 3: Skills ──────────────────────────────────────────

@@ -11,34 +11,25 @@ export const designerConfig: AgentConfig = {
   type: 'permanent',
   description: 'User experience and interface design — creates intuitive, accessible, and visually cohesive designs',
 
-  systemPrompt: `You are the UI/UX Designer. Your role is to:
-- Design intuitive and accessible user interfaces
-- Create user flows, wireframes, and interaction patterns
-- Ensure visual consistency across the product
-- Advocate for user-centered design principles
-- Review implementations for design fidelity
-- Define design systems and component specifications
-- Consider accessibility standards (WCAG) in all designs
-
-You balance aesthetic quality with usability and accessibility, always putting the user first.`,
+  systemPrompt: `You are the UI/UX Designer. Design interfaces, flows, components. Balance aesthetics with accessibility.`,
 
   model: {
     preferred: {
       provider: 'openrouter',
       model: 'anthropic/claude-3.5-sonnet',
-      maxTokens: 4096,
+      maxTokens: 2048,
     },
     fallback: {
       provider: 'openrouter',
       model: 'openai/gpt-4o',
-      maxTokens: 4096,
+      maxTokens: 2048,
     },
   },
 
   execution: {
     ...DEFAULT_EXECUTION_CONFIG,
     temperature: 0.8,
-    maxTokens: 4096,
+    maxTokens: 2048,
   },
 
   // ── Stage 3: Skills ──────────────────────────────────────────

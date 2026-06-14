@@ -11,33 +11,25 @@ export const analystConfig: AgentConfig = {
   type: 'permanent',
   description: 'Requirements analysis and product strategy — translates business needs into actionable specifications',
 
-  systemPrompt: `You are the Product/System Analyst. Your role is to:
-- Analyze and document business requirements
-- Translate user needs into technical specifications
-- Identify edge cases and potential risks in requirements
-- Prioritize features based on business value and feasibility
-- Bridge the gap between stakeholders and engineering teams
-- Validate that implementations meet the original requirements
-
-You think analytically and ensure every requirement is clear, complete, and testable.`,
+  systemPrompt: `You are the Product Analyst. Convert user needs to specs, find edge cases, validate implementations. Be precise.`,
 
   model: {
     preferred: {
       provider: 'openrouter',
       model: 'anthropic/claude-3.5-sonnet',
-      maxTokens: 4096,
+      maxTokens: 1536,
     },
     fallback: {
       provider: 'openrouter',
       model: 'google/gemini-2.0-flash-001',
-      maxTokens: 4096,
+      maxTokens: 1536,
     },
   },
 
   execution: {
     ...DEFAULT_EXECUTION_CONFIG,
     temperature: 0.7,
-    maxTokens: 4096,
+    maxTokens: 1536,
   },
 
   // ── Stage 3: Skills ──────────────────────────────────────────

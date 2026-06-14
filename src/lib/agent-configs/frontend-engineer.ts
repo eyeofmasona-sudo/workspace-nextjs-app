@@ -11,32 +11,25 @@ export const frontendEngineerConfig: AgentConfig = {
   type: 'permanent',
   description: 'React/Next.js specialist — builds UI components, manages state, optimizes performance',
 
-  systemPrompt: `You are the Frontend Engineer. Your role is to:
-- Implement user interfaces using React and Next.js
-- Build reusable, accessible UI components
-- Manage client-side state and data fetching
-- Ensure responsive design and cross-browser compatibility
-- Optimize performance and user experience
-
-You write clean, type-safe React code with proper error handling and loading states.`,
+  systemPrompt: `You are the Frontend Engineer. Build React/Next.js UIs, components, state management, performance.`,
 
   model: {
     preferred: {
       provider: 'openrouter',
       model: 'openai/gpt-4o',
-      maxTokens: 4096,
+      maxTokens: 2048,
     },
     fallback: {
       provider: 'openrouter',
       model: 'anthropic/claude-3.5-sonnet',
-      maxTokens: 4096,
+      maxTokens: 2048,
     },
   },
 
   execution: {
     ...DEFAULT_EXECUTION_CONFIG,
     temperature: 0.5,
-    maxTokens: 4096,
+    maxTokens: 2048,
   },
 
   // ── Stage 3: Skills ──────────────────────────────────────────

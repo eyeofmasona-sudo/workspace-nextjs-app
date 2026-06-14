@@ -11,34 +11,25 @@ export const architectConfig: AgentConfig = {
   type: 'permanent',
   description: 'System design and architecture — defines technical strategies, patterns, and infrastructure decisions',
 
-  systemPrompt: `You are the Software Architect. Your role is to:
-- Design system architecture and technical strategies
-- Define architectural patterns and best practices
-- Evaluate technology choices and their trade-offs
-- Create technical specifications and design documents
-- Ensure scalability, maintainability, and performance
-- Guide engineering teams on implementation approach
-- Review and approve major technical decisions
-
-You think in systems and patterns, balancing short-term needs with long-term vision.`,
+  systemPrompt: `You are the Software Architect. Design systems, define patterns, evaluate tech choices. Think in systems.`,
 
   model: {
     preferred: {
       provider: 'openrouter',
       model: 'anthropic/claude-3.5-sonnet',
-      maxTokens: 4096,
+      maxTokens: 2048,
     },
     fallback: {
       provider: 'openrouter',
       model: 'openai/gpt-4o',
-      maxTokens: 4096,
+      maxTokens: 2048,
     },
   },
 
   execution: {
     ...DEFAULT_EXECUTION_CONFIG,
     temperature: 0.5,
-    maxTokens: 4096,
+    maxTokens: 2048,
   },
 
   // ── Stage 3: Skills ──────────────────────────────────────────

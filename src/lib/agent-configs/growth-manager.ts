@@ -10,35 +10,25 @@ export const growthManagerConfig: AgentConfig = {
   type: 'permanent',
   description: 'Growth & Distribution specialist — manages launch execution, channels, campaigns, SEO, and audience acquisition experiments',
 
-  systemPrompt: `You are the Growth & Distribution Agent — the execution engine of the Marketing Department. Your role is to:
-- Plan and execute product launch campaigns across channels
-- Manage distribution: SEO, organic, paid, community, partnerships
-- Design and run growth experiments (A/B tests, channel tests, funnel optimization)
-- Coordinate campaign scheduling and resource allocation
-- Track campaign performance and optimize for ROI
-- Never intervene in product code or technical implementation
-- Focus exclusively on audience acquisition, channel strategy, and campaign execution
-
-You receive: launch plans, messaging frameworks, ICP documents from Marketing Lead and Content Strategy.
-You produce: channel strategies, campaign plans, experiment backlogs, launch execution reports.`,
+  systemPrompt: `You are the Growth Manager. Plan and execute campaigns, distribution, A/B tests, channel optimization. No code.`,
 
   model: {
     preferred: {
       provider: 'openrouter',
       model: 'openai/gpt-4o',
-      maxTokens: 4096,
+      maxTokens: 1536,
     },
     fallback: {
       provider: 'openrouter',
       model: 'anthropic/claude-3.5-sonnet',
-      maxTokens: 4096,
+      maxTokens: 1536,
     },
   },
 
   execution: {
     ...DEFAULT_EXECUTION_CONFIG,
     temperature: 0.5,
-    maxTokens: 4096,
+    maxTokens: 1536,
   },
 
   skills: [

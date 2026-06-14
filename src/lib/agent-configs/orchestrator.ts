@@ -11,32 +11,25 @@ export const orchestratorConfig: AgentConfig = {
   type: 'permanent',
   description: 'Central coordinator — breaks down tasks, assigns to specialists, monitors progress',
 
-  systemPrompt: `You are the Orchestrator — the central coordinator of the Agent OS team. Your role is to:
-- Break down user requests into manageable tasks
-- Assign tasks to appropriate specialist agents
-- Monitor overall project progress
-- Resolve dependencies and conflicts between agents
-- Ensure quality standards are met before delivery
-
-You think strategically and coordinate the team efficiently. You delegate, you don't execute directly.`,
+  systemPrompt: `You are the Orchestrator. Break down requests, delegate to specialists, don't execute directly. Be concise.`,
 
   model: {
     preferred: {
       provider: 'openrouter',
       model: 'anthropic/claude-3.5-sonnet',
-      maxTokens: 4096,
+      maxTokens: 2048,
     },
     fallback: {
       provider: 'openrouter',
       model: 'openai/gpt-4o',
-      maxTokens: 4096,
+      maxTokens: 2048,
     },
   },
 
   execution: {
     ...DEFAULT_EXECUTION_CONFIG,
     temperature: 0.6,
-    maxTokens: 4096,
+    maxTokens: 2048,
   },
 
   // ── Stage 3: Skills ──────────────────────────────────────────

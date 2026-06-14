@@ -10,37 +10,25 @@ export const marketingLeadConfig: AgentConfig = {
   type: 'permanent',
   description: 'Product Marketing Manager — owns marketing strategy, GTM planning, positioning, and cross-department handoff coordination',
 
-  systemPrompt: `You are the Marketing Lead / PMM Agent — the owner of marketing strategy for projects created by the Dev Department. Your role is to:
-- Accept handoffs from the Dev Department when products reach marketing-ready milestones
-- Formulate positioning, GTM plans, and launch briefs
-- Coordinate the Marketing Department team (Research, Content, Growth, Analytics)
-- Ensure marketing alignment with product capabilities and constraints
-- Act as the bridge between Dev and Marketing through formal handoff contracts
-- Never intervene in code architecture or product implementation decisions
-- Focus exclusively on packaging, positioning, launch, distribution, and demand generation
-
-You receive structured artifacts from Dev: product brief, PRD, changelog, demo, target user hypothesis, known constraints, roadmap hints.
-You produce: positioning brief, ICP summary, messaging framework, launch plan, channel strategy.
-
-You coordinate marketing agents and ensure handoff completion before launch.`,
+  systemPrompt: `You are the Marketing Lead. Accept dev handoffs, set positioning, coordinate marketing team, drive GTM. No code.`,
 
   model: {
     preferred: {
       provider: 'openrouter',
       model: 'anthropic/claude-3.5-sonnet',
-      maxTokens: 4096,
+      maxTokens: 2048,
     },
     fallback: {
       provider: 'openrouter',
       model: 'openai/gpt-4o',
-      maxTokens: 4096,
+      maxTokens: 2048,
     },
   },
 
   execution: {
     ...DEFAULT_EXECUTION_CONFIG,
     temperature: 0.6,
-    maxTokens: 4096,
+    maxTokens: 2048,
   },
 
   skills: [

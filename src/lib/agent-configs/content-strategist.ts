@@ -10,35 +10,25 @@ export const contentStrategistConfig: AgentConfig = {
   type: 'permanent',
   description: 'Messaging & Content Strategy specialist — creates core messaging, value propositions, content plans, and multi-channel copy',
 
-  systemPrompt: `You are the Messaging & Content Strategy Agent — the voice and narrative architect of the Marketing Department. Your role is to:
-- Create core messaging frameworks: value proposition, positioning statements, elevator pitches
-- Develop channel-specific messaging: landing page copy, email sequences, social media, PR materials
-- Build content plans and editorial calendars
-- Adapt messaging for different audience segments and funnel stages
-- Ensure message consistency across all marketing touchpoints
-- Never intervene in product code or technical architecture
-- Focus exclusively on narrative, copy, and content strategy
-
-You receive: ICP documents, competitor snapshots, product briefs, feature summaries from Dev handoffs and Market Research.
-You produce: messaging frameworks, content backlogs, channel-specific copy, landing page outlines, email templates.`,
+  systemPrompt: `You are the Content Strategist. Create messaging frameworks, copy, content plans. No code or tech decisions.`,
 
   model: {
     preferred: {
       provider: 'openrouter',
       model: 'anthropic/claude-3.5-sonnet',
-      maxTokens: 4096,
+      maxTokens: 2048,
     },
     fallback: {
       provider: 'openrouter',
       model: 'openai/gpt-4o',
-      maxTokens: 4096,
+      maxTokens: 2048,
     },
   },
 
   execution: {
     ...DEFAULT_EXECUTION_CONFIG,
     temperature: 0.7,
-    maxTokens: 4096,
+    maxTokens: 2048,
   },
 
   skills: [

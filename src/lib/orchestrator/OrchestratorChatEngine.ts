@@ -77,7 +77,7 @@ interface DelegationDecision {
 // ─── Constants ───────────────────────────────────────────────
 
 const DEFAULT_MODEL = 'anthropic/claude-3.5-sonnet';
-const DELEGATION_ANALYSIS_MODEL = 'anthropic/claude-3.5-sonnet';
+const DELEGATION_ANALYSIS_MODEL = 'google/gemini-2.0-flash-001';
 const SYNTHESIS_MODEL = 'anthropic/claude-3.5-sonnet';
 const MAX_DELEGATION_AGENTS = 5;
 
@@ -300,41 +300,18 @@ class OrchestratorChatEngine {
 
       // Build the agent catalog for the prompt
       const agentCatalog = availableAgents
-        .map(
-          (a) =>
-            `- ID: "${a.id}" | Name: "${a.name}" | Role: ${a.role} | Department: ${a.department} | Description: ${a.description}` +
-            (a.skills.length > 0 ? ` | Skills: ${a.skills.join(', ')}` : '') +
-            (a.tools.length > 0 ? ` | Tools: ${a.tools.join(', ')}` : '')
-        )
+        .map((a) =>
+          `${a.id}(${a.role}/${a.department}): ${a.description}` +
+          (a.skills.length > 0 ? ` [${a.skills.join(',')}]` : ''))
         .join('\n');
 
-      const systemPrompt = `You are the Agent OS Orchestrator. Your job is to analyze user requests and determine which specialized agents should handle the work.
+      const systemPrompt = `Route this request to the right agents.
 
-AVAILABLE AGENTS:
+AGENTS:
 ${agentCatalog}
 
-RULES:
-1. Select ONLY agents that are relevant to the user's request
-2. Each selected agent gets a specific subtask (not the entire request)
-3. Maximum ${MAX_DELEGATION_AGENTS} agents can be delegated to
-4. If no agent is relevant, return an empty list (the orchestrator will handle it directly)
-5. Be precise with subtask descriptions — each agent should know exactly what to do
-6. Consider department boundaries — dev agents handle product/technical tasks, marketing agents handle promotion/content/growth tasks
-7. For marketing-related tasks (launch, positioning, content, growth, campaigns), prefer marketing department agents
-8. For technical tasks (code, architecture, testing, deployment), prefer dev department agents
-9. Cross-department collaboration should go through the orchestrator — don't assign marketing tasks to dev agents or vice versa
-
-RESPOND WITH JSON ONLY. No markdown, no explanation outside JSON.
-Format:
-{
-  "delegations": [
-    {
-      "agentId": "the-agent-id",
-      "task": "specific task description for this agent",
-      "reason": "why this agent was selected"
-    }
-  ]
-}`;
+Pick relevant agents only (max ${MAX_DELEGATION_AGENTS}). Dev agents=technical, marketing agents=content/growth. Empty list if none fit.
+JSON only: {"delegations":[{"agentId":"id","task":"subtask","reason":"why"}]}`;
 
       const messages: ChatMessage[] = [
         { role: 'system', content: systemPrompt },
@@ -342,7 +319,7 @@ Format:
 
       // Add conversation history for context
       if (history && history.length > 0) {
-        for (const h of history.slice(-6)) {
+        for (const h of history.slice(-4)) {
           messages.push({ role: h.role as ChatMessage['role'], content: h.content });
         }
       }
@@ -353,7 +330,7 @@ Format:
         model: DELEGATION_ANALYSIS_MODEL,
         messages,
         temperature: 0.3,
-        maxTokens: 1024,
+        maxTokens: 768,
       };
 
       const response = await provider.complete(request);
@@ -479,12 +456,12 @@ Format:
         {
           role: 'system',
           content:
-            'You are the Agent OS Orchestrator. No specialized agents are available for this task, so you are handling it directly. Provide a helpful, concise response. If the task requires specialized capabilities, suggest which type of agent would be needed.',
+            'Orchestrator (direct): answer concisely. If specialized help needed, name the agent type.',
         },
       ];
 
       if (history && history.length > 0) {
-        for (const h of history.slice(-6)) {
+        for (const h of history.slice(-4)) {
           messages.push({ role: h.role as ChatMessage['role'], content: h.content });
         }
       }
@@ -495,7 +472,7 @@ Format:
         model: DEFAULT_MODEL,
         messages,
         temperature: 0.7,
-        maxTokens: 2048,
+        maxTokens: 1024,
       });
 
       return {
@@ -543,21 +520,10 @@ Format:
         })
         .join('\n\n');
 
-      const systemPrompt = `You are the Agent OS Orchestrator. You delegated tasks to specialized agents and have received their results. Your job is to synthesize a clear, unified response for the user.
+      const systemPrompt = `Synthesize agent results into one response. Direct answer first, credit agents, note failures or needs_human (🖐️=paused, not failure). Integrate, don't list.
 
-GUIDELINES:
-1. Start with a direct answer to the user's original question
-2. Reference which agents contributed to the answer
-3. If any agents failed, mention it honestly and suggest alternatives
-4. If any agents returned needs_human status (🖐️), explain that manual intervention is required (e.g. login, CAPTCHA, 2FA) and the task is paused pending human action. This is NOT a failure — the task will continue after manual intervention via the browser operator resume endpoint.
-5. Be concise but comprehensive
-6. Don't just concatenate agent outputs — integrate them into a coherent response
-7. If the results are technical, provide a summary that's accessible
-
-ORIGINAL USER REQUEST:
-${originalMessage}
-
-AGENT RESULTS:
+REQUEST: ${originalMessage}
+RESULTS:
 ${agentSummaries}`;
 
       const messages: ChatMessage[] = [
@@ -565,21 +531,21 @@ ${agentSummaries}`;
       ];
 
       if (history && history.length > 0) {
-        for (const h of history.slice(-4)) {
+        for (const h of history.slice(-3)) {
           messages.push({ role: h.role as ChatMessage['role'], content: h.content });
         }
       }
 
       messages.push({
         role: 'user',
-        content: 'Please provide a unified response based on the agent results above.',
+        content: 'Synthesize.',
       });
 
       const response = await provider.complete({
         model: SYNTHESIS_MODEL,
         messages,
         temperature: 0.5,
-        maxTokens: 2048,
+        maxTokens: 1024,
       });
 
       return {

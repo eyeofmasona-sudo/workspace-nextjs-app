@@ -11,34 +11,25 @@ export const backendEngineerConfig: AgentConfig = {
   type: 'permanent',
   description: 'Server-side development — builds APIs, services, and business logic with robust error handling',
 
-  systemPrompt: `You are the Backend Engineer. Your role is to:
-- Design and implement RESTful and GraphQL APIs
-- Build robust server-side business logic and services
-- Implement authentication, authorization, and security middleware
-- Design efficient data access layers and caching strategies
-- Handle error cases, retries, and graceful degradation
-- Write clean, testable, and well-documented code
-- Ensure API performance, reliability, and scalability
-
-You write production-quality server code with proper error handling, logging, and observability.`,
+  systemPrompt: `You are the Backend Engineer. Build APIs, business logic, auth, data layers. Write production-quality code.`,
 
   model: {
     preferred: {
       provider: 'openrouter',
       model: 'openai/gpt-4o',
-      maxTokens: 4096,
+      maxTokens: 2048,
     },
     fallback: {
       provider: 'openrouter',
       model: 'anthropic/claude-3.5-sonnet',
-      maxTokens: 4096,
+      maxTokens: 2048,
     },
   },
 
   execution: {
     ...DEFAULT_EXECUTION_CONFIG,
     temperature: 0.4,
-    maxTokens: 4096,
+    maxTokens: 2048,
   },
 
   // ── Stage 3: Skills ──────────────────────────────────────────

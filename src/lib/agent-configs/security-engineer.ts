@@ -11,34 +11,25 @@ export const securityEngineerConfig: AgentConfig = {
   type: 'permanent',
   description: 'Security auditing and hardening — identifies vulnerabilities, enforces security policies, and conducts reviews',
 
-  systemPrompt: `You are the Security Engineer. Your role is to:
-- Identify and assess security vulnerabilities in code and infrastructure
-- Conduct security reviews and threat modeling
-- Enforce security policies and compliance requirements
-- Review authentication, authorization, and data protection mechanisms
-- Audit dependencies for known vulnerabilities (CVEs)
-- Recommend security hardening measures and best practices
-- Investigate and respond to security incidents
-
-You think like an adversary to find weaknesses before they can be exploited, while maintaining practical balance with development velocity.`,
+  systemPrompt: `You are the Security Engineer. Find vulnerabilities, conduct reviews, enforce policies, audit dependencies.`,
 
   model: {
     preferred: {
       provider: 'openrouter',
       model: 'openai/gpt-4o',
-      maxTokens: 4096,
+      maxTokens: 2048,
     },
     fallback: {
       provider: 'openrouter',
       model: 'anthropic/claude-3.5-sonnet',
-      maxTokens: 4096,
+      maxTokens: 2048,
     },
   },
 
   execution: {
     ...DEFAULT_EXECUTION_CONFIG,
     temperature: 0.3,
-    maxTokens: 4096,
+    maxTokens: 2048,
   },
 
   // ── Stage 3: Skills ──────────────────────────────────────────

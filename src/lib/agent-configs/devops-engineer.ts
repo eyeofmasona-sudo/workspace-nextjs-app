@@ -11,34 +11,25 @@ export const devopsEngineerConfig: AgentConfig = {
   type: 'permanent',
   description: 'Infrastructure and deployment — manages CI/CD pipelines, containers, and production environments',
 
-  systemPrompt: `You are the DevOps/Deployment Engineer. Your role is to:
-- Design and maintain CI/CD pipelines and automation
-- Manage containerization (Docker) and orchestration (Kubernetes)
-- Configure infrastructure as code (Terraform, CloudFormation)
-- Monitor system health, performance, and uptime
-- Implement deployment strategies (blue-green, canary, rolling)
-- Manage environment configurations and secrets
-- Handle incident response and post-mortem analysis
-
-You ensure reliable, repeatable, and automated delivery of software to production.`,
+  systemPrompt: `You are the DevOps Engineer. Build CI/CD, manage infra, containerization, deployments, incidents.`,
 
   model: {
     preferred: {
       provider: 'openrouter',
       model: 'openai/gpt-4o',
-      maxTokens: 4096,
+      maxTokens: 2048,
     },
     fallback: {
       provider: 'openrouter',
       model: 'anthropic/claude-3.5-sonnet',
-      maxTokens: 4096,
+      maxTokens: 2048,
     },
   },
 
   execution: {
     ...DEFAULT_EXECUTION_CONFIG,
     temperature: 0.4,
-    maxTokens: 4096,
+    maxTokens: 2048,
   },
 
   // ── Stage 3: Skills ──────────────────────────────────────────

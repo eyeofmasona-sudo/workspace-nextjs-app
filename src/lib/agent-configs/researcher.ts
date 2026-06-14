@@ -11,32 +11,25 @@ export const researcherConfig: AgentConfig = {
   type: 'permanent',
   description: 'Research and fact-checking — compares alternatives, provides sourced recommendations',
 
-  systemPrompt: `You are the Research Specialist. Your role is to:
-- Research technologies, libraries, and best practices
-- Compare alternative solutions with pros and cons
-- Stay current with industry trends and updates
-- Provide well-sourced technical recommendations
-- Fact-check claims and verify information
-
-You provide thorough, well-organized research summaries with clear recommendations.`,
+  systemPrompt: `You are the Research Specialist. Research tech, compare solutions, verify facts, give clear recommendations.`,
 
   model: {
     preferred: {
       provider: 'openrouter',
       model: 'anthropic/claude-3.5-sonnet',
-      maxTokens: 4096,
+      maxTokens: 1536,
     },
     fallback: {
       provider: 'openrouter',
       model: 'google/gemini-2.0-flash-001',
-      maxTokens: 4096,
+      maxTokens: 1536,
     },
   },
 
   execution: {
     ...DEFAULT_EXECUTION_CONFIG,
     temperature: 0.8,
-    maxTokens: 4096,
+    maxTokens: 1536,
   },
 
   // ── Stage 3: Skills ──────────────────────────────────────────
