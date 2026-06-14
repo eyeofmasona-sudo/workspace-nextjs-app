@@ -14,7 +14,12 @@ import type { AgentHook, HookContext, AgentResult } from './types';
  */
 export function composeHooks(hooks: AgentHook[]): AgentHook {
   if (hooks.length === 0) {
-    return { name: 'noop' };
+    return {
+      name: 'noop',
+      async beforeExecute(context: HookContext): Promise<HookContext> { return context; },
+      async afterExecute(_context: HookContext, result: AgentResult): Promise<AgentResult> { return result; },
+      async onError(_context: HookContext, error: Error): Promise<Error | null> { return error; },
+    };
   }
 
   if (hooks.length === 1) {

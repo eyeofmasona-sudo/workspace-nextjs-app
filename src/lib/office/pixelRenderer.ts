@@ -241,7 +241,7 @@ function renderCharacter(
 ): ZDrawable[] {
   const drawables: ZDrawable[] = [];
   const isReading = char.agentStatus === 'reviewing' || char.agentStatus === 'thinking' ||
-                    (char.currentTool ? isReadingTool(char.currentTool) : false);
+                    (char.currentTool ? ['document.parse', 'rag.query', 'browser.search'].includes(char.currentTool) : false);
 
   const spriteSet = getCharacterSprites(char.palette, char.hueShift);
   const sprite = getCharSpriteData(spriteSet, char.state, char.dir, char.frame, isReading);

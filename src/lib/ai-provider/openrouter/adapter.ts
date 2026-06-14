@@ -246,7 +246,7 @@ export class OpenRouterProvider implements AIProvider {
 
   private async handleError(res: Response, model: string): Promise<never> {
     let errorMessage = `OpenRouter API error (${res.status})`;
-    let errorCode: string = 'UNKNOWN';
+    let errorCode: import('../types').ProviderErrorCode = 'UNKNOWN';
     let retryable = false;
 
     try {

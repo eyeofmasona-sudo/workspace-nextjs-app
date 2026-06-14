@@ -109,7 +109,7 @@ class AgentRuntime {
     };
 
     // 7. Run beforeExecute hooks
-    context = await hookPipeline.beforeExecute(context);
+    context = await (hookPipeline.beforeExecute?.(context) ?? context);
 
     // 8. Resolve model
     const resolvedModel = agentRegistry.resolveModel(agentId, input.modelOverride);
@@ -233,7 +233,7 @@ class AgentRuntime {
     }
 
     // 13. Run afterExecute hooks
-    result = await hookPipeline.afterExecute(context, result);
+    result = await (hookPipeline.afterExecute?.(context, result) ?? result);
 
     // 14. Run skill afterRun hooks
     result = await this.runSkillAfterRun(config, skillContext, result);

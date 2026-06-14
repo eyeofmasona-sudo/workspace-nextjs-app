@@ -5,6 +5,7 @@
 // AgentRuntime handles HOW to run them.
 
 import type { ChatMessage, CompletionResponse, ResolvedModel } from '../ai-provider/types';
+export type { ResolvedModel };
 
 // ─── Agent Identity ──────────────────────────────────────────
 

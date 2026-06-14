@@ -1358,8 +1358,15 @@ export default function Home() {
           const agentsData = await agentsRes.json();
           if (agentsData.agents?.length > 0) {
             setWorkspaceId(agentsData.agents[0].workspaceId);
+            return;
           }
         }
+      }
+      // Not initialized yet — auto-seed on first load
+      const seedRes = await fetch('/api/seed', { method: 'POST' });
+      if (seedRes.ok) {
+        const seedData = await seedRes.json();
+        setWorkspaceId(seedData.workspace?.id ?? null);
       }
     } catch (err) {
       console.error('Failed to fetch workspace:', err);
@@ -1453,7 +1460,7 @@ export default function Home() {
           const assistantMsg: ChatMessage = {
             id: `asst-${Date.now()}`,
             role: 'assistant',
-            content: data.orchestratorResponse || data.error || 'No response',
+            content: data.orchestratorResponse || (data as unknown as Record<string, unknown>).error as string || 'No response',
             model: data.modelUsed,
             usage: data.usage,
             durationMs: data.totalDurationMs,

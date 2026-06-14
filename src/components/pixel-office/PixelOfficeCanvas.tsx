@@ -6,7 +6,7 @@
 
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { TILE_SIZE } from '@/lib/pixel-office/types';
 import { startGameLoop } from '@/lib/pixel-office/engine/gameLoop';
 import type { OfficeState } from '@/lib/pixel-office/engine/officeState';
@@ -15,6 +15,9 @@ import { renderFrame } from '@/lib/pixel-office/engine/renderer';
 interface PixelOfficeCanvasProps {
   officeState: OfficeState;
   onAgentClick: (agentId: number) => void;
+  zoom?: number;
+  onZoomChange?: React.Dispatch<React.SetStateAction<number>>;
+  panRef?: React.RefObject<unknown>;
 }
 
 /** Padding fraction around the office in the viewport */
@@ -270,8 +273,9 @@ export function PixelOfficeCanvas({
         className="block touch-none"
         style={{
           imageRendering: 'pixelated',
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           msInterpolationMode: 'nearest-neighbor',
-        }}
+        } as React.CSSProperties & { msInterpolationMode?: string }}
       />
     </div>
   );

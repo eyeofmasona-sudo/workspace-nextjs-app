@@ -936,7 +936,7 @@ export function getColorizedFloorSprite(patternIndex: number, color: ColorValue)
   if (cached) return cached;
 
   const base = DEFAULT_FLOOR_SPRITE;
-  const result = colorize ? colorizeSprite(base, { ...color, colorize: true }) : base;
+  const result = colorizeSprite(base, { ...color, colorize: true });
   floorSpriteCache.set(key, result);
   return result;
 }

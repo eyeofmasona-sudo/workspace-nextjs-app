@@ -104,7 +104,9 @@ class SkillPackService {
     for (const item of pack.items) {
       try {
         const result = await skillService.installSkill(item.skill.key, agentId);
-        if (result.created) {
+        // If installedAt ≈ updatedAt (within 1s), it was just created; otherwise it was updated/skipped
+        const wasCreated = Math.abs(result.installedAt.getTime() - result.updatedAt.getTime()) < 1000;
+        if (wasCreated) {
           installed++;
         } else {
           skipped++;
@@ -174,12 +176,9 @@ class SkillPackService {
 
     for (const item of pack.items) {
       try {
-        const result = await skillService.uninstallSkill(item.skill.key, agentId);
-        if (result.removed) {
-          removed++;
-        } else {
-          notInstalled++;
-        }
+        await skillService.uninstallSkill(item.skill.key, agentId);
+        // uninstallSkill throws if not installed, so reaching here means it was removed
+        removed++;
       } catch (err) {
         errors.push({
           skillKey: item.skill.key,

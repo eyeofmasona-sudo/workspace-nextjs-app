@@ -8,3 +8,7 @@ node_modules/
 dist/
 build/
 .vercel
+db/*.db
+tsconfig.tsbuildinfo
+.next/
+node_modules/

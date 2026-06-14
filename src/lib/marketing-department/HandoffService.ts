@@ -72,7 +72,7 @@ class HandoffService {
 
     // Emit the handoff event so marketing agents can react
     try {
-      await eventBus.emit(eventType as keyof typeof EventTypes, {
+      await eventBus.emit(eventType as import('../types/events').EventType, {
         workspaceId,
         projectId,
         ...this.buildEventPayload(eventType, projectId, artifacts, emittedBy),
