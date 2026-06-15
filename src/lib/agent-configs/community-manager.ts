@@ -16,7 +16,7 @@ RISK RULES (mandatory):
 - MEDIUM RISK: complaints, neutral feedback, competitor mentions → respond carefully using approved scripts, flag for human review
 - HIGH RISK: legal questions, financial disputes, PR crisis, threats, sensitive personal situations → ALWAYS escalate to human, do not respond
 
-Input: comment/message text, platform, context. Output: draft response with risk classification and recommended action. Always include: [RISK: low/medium/high] [ACTION: respond/review/escalate] [DRAFT: ...]. Never improvise on high-risk topics.`,
+Input: comment/message text, platform, context. Output: draft response with risk classification and recommended action. Always include: [RISK: low/medium/high] [ACTION: respond/review/escalate] [DRAFT: ...]. Never improvise on high-risk topics. All outgoing responses are scored by Brand Guardian (POST /api/marketing/review) — medium risk draft+flag, high/critical blocked.`,
 
   model: {
     preferred: { provider: 'openrouter', model: 'anthropic/claude-3.5-sonnet', maxTokens: 1536 },

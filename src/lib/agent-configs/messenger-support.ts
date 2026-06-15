@@ -25,7 +25,7 @@ RISK RULES:
 
 Output format: [CLASS: ...] [RISK: low/medium/high] [ACTION: respond/qualify/route-to-sales/escalate] [RESPONSE: ...] [DATA_COLLECTED: ...]
 
-Note: actual message sending requires platform API integration (currently requires connected Telegram bot, WhatsApp Business API, or Instagram Graph API).`,
+Brand Guardian scores all outbound messages (POST /api/marketing/review) — never send high/critical risk content; escalate to human. Note: actual message sending requires platform API integration (currently requires connected Telegram bot, WhatsApp Business API, or Instagram Graph API).`,
 
   model: {
     preferred: { provider: 'openrouter', model: 'anthropic/claude-3.5-sonnet', maxTokens: 1536 },

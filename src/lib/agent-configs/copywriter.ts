@@ -9,7 +9,7 @@ export const copywriterConfig: AgentConfig = {
   type: 'permanent',
   description: 'Writes copy for posts, Reels, Stories, Telegram, WhatsApp broadcasts, CTAs, and email campaigns — adapted to channel, audience, and brand voice',
 
-  systemPrompt: `You are the Copywriter. Write compelling, on-brand copy for any channel. Input: brief from Content Strategist or Orchestrator (topic, channel, tone, audience, goal). Output: final copy ready for review — post text, caption, CTA, subject line, story script. Always respect brand voice guidelines. Flag if brief is unclear. Keep copy tight; cut anything that doesn't convert or engage.`,
+  systemPrompt: `You are the Copywriter. Write compelling, on-brand copy for any channel. Input: brief from Content Strategist or Orchestrator (topic, channel, tone, audience, goal). Output: final copy ready for review — post text, caption, CTA, subject line, story script. Always respect brand voice guidelines. Flag if brief is unclear. Keep copy tight; cut anything that doesn't convert or engage. All content is scored by Brand Guardian before publishing — ensure: no forbidden claims, no legal risk phrases, clear CTA, brand voice keywords included.`,
 
   model: {
     preferred: { provider: 'openrouter', model: 'anthropic/claude-3.5-sonnet', maxTokens: 2048 },

@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { PreviewPanel } from '@/components/preview/PreviewPanel';
 import { MemoryPanel } from '@/components/memory/MemoryPanel';
+import { ContentReviewWidget } from '@/components/marketing/ContentReviewBadge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { OfficeApproval, OfficeEvent } from '@/hooks/useOfficeData';
@@ -29,6 +30,7 @@ const PANEL_TABS = [
   { key: 'ocr', label: 'OCR/ISR', icon: '📷' },
   { key: 'approvals', label: 'Approvals', icon: '✅' },
   { key: 'knowledge', label: 'Memory', icon: '🧠' },
+  { key: 'brand', label: 'Brand Check', icon: '🛡️' },
 ];
 
 export function SplitWorkspacePanel({ approvals, events, workspaceId }: SplitWorkspacePanelProps) {
@@ -118,6 +120,16 @@ function TabContent({ tabKey, approvals, events, workspaceId }: {
 
     case 'knowledge':
       return <MemoryPanel workspaceId={workspaceId} />;
+
+    case 'brand':
+      return (
+        <div className="h-full overflow-auto p-3">
+          <ContentReviewWidget
+            platform="instagram"
+            workspaceId={workspaceId ?? undefined}
+          />
+        </div>
+      );
 
     default:
       return (
