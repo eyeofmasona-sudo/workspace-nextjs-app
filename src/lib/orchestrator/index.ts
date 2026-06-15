@@ -42,3 +42,15 @@ export type {
   AgentHireRequest,
   AgentHireResult,
 } from './AgentHiringService';
+
+// ─── Task Contract & Quality Gate (Stage 7) ──────────────────
+export {
+  createTaskContract,
+  isLowConfidence,
+  requiresHumanApproval,
+  type TaskContract,
+  type QualityGateResult,
+  type CreateTaskContractInput,
+} from './TaskContract';
+
+export { qualityGateService } from './QualityGateService';

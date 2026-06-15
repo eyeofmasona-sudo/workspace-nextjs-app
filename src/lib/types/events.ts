@@ -83,6 +83,12 @@ export const EventTypes = {
   LAUNCH_APPROVED: 'handoff.launch_approved',
   CAMPAIGN_LIVE: 'handoff.campaign_live',
   MARKET_FEEDBACK_COLLECTED: 'handoff.market_feedback_collected',
+
+  // ─── Task Contract & Quality Gate Events ────────────────
+  TASK_CONTRACT_CREATED: 'task.contract.created',
+  TASK_ROUTING_DECIDED: 'task.routing.decided',
+  TASK_QUALITY_CHECKED: 'task.quality.checked',
+  TASK_ESCALATED: 'task.escalated',
   POST_LAUNCH_REVIEW: 'handoff.post_launch_review',
 } as const;
 
@@ -456,6 +462,47 @@ export interface PostLaunchReviewPayload extends BaseEventPayload {
 
 // ─── Event Map (for type-safe subscriptions) ─────────────────
 
+// ─── Task Contract & Quality Gate Payloads ───────────────────
+
+export interface TaskContractCreatedPayload extends BaseEventPayload {
+  workspaceId: string;
+  contractId: string;
+  goal: string;
+  assignedAgentRole: string;
+  assignedDepartment: string;
+  riskLevel: string;
+  approvalRequired: boolean;
+  routingConfidence: number;
+}
+
+export interface TaskRoutingDecidedPayload extends BaseEventPayload {
+  workspaceId: string;
+  contractId: string;
+  agentRole: string;
+  agentId?: string;
+  confidence: number;
+  reason: string;
+  isLowConfidence: boolean;
+}
+
+export interface TaskQualityCheckedPayload extends BaseEventPayload {
+  workspaceId: string;
+  contractId: string;
+  agentId: string;
+  score: number;
+  status: string;
+  issues: string[];
+  riskTriggered: boolean;
+}
+
+export interface TaskEscalatedPayload extends BaseEventPayload {
+  workspaceId: string;
+  contractId: string;
+  agentId: string;
+  approvalRequestId?: string;
+  reason: string;
+}
+
 export interface EventMap {
   [EventTypes.PROJECT_CREATED]: ProjectCreatedPayload;
   [EventTypes.PROJECT_UPDATED]: BaseEventPayload & { projectId: string };
@@ -508,6 +555,10 @@ export interface EventMap {
   [EventTypes.CAMPAIGN_LIVE]: CampaignLivePayload;
   [EventTypes.MARKET_FEEDBACK_COLLECTED]: MarketFeedbackCollectedPayload;
   [EventTypes.POST_LAUNCH_REVIEW]: PostLaunchReviewPayload;
+  [EventTypes.TASK_CONTRACT_CREATED]: TaskContractCreatedPayload;
+  [EventTypes.TASK_ROUTING_DECIDED]: TaskRoutingDecidedPayload;
+  [EventTypes.TASK_QUALITY_CHECKED]: TaskQualityCheckedPayload;
+  [EventTypes.TASK_ESCALATED]: TaskEscalatedPayload;
 }
 
 // ─── Event Handler Types ─────────────────────────────────────

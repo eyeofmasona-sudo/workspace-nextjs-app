@@ -3,6 +3,9 @@
 // Future: replace with semantic similarity or AI-based matching.
 
 import { db } from '../db';
+import { eventBus } from '../event-bus';
+import { EventTypes } from '../types/events';
+import { createTaskContract, type CreateTaskContractInput } from './TaskContract';
 import type { AgentAssignment } from './types';
 
 // ─── Keyword → Role mapping ─────────────────────────────────
@@ -310,7 +313,7 @@ class AgentAssignmentEngine {
     const confidence = Math.min(bestMatch.score / 30, 1.0);
     const isTemporary = !agent;
 
-    return {
+    const assignment = {
       agentRole: bestMatch.role,
       agentId: agent?.id,
       agentName: agent?.name,
@@ -320,6 +323,54 @@ class AgentAssignmentEngine {
         : `Matched to ${agent!.name} by keywords: ${bestMatch.matchedKeywords.join(', ')}`,
       isTemporary,
     };
+
+    // Emit routing decision event (non-blocking)
+    eventBus.emit(EventTypes.TASK_ROUTING_DECIDED, {
+      workspaceId,
+      timestamp: Date.now(),
+      source: 'agent-assignment-engine',
+      contractId: '',  // Caller sets contractId after contract creation
+      agentRole: assignment.agentRole,
+      agentId: assignment.agentId,
+      confidence,
+      reason: assignment.reason,
+      isLowConfidence: confidence < 0.5,
+    }).catch(() => {});  // Non-fatal
+
+    return assignment;
+  }
+
+  /**
+   * Build a TaskContract from an assignment result.
+   * Merges routing confidence into the contract.
+   */
+  buildContract(
+    input: Omit<CreateTaskContractInput, 'assignedAgentRole' | 'assignedDepartment'>,
+    assignment: AgentAssignment,
+    department: string
+  ) {
+    const contract = createTaskContract({
+      ...input,
+      assignedAgentRole: assignment.agentRole,
+      assignedDepartment: department,
+    });
+    contract.routingConfidence = assignment.confidence;
+
+    // Emit contract created event (non-blocking)
+    eventBus.emit(EventTypes.TASK_CONTRACT_CREATED, {
+      workspaceId: input.workspaceId,
+      timestamp: Date.now(),
+      source: 'agent-assignment-engine',
+      contractId: contract.id,
+      goal: contract.goal,
+      assignedAgentRole: contract.assignedAgentRole,
+      assignedDepartment: contract.assignedDepartment,
+      riskLevel: contract.riskLevel,
+      approvalRequired: contract.approvalRequired,
+      routingConfidence: contract.routingConfidence,
+    }).catch(() => {});
+
+    return contract;
   }
 
   /**

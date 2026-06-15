@@ -41,6 +41,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 // ─── Pixel Office components ──────────────────────────────────
 import { PixelOfficeCanvas } from '@/components/pixel-office/PixelOfficeCanvas';
+import { ContractBadge } from '@/components/orchestrator/ContractBadge';
 import { OfficeState, ROLE_SEAT_MAP } from '@/lib/pixel-office/engine/officeState';
 import { BehaviorState } from '@/lib/pixel-office/types';
 import { loadAllAssets } from '@/lib/pixel-office/assetLoader';
@@ -175,6 +176,13 @@ interface ChatMessage {
   error?: boolean;
   delegatedTasks?: DelegatedTask[];
   totalDurationMs?: number;
+  // Contract metadata (from TaskContract)
+  riskLevel?: string;
+  routingConfidence?: number;
+  approvalRequired?: boolean;
+  qualityStatus?: 'passed' | 'needs_review' | 'blocked' | 'escalated';
+  qualityScore?: number;
+  qualityIssues?: string[];
 }
 
 interface HiredAgent {
@@ -931,6 +939,18 @@ function OrchestratorChatPanel({
                   <DelegationReport tasks={msg.delegatedTasks} totalDurationMs={msg.totalDurationMs || 0} />
                 )}
                 <p className="text-xs whitespace-pre-wrap break-words leading-relaxed">{msg.content}</p>
+                {msg.role === 'assistant' && (msg.riskLevel || msg.routingConfidence !== undefined) && (
+                  <div className="mt-1.5">
+                    <ContractBadge
+                      riskLevel={msg.riskLevel ?? 'low'}
+                      routingConfidence={msg.routingConfidence ?? 1}
+                      approvalRequired={msg.approvalRequired ?? false}
+                      qualityStatus={msg.qualityStatus}
+                      qualityScore={msg.qualityScore}
+                      issues={msg.qualityIssues}
+                    />
+                  </div>
+                )}
                 {msg.role === 'assistant' && !msg.error && (
                   <div className="mt-1.5 pt-1 border-t border-slate-700/30 flex flex-wrap items-center gap-1.5 text-[9px] text-slate-500">
                     {msg.model && <span className="flex items-center gap-0.5"><Cpu className="w-2 h-2" />{msg.model.split('/').pop()}</span>}
