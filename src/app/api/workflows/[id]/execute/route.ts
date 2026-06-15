@@ -1,39 +1,50 @@
 // POST /api/workflows/[id]/execute
-// Возвращает 501 Not Implemented до тех пор, пока не реализована
-// реальная оркестрация агентов через OrchestratorEngine (Option B).
+// Выполняет workflow template пошагово через OrchestratorChatEngine.
 //
-// Это намеренный guard: агенты и клиенты должны получать явный
-// отказ, а не фиктивный success / pending.
+// Тело запроса (JSON, опционально):
+//   { input?: Record<string, unknown>, workspaceId?: string }
+//
+// Ответ:
+//   200 completed|partial  — { result: ExecutionResult }
+//   400                    — невалидное тело
+//   404                    — шаблон не найден
+//   500                    — внутренняя ошибка
 
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { workflowService } from '@/lib/workflows';
+import { loggers } from '@/lib/logger';
 
 type Ctx = { params: Promise<{ id: string }> };
 
-export async function POST(_request: NextRequest, { params }: Ctx) {
+export async function POST(request: NextRequest, { params }: Ctx) {
   const { id } = await params;
 
-  // Подтверждаем, что шаблон существует, чтобы сообщение было информативным
-  const template = await db.workflowTemplate.findUnique({
-    where: { id },
-    select: { id: true, name: true, status: true },
-  }).catch(() => null);
-
-  if (!template) {
-    return NextResponse.json(
-      { error: `Workflow template not found: ${id}` },
-      { status: 404 }
-    );
+  let body: { input?: Record<string, unknown>; workspaceId?: string } = {};
+  try {
+    const raw = await request.text();
+    if (raw.trim()) body = JSON.parse(raw) as typeof body;
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  // 501 — исполнение не реализовано
-  return NextResponse.json(
-    {
-      error: 'Workflow execution is not yet implemented.',
-      templateId: template.id,
-      templateName: template.name,
-      hint: 'Use POST /api/orchestrator/chat to run agents manually, or wait for Option B implementation.',
-    },
-    { status: 501 }
-  );
+  try {
+    const result = await workflowService.executeTemplate(
+      id,
+      body.input ?? {},
+      body.workspaceId
+    );
+
+    const status = result.status === 'failed' ? 500 : 200;
+    return NextResponse.json({ result }, { status });
+
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+
+    if (msg.includes('not found')) {
+      return NextResponse.json({ error: msg }, { status: 404 });
+    }
+
+    loggers.api.error({ err }, `[API] POST /workflows/${id}/execute error:`);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }

@@ -3,6 +3,7 @@
 // and seeding default templates for common multi-agent workflows.
 
 import { db } from '../db';
+import { loggers } from '@/lib/logger';
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -38,12 +39,28 @@ export interface WorkflowTemplateWithSteps {
   updatedAt: Date;
 }
 
+export interface WorkflowStepResult {
+  stepNumber: number;
+  agentRole: string;
+  description: string;
+  status: 'completed' | 'failed' | 'skipped';
+  result?: string;
+  error?: string;
+  durationMs: number;
+}
+
 export interface ExecutionResult {
   templateId: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
+  templateName: string;
+  status: 'completed' | 'failed' | 'partial';
   message: string;
   input: Record<string, unknown>;
+  stepResults: WorkflowStepResult[];
+  completedSteps: number;
+  totalSteps: number;
   startedAt: Date;
+  completedAt: Date;
+  totalDurationMs: number;
 }
 
 // ─── Default Workflow Definitions ────────────────────────────
@@ -274,33 +291,127 @@ class WorkflowService {
     return this.parseTemplate(template);
   }
 
-  // ─── Execute Template ────────────────────────────────────────
+  // ─── Execute Template (Real Implementation) ──────────────────
 
   /**
-   * Workflow execution — NOT YET IMPLEMENTED.
-   * Throws a NotImplementedError so callers receive an unambiguous failure,
-   * not a fabricated {status:'pending'} that agents might treat as success.
+   * Execute a workflow template step-by-step via OrchestratorChatEngine.
    *
-   * Option B (real execution via OrchestratorEngine) will replace this
-   * when the scope is confirmed.
+   * Each WorkflowStep becomes a targeted chat() call. The output of each
+   * step is appended to a rolling context string passed into the next step,
+   * enabling information chaining across agents.
+   *
+   * Failure policy: step failure → marks workflow 'partial', continues
+   * remaining steps. Caller receives full per-step breakdown.
    */
   async executeTemplate(
     templateId: string,
-    _input: Record<string, unknown>
-  ): Promise<never> {
-    // Verify template exists first so the error message is informative
-    const template = await db.workflowTemplate.findUnique({
-      where: { id: templateId },
+    input: Record<string, unknown>,
+    workspaceId?: string
+  ): Promise<ExecutionResult> {
+    const startedAt = new Date();
+
+    // 1. Load template
+    const template = await db.workflowTemplate.findUnique({ where: { id: templateId } });
+    if (!template) throw new Error(`Workflow template not found: ${templateId}`);
+
+    const parsed = this.parseTemplate({
+      ...template,
+      steps: typeof template.steps === 'string' ? template.steps : JSON.stringify(template.steps),
+      description: template.description ?? null,
+      category: template.category ?? null,
+      icon: template.icon ?? null,
+      version: template.version ?? '1.0.0',
+      metadata: template.metadata ?? null,
     });
 
-    if (!template) {
-      throw new Error(`Workflow template not found: ${templateId}`);
+    if (parsed.steps.length === 0) {
+      return {
+        templateId, templateName: template.name, status: 'failed',
+        message: 'Workflow template has no steps defined.',
+        input, stepResults: [], completedSteps: 0, totalSteps: 0,
+        startedAt, completedAt: new Date(), totalDurationMs: 0,
+      };
     }
 
-    throw new Error(
-      `Workflow execution is not yet implemented (template: "${template.name}"). ` +
-      `Use the orchestrator chat API to run agents manually.`
+    // 2. Lazy-import to avoid circular dependency
+    const { orchestratorChatEngine } = await import('../orchestrator/OrchestratorChatEngine');
+
+    // 3. Rolling context — seeded with caller input, grows with each step output
+    let rollingContext =
+      `Workflow: "${template.name}"\n` +
+      (template.description ? `Description: ${template.description}\n` : '') +
+      `Input: ${JSON.stringify(input, null, 2)}`;
+
+    const stepResults: WorkflowStepResult[] = [];
+    let completedSteps = 0;
+    let overallStatus: ExecutionResult['status'] = 'completed';
+
+    // 4. Sequential step execution
+    for (const step of parsed.steps) {
+      const stepStart = Date.now();
+      loggers.orchestrator.info(
+        `[Workflow] Step ${step.stepNumber}/${parsed.steps.length}: ${step.agentRole} — ${step.description}`
+      );
+
+      const stepMessage =
+        `[Workflow Step ${step.stepNumber}/${parsed.steps.length}] ${step.description}\n\n` +
+        `Context from previous steps:\n${rollingContext}`;
+
+      try {
+        const chatResponse = await orchestratorChatEngine.chat({
+          message: stepMessage,
+          workspaceId,
+          mode: 'auto',
+        });
+
+        stepResults.push({
+          stepNumber: step.stepNumber,
+          agentRole: step.agentRole,
+          description: step.description,
+          status: 'completed',
+          result: chatResponse.orchestratorResponse,
+          durationMs: Date.now() - stepStart,
+        });
+        completedSteps++;
+
+        // Chain output into next step context (capped at 1500 chars)
+        rollingContext +=
+          `\n\n--- Step ${step.stepNumber} (${step.agentRole}) ---\n` +
+          chatResponse.orchestratorResponse.slice(0, 1500);
+
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        loggers.orchestrator.error({ err }, `[Workflow] Step ${step.stepNumber} failed`);
+        stepResults.push({
+          stepNumber: step.stepNumber, agentRole: step.agentRole,
+          description: step.description, status: 'failed',
+          error: errorMsg, durationMs: Date.now() - stepStart,
+        });
+        overallStatus = 'partial';
+      }
+    }
+
+    if (completedSteps === 0) overallStatus = 'failed';
+    const completedAt = new Date();
+    const totalDurationMs = completedAt.getTime() - startedAt.getTime();
+
+    loggers.orchestrator.info(
+      `[Workflow] "${template.name}" — ${completedSteps}/${parsed.steps.length} steps in ${totalDurationMs}ms`
     );
+
+    return {
+      templateId, templateName: template.name,
+      status: overallStatus,
+      message:
+        overallStatus === 'completed'
+          ? `Workflow "${template.name}" completed (${completedSteps}/${parsed.steps.length} steps).`
+          : overallStatus === 'partial'
+          ? `Workflow "${template.name}" partial (${completedSteps}/${parsed.steps.length} steps succeeded).`
+          : `Workflow "${template.name}" failed — 0 steps completed.`,
+      input, stepResults, completedSteps,
+      totalSteps: parsed.steps.length,
+      startedAt, completedAt, totalDurationMs,
+    };
   }
 
   // ─── Seed Default Templates ──────────────────────────────────
