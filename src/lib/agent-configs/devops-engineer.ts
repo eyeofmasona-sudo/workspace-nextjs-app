@@ -63,6 +63,15 @@ export const devopsEngineerConfig: AgentConfig = {
       enabled: true,
       requiredPermission: 'read',
     },
+  
+    { toolId: 'filesystem.read', enabled: true, requiredPermission: 'read' },
+    { toolId: 'filesystem.list', enabled: true, requiredPermission: 'read' },
+    { toolId: 'filesystem.exists', enabled: true, requiredPermission: 'read' },
+    { toolId: 'git.status', enabled: true, requiredPermission: 'read' },
+    { toolId: 'git.log', enabled: true, requiredPermission: 'read' },
+    { toolId: 'git.branch', enabled: true, requiredPermission: 'read' },
+    { toolId: 'project.build', enabled: true, requiredPermission: 'write' },
+    { toolId: 'project.test', enabled: true, requiredPermission: 'write' },
   ],
 
   hooks: [],

@@ -68,6 +68,14 @@ export const qaEngineerConfig: AgentConfig = {
       enabled: true,
       requiredPermission: 'read',
     },
+  
+    { toolId: 'filesystem.read', enabled: true, requiredPermission: 'read' },
+    { toolId: 'filesystem.search', enabled: true, requiredPermission: 'read' },
+    { toolId: 'git.diff', enabled: true, requiredPermission: 'read' },
+    { toolId: 'git.status', enabled: true, requiredPermission: 'read' },
+    { toolId: 'project.test', enabled: true, requiredPermission: 'write' },
+    { toolId: 'project.lint', enabled: true, requiredPermission: 'read' },
+    { toolId: 'project.typecheck', enabled: true, requiredPermission: 'read' },
   ],
 
   hooks: [],

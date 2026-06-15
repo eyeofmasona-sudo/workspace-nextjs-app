@@ -566,4 +566,15 @@ export const DEFAULT_SKILLS: DefaultSkillDefinition[] = [
     requiredTools: ['database.query', 'filesystem.read'],
     tags: ['finance', 'analysis', 'budgeting', 'reporting'],
   },
+  {
+    key: 'communication',
+    name: 'Communication',
+    description: 'Draft, send, and manage professional communications across channels (chat, email, DM). Handles tone adaptation, escalation, and response drafting.',
+    category: 'communication',
+    icon: '💬',
+    version: '1.0.0',
+    status: 'available',
+    requiredTools: [],
+    tags: ['communication', 'messaging', 'response', 'drafting'],
+  },
 ];

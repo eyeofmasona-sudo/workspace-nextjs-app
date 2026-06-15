@@ -56,6 +56,15 @@ export const frontendEngineerConfig: AgentConfig = {
       enabled: true,
       requiredPermission: 'read',
     },
+  
+    { toolId: 'filesystem.read', enabled: true, requiredPermission: 'read' },
+    { toolId: 'filesystem.write', enabled: true, requiredPermission: 'write' },
+    { toolId: 'filesystem.list', enabled: true, requiredPermission: 'read' },
+    { toolId: 'filesystem.search', enabled: true, requiredPermission: 'read' },
+    { toolId: 'git.status', enabled: true, requiredPermission: 'read' },
+    { toolId: 'project.build', enabled: true, requiredPermission: 'write' },
+    { toolId: 'project.typecheck', enabled: true, requiredPermission: 'read' },
+    { toolId: 'project.lint', enabled: true, requiredPermission: 'read' },
   ],
 
   hooks: [],

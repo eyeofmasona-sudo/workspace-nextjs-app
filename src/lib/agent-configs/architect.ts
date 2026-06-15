@@ -68,6 +68,13 @@ export const architectConfig: AgentConfig = {
       enabled: true,
       requiredPermission: 'read',
     },
+  
+    { toolId: 'filesystem.read', enabled: true, requiredPermission: 'read' },
+    { toolId: 'filesystem.list', enabled: true, requiredPermission: 'read' },
+    { toolId: 'filesystem.search', enabled: true, requiredPermission: 'read' },
+    { toolId: 'git.log', enabled: true, requiredPermission: 'read' },
+    { toolId: 'git.branch', enabled: true, requiredPermission: 'read' },
+    { toolId: 'project.typecheck', enabled: true, requiredPermission: 'read' },
   ],
 
   hooks: [],

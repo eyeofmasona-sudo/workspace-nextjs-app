@@ -69,6 +69,10 @@ export const researcherConfig: AgentConfig = {
       enabled: true,
       requiredPermission: 'read',
     },
+  
+    { toolId: 'filesystem.read', enabled: true, requiredPermission: 'read' },
+    { toolId: 'filesystem.search', enabled: true, requiredPermission: 'read' },
+    { toolId: 'filesystem.list', enabled: true, requiredPermission: 'read' },
   ],
 
   hooks: [],
