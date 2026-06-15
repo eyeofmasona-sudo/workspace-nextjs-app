@@ -8,6 +8,7 @@ import { toolRegistryService } from './ToolRegistryService';
 import { toolPermissionService } from './ToolPermissionService';
 import { toolExecutionService } from './ToolExecutionService';
 import { toolAdapterRegistry } from './ToolAdapterRegistry';
+import { agentPermissionService } from '../agent-system/AgentPermissionService';
 import type { ExecuteToolRequest, ExecuteToolResult } from './types';
 
 class ToolHub {
@@ -97,7 +98,30 @@ class ToolHub {
       metadata: { toolKey },
     });
 
-    // 5. Check permissions via ToolPermissionPolicy → AgentPermission
+    // 5a. Direct AgentPermission check by toolKey category — defence-in-depth.
+    //     Ensures an agent has at least the category-level read/write permission
+    //     even if ToolPermissionPolicy rows are absent for this tool.
+    //     Category maps directly to the AgentPermission.permissionKey column.
+    if (tool.category) {
+      const categoryPermKey = tool.category; // e.g. 'filesystem', 'git', 'terminal'
+      const requiredLevel = tool.riskLevel === 'low' ? 'read' : 'write';
+      const categoryAllowed = await agentPermissionService.canAgentUsePermission(
+        agentId,
+        categoryPermKey,
+        requiredLevel
+      );
+      if (!categoryAllowed) {
+        const reason = `Agent lacks '${categoryPermKey}:${requiredLevel}' permission required for tool '${toolKey}'`;
+        await toolExecutionService.markBlocked(execution.id, reason);
+        return {
+          status: 'blocked',
+          executionId: execution.id,
+          error: reason,
+        };
+      }
+    }
+
+    // 5b. Check permissions via ToolPermissionPolicy → AgentPermission
     const permissionCheck = await toolPermissionService.checkToolPermission(agentId, tool.id);
     if (!permissionCheck.allowed) {
       await toolExecutionService.markBlocked(execution.id, permissionCheck.reason ?? 'Insufficient permissions');
