@@ -736,3 +736,84 @@ model HandoffRecord {
 
   @@map("handoff_records")
 }
+
+// ─── Content Calendar ─────────────────────────────────────────
+
+model ContentItem {
+  id               String    @id @default(cuid())
+  workspaceId      String
+  projectId        String?
+
+  // Content fields
+  title            String
+  platform         String    // instagram | tiktok | telegram | twitter | linkedin | youtube | whatsapp | general
+  format           String    @default("text") // image | video | text | carousel | reel | story
+  caption          String    @default("")
+  script           String    @default("")
+  hashtags         String    @default("[]") // JSON array of strings
+  mediaUrl         String?   // URL/path to media asset (future integration)
+
+  // Workflow status
+  status           String    @default("draft")
+  // draft | in_review | approved | scheduled | published_manual | rejected | archived
+
+  // Scheduling
+  scheduledAt      DateTime?
+  publishedAt      DateTime? // set when status = published_manual
+
+  // Attribution
+  createdByAgentId String?
+  approvedByAgentId String?
+
+  // Brand Guardian scores
+  riskLevel        String    @default("low")  // low | medium | high | critical
+  score            Int       @default(0)      // 0–100
+
+  // Notes
+  notes            String?
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  reviews          ContentReview[]
+  queueItems       PublishingQueueItem[]
+
+  @@map("content_items")
+}
+
+model ContentReview {
+  id            String   @id @default(cuid())
+  contentItemId String
+  agentId       String?
+  agentName     String?
+  status        String   // approved | rejected | needs_changes
+  score         Int      @default(0)
+  riskLevel     String   @default("low")
+  notes         String?
+  issues        String   @default("[]") // JSON array
+  suggestions   String   @default("[]") // JSON array
+  reviewedAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  contentItem   ContentItem @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+
+  @@map("content_reviews")
+}
+
+model PublishingQueueItem {
+  id            String    @id @default(cuid())
+  contentItemId String
+  workspaceId   String
+  scheduledAt   DateTime
+  publishedAt   DateTime?
+  isPublished   Boolean   @default(false)
+  publishedBy   String?   // agentId or "manual"
+  platform      String
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  contentItem   ContentItem @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+
+  @@map("publishing_queue_items")
+}
