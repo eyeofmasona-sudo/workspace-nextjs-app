@@ -5,6 +5,7 @@
 'use client';
 
 import { useState } from 'react';
+import { PreviewPanel } from '@/components/preview/PreviewPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { OfficeApproval, OfficeEvent } from '@/hooks/useOfficeData';
@@ -53,7 +54,7 @@ export function SplitWorkspacePanel({ approvals, events }: SplitWorkspacePanelPr
 
         <div className="flex-1 min-h-0 overflow-hidden">
           {PANEL_TABS.map((tab) => (
-            <TabsContent key={tab.key} value={tab.key} className="h-full m-0 p-3">
+            <TabsContent key={tab.key} value={tab.key} className={`h-full m-0 ${tab.key === 'preview' ? '' : 'p-3'}`}>
               <TabContent tabKey={tab.key} approvals={approvals} events={events} />
             </TabsContent>
           ))}
@@ -107,6 +108,9 @@ function TabContent({ tabKey, approvals, events }: {
           </div>
         </ScrollArea>
       );
+
+    case 'preview':
+      return <PreviewPanel />;
 
     default:
       return (
