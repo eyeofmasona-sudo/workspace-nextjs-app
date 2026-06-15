@@ -92,7 +92,8 @@ class ToolHub {
       toolId: tool.id,
       toolKey,
       action,
-      inputSummary: JSON.stringify(input).slice(0, 500), // Truncate for safety
+      inputSummary: JSON.stringify(input).slice(0, 500), // Усечённый (только для отображения)
+      inputFull: JSON.stringify(input),                  // Полный — используется при resume
       riskLevel: tool.riskLevel,
       correlationId,
       metadata: { toolKey },
@@ -145,6 +146,7 @@ class ToolHub {
         risk: tool.riskLevel as 'low' | 'medium' | 'high' | 'critical',
         inputSummary: JSON.stringify(input).slice(0, 500),
         correlationId,
+        // inputFull уже сохранён в ToolExecution при createExecution (шаг 4)
       });
 
       await toolExecutionService.markRequiresApproval(execution.id, approvalRequest.id);

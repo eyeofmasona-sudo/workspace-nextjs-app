@@ -42,6 +42,7 @@ class ToolExecutionService {
     toolKey: string;
     action: string;
     inputSummary?: string;
+    inputFull?: string;       // полный JSON input — без обрезки, используется при resume
     riskLevel?: string;
     correlationId?: string;
     metadata?: Record<string, unknown>;
@@ -58,6 +59,7 @@ class ToolExecutionService {
         action: params.action,
         correlationId: params.correlationId ?? null,
         inputSummary: params.inputSummary ?? null,
+        inputFull: params.inputFull ?? null,
         status: 'pending',
         riskLevel: params.riskLevel ?? 'low',
         metadata: JSON.stringify(mergedMetadata),

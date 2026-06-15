@@ -415,7 +415,8 @@ model ToolExecution {
   toolId            String
   action            String // e.g. "read", "write", "run", "deploy"
   correlationId     String? // Links orchestrator → tool events for UI animation correlation
-  inputSummary      String? // JSON: safe summary of input
+  inputSummary      String? // JSON: truncated summary of input (display/logs only)
+  inputFull         String? // JSON: full input — used on resume (never truncated)
   outputSummary     String? // JSON: safe summary of output
   status            String    @default("pending") // pending | running | success | failed | blocked | requires_approval
   riskLevel         String    @default("low") // low | medium | high | critical

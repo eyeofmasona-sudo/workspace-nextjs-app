@@ -22,15 +22,18 @@ export async function POST(
       );
     }
 
-    // 2. Re-execute the tool with resumedFromApproval flag
-    // Note: inputSummary may be truncated, so parse safely
+    // 2. Восстанавливаем полный input для resume.
+    //    inputFull — полный JSON без обрезки, сохранённый при создании execution.
+    //    inputSummary НЕ используется для resume (может быть усечён до 500 chars).
     let parsedInput: unknown = {};
-    if (execution.inputSummary) {
+    const rawInput = (execution as Record<string, unknown>).inputFull as string | null
+      ?? execution.inputSummary; // fallback для старых записей до этого патча
+    if (rawInput) {
       try {
-        parsedInput = JSON.parse(execution.inputSummary);
+        parsedInput = JSON.parse(rawInput);
       } catch {
-        // inputSummary was truncated — use as-is
-        parsedInput = { truncated: execution.inputSummary };
+        // inputFull должен всегда быть валидным JSON — логируем как ошибку
+        parsedInput = {};
       }
     }
 
