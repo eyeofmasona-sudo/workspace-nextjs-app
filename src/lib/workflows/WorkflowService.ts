@@ -274,41 +274,33 @@ class WorkflowService {
     return this.parseTemplate(template);
   }
 
-  // ─── Execute Template (Placeholder) ──────────────────────────
+  // ─── Execute Template ────────────────────────────────────────
 
   /**
-   * Placeholder for future workflow execution.
-   * Returns a pending execution result indicating the feature is not yet implemented.
+   * Workflow execution — NOT YET IMPLEMENTED.
+   * Throws a NotImplementedError so callers receive an unambiguous failure,
+   * not a fabricated {status:'pending'} that agents might treat as success.
+   *
+   * Option B (real execution via OrchestratorEngine) will replace this
+   * when the scope is confirmed.
    */
   async executeTemplate(
     templateId: string,
-    input: Record<string, unknown>
-  ): Promise<ExecutionResult> {
-    // Verify template exists
+    _input: Record<string, unknown>
+  ): Promise<never> {
+    // Verify template exists first so the error message is informative
     const template = await db.workflowTemplate.findUnique({
       where: { id: templateId },
     });
 
     if (!template) {
-      return {
-        templateId,
-        status: 'failed',
-        message: `Workflow template not found: ${templateId}`,
-        input,
-        startedAt: new Date(),
-      };
+      throw new Error(`Workflow template not found: ${templateId}`);
     }
 
-    // Placeholder: In the future, this will orchestrate agents through
-    // the defined workflow steps, passing input between steps and
-    // tracking execution state.
-    return {
-      templateId,
-      status: 'pending',
-      message: `Workflow execution for "${template.name}" is not yet implemented. This is a placeholder for the future execution engine.`,
-      input,
-      startedAt: new Date(),
-    };
+    throw new Error(
+      `Workflow execution is not yet implemented (template: "${template.name}"). ` +
+      `Use the orchestrator chat API to run agents manually.`
+    );
   }
 
   // ─── Seed Default Templates ──────────────────────────────────
