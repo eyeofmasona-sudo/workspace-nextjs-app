@@ -12,3 +12,4 @@ db/*.db
 tsconfig.tsbuildinfo
 .next/
 node_modules/
+prisma/db/*.db
