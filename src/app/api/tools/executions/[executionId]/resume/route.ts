@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { toolExecutionService } from '@/lib/tool-hub/ToolExecutionService';
 import { toolHub } from '@/lib/tool-hub/ToolHub';
+import { loggers } from '@/lib/logger';
 
 export async function POST(
   request: NextRequest,
@@ -57,7 +58,7 @@ export async function POST(
     if (message.includes('not approved')) {
       return NextResponse.json({ error: message }, { status: 403 });
     }
-    console.error('[API] POST /tools/executions/[executionId]/resume error:', error);
+    loggers.toolHub.error({ err: error }, '[API] POST /tools/executions/[executionId]/resume error:');
     return NextResponse.json({ error: 'Failed to resume execution' }, { status: 500 });
   }
 }

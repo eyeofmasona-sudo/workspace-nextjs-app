@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { skillPackService } from '@/lib/packs';
+import { loggers } from '@/lib/logger';
 
 export async function GET(
   request: NextRequest,
@@ -20,7 +21,7 @@ export async function GET(
 
     return NextResponse.json({ pack });
   } catch (error) {
-    console.error('[API] GET /skill-packs/:key error:', error);
+    loggers.api.error({ err: error }, '[API] GET /skill-packs/:key error:');
     return NextResponse.json(
       { error: 'Failed to fetch skill pack' },
       { status: 500 }

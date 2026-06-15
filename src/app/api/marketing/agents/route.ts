@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { marketingDepartmentRegistry } from '@/lib/marketing-department';
+import { loggers } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
     const allSpecs = marketingDepartmentRegistry.getAllAgentSpecs();
     return NextResponse.json({ success: true, data: allSpecs });
   } catch (error) {
-    console.error('[Marketing Agents API] Error:', error);
+    loggers.api.error({ err: error }, '[Marketing Agents API] Error:');
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

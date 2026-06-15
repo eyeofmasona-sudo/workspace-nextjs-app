@@ -6,6 +6,7 @@
 import { db } from '../db';
 import { eventBus } from '../event-bus';
 import { EventTypes } from '../types/events';
+import { logger } from '@/lib/logger';
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -468,7 +469,7 @@ class InstallationService {
         },
       });
     } catch (error) {
-      console.error('[InstallationService] Failed to log skill action:', error);
+      logger.error({ err: error }, '[InstallationService] Failed to log skill action:');
     }
   }
 
@@ -490,7 +491,7 @@ class InstallationService {
         },
       });
     } catch (error) {
-      console.error('[InstallationService] Failed to log tool action:', error);
+      logger.error({ err: error }, '[InstallationService] Failed to log tool action:');
     }
   }
 }

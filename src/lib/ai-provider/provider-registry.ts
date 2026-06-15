@@ -3,6 +3,7 @@
 // Agents resolve their provider through this registry at runtime.
 
 import type { AIProvider } from './types';
+import { logger } from '@/lib/logger';
 
 class ProviderRegistry {
   private static instance: ProviderRegistry | null = null;
@@ -20,7 +21,7 @@ class ProviderRegistry {
   /** Register a provider */
   register(provider: AIProvider): void {
     if (this.providers.has(provider.id)) {
-      console.warn(`[ProviderRegistry] Overwriting existing provider: ${provider.id}`);
+      logger.warn(`[ProviderRegistry] Overwriting existing provider: ${provider.id}`);
     }
     this.providers.set(provider.id, provider);
   }

@@ -10,6 +10,7 @@ import type {
   BrowserProviderConfig,
 } from './BrowserOperatorTypes';
 import defaultProvidersConfig from './config/providers.config.json';
+import { loggers } from '@/lib/logger';
 
 // ── Registry ───────────────────────────────────────────────────
 class BrowserOperatorProviderRegistry {
@@ -81,7 +82,7 @@ class BrowserOperatorProviderRegistry {
         try {
           await adapter.initialize(config);
         } catch (err) {
-          console.error(`[BrowserOperator] Failed to initialize provider "${id}":`, err);
+          loggers.browser.error({ err: err }, `[BrowserOperator] Failed to initialize provider "${id}":`);
         }
       }
     }

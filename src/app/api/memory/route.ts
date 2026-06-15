@@ -3,6 +3,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { memorySystem } from '@/lib/memory';
+import { loggers } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
     const items = await memorySystem.getRecent(limit);
     return NextResponse.json({ items });
   } catch (error) {
-    console.error('[API] GET /memory error:', error);
+    loggers.memory.error({ err: error }, '[API] GET /memory error:');
     return NextResponse.json({ error: 'Failed to fetch memory items' }, { status: 500 });
   }
 }
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest) {
     const item = await memorySystem.store({ scope, scopeId, type, content, metadata });
     return NextResponse.json({ item }, { status: 201 });
   } catch (error) {
-    console.error('[API] POST /memory error:', error);
+    loggers.memory.error({ err: error }, '[API] POST /memory error:');
     return NextResponse.json({ error: 'Failed to store memory' }, { status: 500 });
   }
 }

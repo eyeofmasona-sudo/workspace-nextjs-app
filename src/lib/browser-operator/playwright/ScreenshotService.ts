@@ -7,6 +7,7 @@
 
 import { mkdirSync, existsSync, readdirSync, unlinkSync, statSync } from 'fs';
 import { join } from 'path';
+import { loggers } from '@/lib/logger';
 
 type Page = any; // Playwright Page — uses any to avoid compile-time import
 
@@ -51,7 +52,7 @@ export class ScreenshotService {
         fullPage: false, // Viewport only for speed
       });
     } catch (err) {
-      console.error('[ScreenshotService] Failed to capture:', err);
+      loggers.browser.error({ err: err }, '[ScreenshotService] Failed to capture:');
       // Return empty path on failure
       return '';
     }
@@ -162,7 +163,7 @@ export class ScreenshotService {
       }
 
       if (removed > 0) {
-        console.debug(`[ScreenshotService] Cleaned up ${removed} old screenshots`);
+        loggers.browser.debug(`[ScreenshotService] Cleaned up ${removed} old screenshots`);
       }
     } catch {
       // Swallow

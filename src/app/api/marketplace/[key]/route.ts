@@ -3,6 +3,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { marketplaceService } from '@/lib/marketplace';
+import { loggers } from '@/lib/logger';
 
 export async function GET(
   request: NextRequest,
@@ -21,7 +22,7 @@ export async function GET(
 
     return NextResponse.json({ item });
   } catch (error) {
-    console.error('[API] GET /marketplace/[key] error:', error);
+    loggers.api.error({ err: error }, '[API] GET /marketplace/[key] error:');
     return NextResponse.json(
       { error: 'Failed to fetch marketplace item' },
       { status: 500 }
@@ -53,7 +54,7 @@ export async function POST(
 
     return NextResponse.json({ result }, { status: 201 });
   } catch (error) {
-    console.error('[API] POST /marketplace/[key] error:', error);
+    loggers.api.error({ err: error }, '[API] POST /marketplace/[key] error:');
     return NextResponse.json(
       { error: 'Failed to install from marketplace' },
       { status: 500 }

@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { temporaryAgentService } from '@/lib/agent-system';
 import { proposeTemporaryAgentSchema } from '@/lib/validations';
+import { loggers } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ proposal }, { status: 201 });
   } catch (error) {
-    console.error('[API] POST /agents/propose-temporary error:', error);
+    loggers.api.error({ err: error }, '[API] POST /agents/propose-temporary error:');
     return NextResponse.json({ error: 'Failed to propose temporary agent' }, { status: 500 });
   }
 }

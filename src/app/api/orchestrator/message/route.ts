@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { orchestratorEngine } from '@/lib/orchestrator';
 import { orchestratorMessageSchema } from '@/lib/validations';
+import { loggers } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest) {
     const statusCode = response.type === 'error' ? 500 : 200;
     return NextResponse.json(response, { status: statusCode });
   } catch (error) {
-    console.error('[API] POST /orchestrator/message error:', error);
+    loggers.orchestrator.error({ err: error }, '[API] POST /orchestrator/message error:');
     return NextResponse.json(
       {
         type: 'error',

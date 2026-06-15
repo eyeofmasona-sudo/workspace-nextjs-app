@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { marketingDepartmentRegistry } from '@/lib/marketing-department';
+import { loggers } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('[Marketing Workflow API] Error:', error);
+    loggers.api.error({ err: error }, '[Marketing Workflow API] Error:');
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -60,7 +61,7 @@ export async function PATCH(request: NextRequest) {
       data: { projectId, workflowState },
     });
   } catch (error) {
-    console.error('[Marketing Workflow API] Error:', error);
+    loggers.api.error({ err: error }, '[Marketing Workflow API] Error:');
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

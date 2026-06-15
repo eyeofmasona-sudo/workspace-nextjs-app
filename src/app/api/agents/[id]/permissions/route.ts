@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { agentPermissionService } from '@/lib/agent-system';
 import { updatePermissionSchema } from '@/lib/validations';
+import { loggers } from '@/lib/logger';
 
 export async function GET(
   request: NextRequest,
@@ -22,7 +23,7 @@ export async function GET(
     const permissions = await agentPermissionService.getAgentPermissions(id);
     return NextResponse.json({ permissions });
   } catch (error) {
-    console.error('[API] GET /agents/:id/permissions error:', error);
+    loggers.api.error({ err: error }, '[API] GET /agents/:id/permissions error:');
     return NextResponse.json({ error: 'Failed to fetch agent permissions' }, { status: 500 });
   }
 }
@@ -66,7 +67,7 @@ export async function PATCH(
 
     return NextResponse.json({ permissions: updatedPermissions });
   } catch (error) {
-    console.error('[API] PATCH /agents/:id/permissions error:', error);
+    loggers.api.error({ err: error }, '[API] PATCH /agents/:id/permissions error:');
     return NextResponse.json({ error: 'Failed to update agent permissions' }, { status: 500 });
   }
 }

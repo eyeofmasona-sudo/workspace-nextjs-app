@@ -3,6 +3,7 @@
 
 import { NextResponse } from 'next/server';
 import { initializeSystem } from '@/lib/seed';
+import { loggers } from '@/lib/logger';
 
 export async function GET() {
   try {
@@ -12,7 +13,7 @@ export async function GET() {
 
     return NextResponse.json({ initialized, status });
   } catch (error) {
-    console.error('[API] GET /seed error:', error);
+    loggers.seed.error({ err: error }, '[API] GET /seed error:');
     return NextResponse.json({ error: 'Failed to check system status' }, { status: 500 });
   }
 }
@@ -27,7 +28,7 @@ export async function POST() {
       agentsSeeded: result.agentsSeeded,
     }, { status: 201 });
   } catch (error) {
-    console.error('[API] POST /seed error:', error);
+    loggers.seed.error({ err: error }, '[API] POST /seed error:');
     return NextResponse.json({ error: 'Failed to initialize system' }, { status: 500 });
   }
 }

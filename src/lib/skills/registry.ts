@@ -9,6 +9,7 @@
 // - New skills can be registered without modifying existing code
 
 import type { ISkill, SkillRegistration, SkillRegistryStats } from './types';
+import { logger } from '@/lib/logger';
 
 // ─── Skill Registry ──────────────────────────────────────────
 
@@ -33,7 +34,7 @@ class SkillRegistry {
    */
   register(skill: ISkill, source: string = 'unknown'): void {
     if (this.registrations.has(skill.id)) {
-      console.warn(`[SkillRegistry] Overwriting existing skill: ${skill.id}`);
+      logger.warn(`[SkillRegistry] Overwriting existing skill: ${skill.id}`);
     }
 
     this.registrations.set(skill.id, {
@@ -42,7 +43,7 @@ class SkillRegistry {
       source,
     });
 
-    console.log(`[SkillRegistry] Registered skill: ${skill.id} (${skill.name}) from ${source}`);
+    logger.info(`[SkillRegistry] Registered skill: ${skill.id} (${skill.name}) from ${source}`);
   }
 
   /**

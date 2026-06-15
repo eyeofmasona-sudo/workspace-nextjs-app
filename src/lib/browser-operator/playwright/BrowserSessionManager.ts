@@ -21,6 +21,7 @@
 import type { BrowserProviderConfig } from '../BrowserOperatorTypes';
 import { mkdirSync } from 'fs';
 import { join } from 'path';
+import { loggers } from '@/lib/logger';
 
 // Type declaration for webpack/Next.js runtime require — used for Playwright lazy loading
 declare const __non_webpack_require__: typeof require | undefined;
@@ -80,7 +81,7 @@ export class BrowserSessionManager {
         this.playwrightModule = pw;
         return pw;
       } catch {
-        console.warn('[BrowserSessionManager] Playwright not installed. Run: bun add playwright && bunx playwright install chromium');
+        loggers.browser.warn('[BrowserSessionManager] Playwright not installed. Run: bun add playwright && bunx playwright install chromium');
         return null;
       }
     })();
@@ -173,7 +174,7 @@ export class BrowserSessionManager {
         };
 
         this.sessions.set(providerId, session);
-        console.info(`[BrowserSessionManager] Launched persistent context for "${providerId}" (profile: ${config.profileDir})`);
+        loggers.browser.info(`[BrowserSessionManager] Launched persistent context for "${providerId}" (profile: ${config.profileDir})`);
         return session;
       }
 
@@ -205,7 +206,7 @@ export class BrowserSessionManager {
       this.sessions.set(providerId, session);
       return session;
     } catch (err) {
-      console.error(`[BrowserSessionManager] Failed to launch browser for "${providerId}":`, err);
+      loggers.browser.error({ err: err }, `[BrowserSessionManager] Failed to launch browser for "${providerId}":`);
       return null;
     }
   }

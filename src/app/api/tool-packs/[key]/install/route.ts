@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { toolPackService } from '@/lib/packs';
+import { loggers } from '@/lib/logger';
 
 export async function POST(
   request: NextRequest,
@@ -26,7 +27,7 @@ export async function POST(
     if (message.includes('not found')) {
       return NextResponse.json({ error: message }, { status: 404 });
     }
-    console.error('[API] POST /tool-packs/:key/install error:', error);
+    loggers.api.error({ err: error }, '[API] POST /tool-packs/:key/install error:');
     return NextResponse.json(
       { error: 'Failed to install tool pack' },
       { status: 500 }

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { temporaryAgentService } from '@/lib/agent-system';
 import { deactivateAgentSchema } from '@/lib/validations';
+import { loggers } from '@/lib/logger';
 
 export async function POST(
   request: NextRequest,
@@ -37,7 +38,7 @@ export async function POST(
       reason: parseResult.data.reason ?? 'Temporary agent deactivated',
     });
   } catch (error) {
-    console.error('[API] POST /agents/:id/deactivate error:', error);
+    loggers.api.error({ err: error }, '[API] POST /agents/:id/deactivate error:');
     return NextResponse.json({ error: 'Failed to deactivate agent' }, { status: 500 });
   }
 }

@@ -4,6 +4,7 @@
 // behavior without modifying the runtime itself.
 
 import type { AgentHook, HookContext, AgentResult } from './types';
+import { loggers } from '@/lib/logger';
 
 // ─── Hook Composer ──────────────────────────────────────────
 
@@ -77,7 +78,7 @@ export const loggingHook: AgentHook = {
   name: 'logging',
 
   async beforeExecute(context: HookContext): Promise<HookContext> {
-    console.log(
+    loggers.agentRuntime.info(
       `[AgentRuntime] ▶ Starting execution: ${context.agentConfig.name} ` +
       `(${context.agentConfig.id})`
     );
@@ -85,7 +86,7 @@ export const loggingHook: AgentHook = {
   },
 
   async afterExecute(context: HookContext, result: AgentResult): Promise<AgentResult> {
-    console.log(
+    loggers.agentRuntime.info(
       `[AgentRuntime] ◀ Completed: ${context.agentConfig.name} ` +
       `→ ${result.status} in ${result.durationMs}ms ` +
       `(${result.usage.totalTokens} tokens)`
@@ -94,7 +95,7 @@ export const loggingHook: AgentHook = {
   },
 
   async onError(context: HookContext, error: Error): Promise<Error | null> {
-    console.error(
+    loggers.agentRuntime.error(
       `[AgentRuntime] ✗ Error in ${context.agentConfig.name}: ${error.message}`
     );
     return null; // Don't modify the error
@@ -119,7 +120,7 @@ export const costTrackingHook: AgentHook = {
     context.data.estimatedCost = cost;
 
     if (cost > 0.01) {
-      console.warn(
+      loggers.agentRuntime.warn(
         `[AgentRuntime] 💰 High cost: $${cost.toFixed(4)} for ${context.agentConfig.name}`
       );
     }

@@ -15,6 +15,7 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
+import { loggers } from '@/lib/logger';
 
 // ── Limit definitions ─────────────────────────────────────────
 
@@ -88,7 +89,7 @@ async function tryInitUpstash(): Promise<UpstashLimiter | null> {
     });
     return new UpstashLimiter(redis, Ratelimit);
   } catch {
-    console.warn('[RateLimit] Upstash init failed — falling back to in-memory');
+    loggers.rateLimit.warn('[RateLimit] Upstash init failed — falling back to in-memory');
     return null;
   }
 }
@@ -192,9 +193,9 @@ async function ensureInit() {
   initialized = true;
   upstashLimiter = await tryInitUpstash();
   if (upstashLimiter) {
-    console.log('[RateLimit] Using Upstash Redis sliding window');
+    loggers.rateLimit.info('[RateLimit] Using Upstash Redis sliding window');
   } else {
-    console.log('[RateLimit] Using in-memory token bucket (single-instance)');
+    loggers.rateLimit.info('[RateLimit] Using in-memory token bucket (single-instance)');
   }
 }
 

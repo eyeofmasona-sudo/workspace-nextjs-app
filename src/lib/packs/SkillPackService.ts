@@ -9,6 +9,7 @@ import { db } from '../db';
 import { eventBus } from '../event-bus';
 import { DEFAULT_SKILL_PACKS } from './defaults';
 import type { DefaultSkillPackDef } from './defaults';
+import { logger } from '@/lib/logger';
 
 // Use dynamic import to avoid circular dependencies
 // SkillRegistryService.installSkill is called per-skill during pack install
@@ -135,7 +136,7 @@ class SkillPackService {
       source: 'skill-pack-service',
     } as any);
 
-    console.log(
+    logger.info(
       `[SkillPackService] Installed pack "${packKey}" to agent ${agentId}: ` +
       `${installed} installed, ${skipped} skipped, ${errors.length} errors`
     );
@@ -187,7 +188,7 @@ class SkillPackService {
       }
     }
 
-    console.log(
+    logger.info(
       `[SkillPackService] Uninstalled pack "${packKey}" from agent ${agentId}: ` +
       `${removed} removed, ${notInstalled} not installed, ${errors.length} errors`
     );
@@ -245,7 +246,7 @@ class SkillPackService {
       for (const skillKey of packDef.skills) {
         const skill = await db.skillDefinition.findUnique({ where: { key: skillKey } });
         if (!skill) {
-          console.warn(`[SkillPackService] Skill "${skillKey}" not found, skipping for pack "${packDef.key}"`);
+          logger.warn(`[SkillPackService] Skill "${skillKey}" not found, skipping for pack "${packDef.key}"`);
           itemsSkipped++;
           continue;
         }
@@ -275,7 +276,7 @@ class SkillPackService {
     }
 
     if (packsCreated > 0 || itemsCreated > 0) {
-      console.log(
+      logger.info(
         `[SkillPackService] Seeded ${packsCreated} packs, ${itemsCreated} items ` +
         `(skipped ${packsSkipped} packs, ${itemsSkipped} items)`
       );

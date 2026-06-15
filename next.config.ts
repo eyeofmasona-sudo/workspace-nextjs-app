@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: false,
   },
   reactStrictMode: false,
+  // Enable instrumentation.ts (Sentry init, OpenTelemetry, etc.)
 };
 
 export default nextConfig;

@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { toolRegistryService } from '@/lib/tool-hub/ToolRegistryService';
 import { createToolSchema } from '@/lib/validations';
+import { loggers } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
     const tools = await toolRegistryService.getTools(workspaceId ?? undefined);
     return NextResponse.json({ tools });
   } catch (error) {
-    console.error('[API] GET /tools error:', error);
+    loggers.toolHub.error({ err: error }, '[API] GET /tools error:');
     return NextResponse.json({ error: 'Failed to fetch tools' }, { status: 500 });
   }
 }
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
     const tool = await toolRegistryService.createTool(parsed.data);
     return NextResponse.json({ tool }, { status: 201 });
   } catch (error) {
-    console.error('[API] POST /tools error:', error);
+    loggers.toolHub.error({ err: error }, '[API] POST /tools error:');
     return NextResponse.json({ error: 'Failed to create tool' }, { status: 500 });
   }
 }

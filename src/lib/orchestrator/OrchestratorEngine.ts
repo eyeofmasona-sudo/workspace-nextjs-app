@@ -20,6 +20,7 @@ import type {
 } from './types';
 import type { RiskLevel } from '../types/domain';
 import { generateCorrelationId } from '../utils/correlation';
+import { loggers } from '@/lib/logger';
 
 class OrchestratorEngine {
   private static instance: OrchestratorEngine | null = null;
@@ -100,7 +101,7 @@ class OrchestratorEngine {
       // Medium+ tasks or tasks requiring approval → plan first
       return await this.handlePlanRequired(workspaceId, projectId, message, classification.size, correlationId);
     } catch (error) {
-      console.error('[OrchestratorEngine] Error processing message:', error);
+      loggers.orchestrator.error({ err: error }, '[OrchestratorEngine] Error processing message:');
       return {
         type: 'error',
         summary: `Internal error: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -197,7 +198,7 @@ class OrchestratorEngine {
         events: result.events,
       };
     } catch (error) {
-      console.error('[OrchestratorEngine] Error approving plan:', error);
+      loggers.orchestrator.error({ err: error }, '[OrchestratorEngine] Error approving plan:');
       return {
         type: 'error',
         summary: `Failed to approve plan: ${error instanceof Error ? error.message : 'Unknown error'}`,

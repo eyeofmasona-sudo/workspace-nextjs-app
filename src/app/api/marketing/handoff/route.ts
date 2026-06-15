@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { handoffService } from '@/lib/marketing-department';
 import { EventTypes } from '@/lib/types/events';
 import type { HandoffArtifact } from '@/lib/types/departments';
+import { loggers } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
         );
     }
   } catch (error) {
-    console.error('[Marketing Handoff API] Error:', error);
+    loggers.api.error({ err: error }, '[Marketing Handoff API] Error:');
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

@@ -12,6 +12,7 @@
 import { EventTypes } from '../types/events';
 import type { EventType, EventMap, BaseEventPayload } from '../types/events';
 import { db } from '../db';
+import { loggers } from '@/lib/logger';
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -83,7 +84,7 @@ class EventBus {
         payload: JSON.stringify(payload),
       },
     }).catch((err: unknown) => {
-      console.error('[EventBus] EventLog write failed:', err);
+      loggers.eventBus.error({ err: err }, '[EventBus] EventLog write failed:');
     });
 
     // Dispatch typed handlers
@@ -91,14 +92,14 @@ class EventBus {
     if (set) {
       for (const handler of set) {
         try { await handler(payload); }
-        catch (err) { console.error(`[EventBus] Handler error (${eventType}):`, err); }
+        catch (err) { loggers.eventBus.error({ err: err }, `[EventBus] Handler error (${eventType}):`); }
       }
     }
 
     // Dispatch wildcard handlers
     for (const handler of this.wildcardHandlers) {
       try { await handler(eventType, payload as EventMap[EventType]); }
-      catch (err) { console.error(`[EventBus] Wildcard handler error (${eventType}):`, err); }
+      catch (err) { loggers.eventBus.error({ err: err }, `[EventBus] Wildcard handler error (${eventType}):`); }
     }
   }
 
@@ -109,12 +110,12 @@ class EventBus {
     if (set) {
       for (const handler of set) {
         try { await handler(payload); }
-        catch (err) { console.error(`[EventBus] Replay handler error (${eventType}):`, err); }
+        catch (err) { loggers.eventBus.error({ err: err }, `[EventBus] Replay handler error (${eventType}):`); }
       }
     }
     for (const handler of this.wildcardHandlers) {
       try { await handler(eventType, payload as EventMap[EventType]); }
-      catch (err) { console.error(`[EventBus] Replay wildcard error (${eventType}):`, err); }
+      catch (err) { loggers.eventBus.error({ err: err }, `[EventBus] Replay wildcard error (${eventType}):`); }
     }
   }
 

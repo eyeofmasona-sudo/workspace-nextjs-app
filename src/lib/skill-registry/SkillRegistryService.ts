@@ -11,6 +11,7 @@
 import { db } from '../db';
 import { DEFAULT_SKILLS } from './defaults';
 import type { DefaultSkillDefinition } from './defaults';
+import { logger } from '@/lib/logger';
 
 // ─── Filter Types ────────────────────────────────────────────
 
@@ -312,12 +313,12 @@ class SkillRegistryService {
           updated++;
         }
       } catch (error) {
-        console.error(`[SkillRegistryService] Failed to seed skill "${def.key}":`, error);
+        logger.error({ err: error }, `[SkillRegistryService] Failed to seed skill "${def.key}":`);
         skipped++;
       }
     }
 
-    console.log(
+    logger.info(
       `[SkillRegistryService] Seed complete: ${created} created, ${updated} updated, ${skipped} skipped`
     );
 

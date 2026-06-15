@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { eventBus } from '@/lib/event-bus';
 import { db } from '@/lib/db';
+import { loggers } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
     const events = await eventBus.getRecentEvents(limit, offset, workspaceId ?? undefined);
     return NextResponse.json({ events });
   } catch (error) {
-    console.error('[API] GET /events error:', error);
+    loggers.api.error({ err: error }, '[API] GET /events error:');
     return NextResponse.json({ error: 'Failed to fetch events' }, { status: 500 });
   }
 }
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ event }, { status: 201 });
   } catch (error) {
-    console.error('[API] POST /events error:', error);
+    loggers.api.error({ err: error }, '[API] POST /events error:');
     return NextResponse.json({ error: 'Failed to create event' }, { status: 500 });
   }
 }

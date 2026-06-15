@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { skillRegistryService } from '@/lib/skill-registry';
+import { loggers } from '@/lib/logger';
 
 export async function GET(
   request: NextRequest,
@@ -20,7 +21,7 @@ export async function GET(
 
     return NextResponse.json({ skill });
   } catch (error) {
-    console.error('[API] GET /skills/:key error:', error);
+    loggers.api.error({ err: error }, '[API] GET /skills/:key error:');
     return NextResponse.json(
       { error: 'Failed to fetch skill' },
       { status: 500 }

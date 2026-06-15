@@ -3,6 +3,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { skillRegistryService } from '@/lib/skill-registry';
+import { loggers } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ skills });
   } catch (error) {
-    console.error('[API] GET /skills error:', error);
+    loggers.api.error({ err: error }, '[API] GET /skills error:');
     return NextResponse.json(
       { error: 'Failed to fetch skills' },
       { status: 500 }
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   } catch (error) {
-    console.error('[API] POST /skills error:', error);
+    loggers.api.error({ err: error }, '[API] POST /skills error:');
     return NextResponse.json(
       { error: 'Failed to process skills request' },
       { status: 500 }

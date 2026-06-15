@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { capabilityScoreService } from '@/lib/capability';
+import { loggers } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ result }, { status: 201 });
   } catch (error) {
-    console.error('[API] POST /capabilities/seed error:', error);
+    loggers.seed.error({ err: error }, '[API] POST /capabilities/seed error:');
     return NextResponse.json(
       { error: 'Failed to seed default scores' },
       { status: 500 }

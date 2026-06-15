@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { agentCapabilityService } from '@/lib/agent-system';
 import { updateCapabilitySchema } from '@/lib/validations';
+import { loggers } from '@/lib/logger';
 
 export async function GET(
   request: NextRequest,
@@ -22,7 +23,7 @@ export async function GET(
     const capabilities = await agentCapabilityService.getAgentCapabilities(id);
     return NextResponse.json({ capabilities });
   } catch (error) {
-    console.error('[API] GET /agents/:id/capabilities error:', error);
+    loggers.api.error({ err: error }, '[API] GET /agents/:id/capabilities error:');
     return NextResponse.json({ error: 'Failed to fetch agent capabilities' }, { status: 500 });
   }
 }
@@ -60,7 +61,7 @@ export async function PATCH(
 
     return NextResponse.json({ capabilities: updatedCapabilities });
   } catch (error) {
-    console.error('[API] PATCH /agents/:id/capabilities error:', error);
+    loggers.api.error({ err: error }, '[API] PATCH /agents/:id/capabilities error:');
     return NextResponse.json({ error: 'Failed to update agent capabilities' }, { status: 500 });
   }
 }

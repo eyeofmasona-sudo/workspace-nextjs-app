@@ -5,6 +5,7 @@
 
 import type { AgentConfig, AgentRole, ModelConfig, ResolvedModel, RegistryStats, AgentStatus } from './types';
 import { providerRegistry } from '../ai-provider/provider-registry';
+import { loggers } from '@/lib/logger';
 
 // ─── Agent Registry ─────────────────────────────────────────
 
@@ -30,7 +31,7 @@ class AgentRegistry {
    */
   register(config: AgentConfig): void {
     if (this.configs.has(config.id)) {
-      console.warn(`[AgentRegistry] Overwriting existing agent config: ${config.id}`);
+      loggers.agentRuntime.warn(`[AgentRegistry] Overwriting existing agent config: ${config.id}`);
     }
     this.configs.set(config.id, config);
     // Initialize status to idle if not already set

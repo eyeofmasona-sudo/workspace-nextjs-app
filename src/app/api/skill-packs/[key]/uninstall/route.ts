@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { skillPackService } from '@/lib/packs';
+import { loggers } from '@/lib/logger';
 
 export async function POST(
   request: NextRequest,
@@ -26,7 +27,7 @@ export async function POST(
     if (message.includes('not found')) {
       return NextResponse.json({ error: message }, { status: 404 });
     }
-    console.error('[API] POST /skill-packs/:key/uninstall error:', error);
+    loggers.api.error({ err: error }, '[API] POST /skill-packs/:key/uninstall error:');
     return NextResponse.json(
       { error: 'Failed to uninstall skill pack' },
       { status: 500 }

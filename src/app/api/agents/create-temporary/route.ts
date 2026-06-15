@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { temporaryAgentService } from '@/lib/agent-system';
 import { createTemporaryAgentSchema } from '@/lib/validations';
+import { loggers } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ agent }, { status: 201 });
   } catch (error) {
-    console.error('[API] POST /agents/create-temporary error:', error);
+    loggers.api.error({ err: error }, '[API] POST /agents/create-temporary error:');
     return NextResponse.json({ error: 'Failed to create temporary agent' }, { status: 500 });
   }
 }

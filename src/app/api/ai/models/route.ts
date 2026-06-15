@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { providerRegistry } from '@/lib/ai-provider/provider-registry';
 import { initProviders } from '@/lib/ai-provider';
+import { loggers } from '@/lib/logger';
 
 let providersInitialized = false;
 async function ensureProviders() {
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ models, total: models.length });
   } catch (error) {
-    console.error('[API] GET /ai/models error:', error);
+    loggers.api.error({ err: error }, '[API] GET /ai/models error:');
     return NextResponse.json(
       { error: 'Failed to list models' },
       { status: 500 },

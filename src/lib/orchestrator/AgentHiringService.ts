@@ -20,6 +20,7 @@ import type { AgentConfig, AgentRole, SkillRef, ToolRef, ExecutionConfig } from 
 import { DEFAULT_EXECUTION_CONFIG } from '../agent-core/types';
 import { eventBus } from '../event-bus';
 import { EventTypes } from '../types/events';
+import { loggers } from '@/lib/logger';
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -282,7 +283,7 @@ class AgentHiringService {
         source: 'agent-hiring-service',
       }).catch(() => {});
 
-      console.log(
+      loggers.orchestrator.info(
         `[AgentHiringService] Hired agent: ${agentName} (${agentId}) ` +
         `with ${assignedSkills.length} skills, ${assignedTools.length} tools`
       );
@@ -297,7 +298,7 @@ class AgentHiringService {
         model: modelAssignment.model,
       };
     } catch (error) {
-      console.error('[AgentHiringService] Hire failed:', error);
+      loggers.orchestrator.error({ err: error }, '[AgentHiringService] Hire failed:');
       return {
         success: false,
         agentId: '',
@@ -317,12 +318,12 @@ class AgentHiringService {
   async fire(agentId: string): Promise<boolean> {
     const config = agentRegistry.get(agentId);
     if (!config) {
-      console.warn(`[AgentHiringService] Cannot fire agent: ${agentId} not found`);
+      loggers.orchestrator.warn(`[AgentHiringService] Cannot fire agent: ${agentId} not found`);
       return false;
     }
 
     if (config.type !== 'temporary') {
-      console.warn(`[AgentHiringService] Cannot fire permanent agent: ${agentId}`);
+      loggers.orchestrator.warn(`[AgentHiringService] Cannot fire permanent agent: ${agentId}`);
       return false;
     }
 
@@ -337,7 +338,7 @@ class AgentHiringService {
         source: 'agent-hiring-service',
       }).catch(() => {});
 
-      console.log(`[AgentHiringService] Fired agent: ${config.name} (${agentId})`);
+      loggers.orchestrator.info(`[AgentHiringService] Fired agent: ${config.name} (${agentId})`);
     }
 
     return success;

@@ -23,6 +23,7 @@
 import { db } from '../db';
 import { eventBus } from './index';
 import type { EventType, EventMap } from '../types/events';
+import { loggers } from '@/lib/logger';
 
 // ── Config ─────────────────────────────────────────────────────
 
@@ -61,12 +62,12 @@ class DurableEventWorker {
     this.started = true;
     this.cursor = replaySince ?? new Date();
 
-    console.log('[DurableEventWorker] Started. Replaying events after', this.cursor.toISOString());
+    loggers.eventBus.info({ cursor: this.cursor.toISOString() }, '[DurableEventWorker] Started. Replaying events after');
 
     // Delay replay to allow synchronous handler registration to complete
     setTimeout(() => {
       this.replay().catch(err => {
-        console.error('[DurableEventWorker] Replay error:', err);
+        loggers.eventBus.error({ err: err }, '[DurableEventWorker] Replay error:');
       });
     }, REPLAY_DELAY_MS);
 
@@ -74,7 +75,7 @@ class DurableEventWorker {
     if (POLL_INTERVAL_MS > 0) {
       this.pollTimer = setInterval(() => {
         this.poll().catch(err => {
-          console.error('[DurableEventWorker] Poll error:', err);
+          loggers.eventBus.error({ err: err }, '[DurableEventWorker] Poll error:');
         });
       }, POLL_INTERVAL_MS);
     }
@@ -98,11 +99,11 @@ class DurableEventWorker {
     });
 
     if (rows.length === 0) {
-      console.log('[DurableEventWorker] No missed events to replay.');
+      loggers.eventBus.info('[DurableEventWorker] No missed events to replay.');
       return;
     }
 
-    console.log(`[DurableEventWorker] Replaying ${rows.length} missed event(s)…`);
+    loggers.eventBus.info(`[DurableEventWorker] Replaying ${rows.length} missed event(s)…`);
     let dispatched = 0;
 
     for (const row of rows) {
@@ -114,7 +115,7 @@ class DurableEventWorker {
       if (row.createdAt > this.cursor) this.cursor = row.createdAt;
     }
 
-    console.log(`[DurableEventWorker] Replayed ${dispatched} event(s).`);
+    loggers.eventBus.info(`[DurableEventWorker] Replayed ${dispatched} event(s).`);
   }
 
   // ── Poll (multi-process / future) ────────────────────────────

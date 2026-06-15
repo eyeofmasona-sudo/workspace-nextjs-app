@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { agentModelConfigService } from '@/lib/agent-system';
 import { updateModelConfigSchema } from '@/lib/validations';
+import { loggers } from '@/lib/logger';
 
 export async function GET(
   request: NextRequest,
@@ -26,7 +27,7 @@ export async function GET(
 
     return NextResponse.json({ models, resolvedModel });
   } catch (error) {
-    console.error('[API] GET /agents/:id/models error:', error);
+    loggers.api.error({ err: error }, '[API] GET /agents/:id/models error:');
     return NextResponse.json({ error: 'Failed to fetch agent models' }, { status: 500 });
   }
 }
@@ -79,7 +80,7 @@ export async function PATCH(
 
     return NextResponse.json({ models: updatedModels });
   } catch (error) {
-    console.error('[API] PATCH /agents/:id/models error:', error);
+    loggers.api.error({ err: error }, '[API] PATCH /agents/:id/models error:');
     return NextResponse.json({ error: 'Failed to update agent models' }, { status: 500 });
   }
 }

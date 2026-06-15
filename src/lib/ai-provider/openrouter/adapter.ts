@@ -14,6 +14,7 @@ import type {
 import { ProviderError } from '../types';
 import { getOpenRouterConfig, isOpenRouterConfigured } from './config';
 import type { OpenRouterConfig } from './config';
+import { logger } from '@/lib/logger';
 
 // ─── OpenRouter API response shape ───────────────────────────
 
@@ -144,7 +145,7 @@ export class OpenRouterProvider implements AIProvider {
       }));
 
       const elapsed = Date.now() - startTime;
-      console.log(
+      logger.info(
         `[OpenRouter] ${request.model} → ${usage.totalTokens} tokens in ${elapsed}ms ` +
         `(finish: ${choice.finish_reason})`
       );

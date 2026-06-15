@@ -9,6 +9,7 @@
 // - New tools can be registered without modifying existing code
 
 import type { ITool, ToolRegistration, ToolRegistryStats, ToolPermission } from './types';
+import { loggers } from '@/lib/logger';
 
 // ─── Tool Registry ───────────────────────────────────────────
 
@@ -33,7 +34,7 @@ class ToolRegistry {
    */
   register(tool: ITool, source: string = 'unknown'): void {
     if (this.registrations.has(tool.id)) {
-      console.warn(`[ToolRegistry] Overwriting existing tool: ${tool.id}`);
+      loggers.toolHub.warn(`[ToolRegistry] Overwriting existing tool: ${tool.id}`);
     }
 
     this.registrations.set(tool.id, {
@@ -42,7 +43,7 @@ class ToolRegistry {
       source,
     });
 
-    console.log(`[ToolRegistry] Registered tool: ${tool.id} (${tool.name}) from ${source}`);
+    loggers.toolHub.info(`[ToolRegistry] Registered tool: ${tool.id} (${tool.name}) from ${source}`);
   }
 
   /**

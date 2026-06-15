@@ -13,6 +13,7 @@
 import type { ColorValue, Direction, SpriteData } from '../types';
 import { Direction as Dir, PALETTE_COUNT } from '../types';
 import { adjustSprite } from '../colorize';
+import { loggers } from '@/lib/logger';
 
 // ════════════════════════════════════════════════════════════════
 // Speech Bubble Sprites (ported from bubble-permission.json / bubble-waiting.json)
@@ -966,7 +967,7 @@ export function getCharacterSprites(paletteIndex: number, hueShift = 0): Charact
     const char = source[safeIndex];
     if (!char) {
       // Defensive fallback if source entry is unexpectedly undefined
-      console.warn(`[getCharacterSprites] source[${safeIndex}] is undefined (palette=${paletteIndex}, sourceLen=${source.length})`);
+      loggers.pixel.warn(`[getCharacterSprites] source[${safeIndex}] is undefined (palette=${paletteIndex}, sourceLen=${source.length})`);
       const fallbackSprite = emptySprite(16, 24);
       const fb = [fallbackSprite, fallbackSprite, fallbackSprite, fallbackSprite, fallbackSprite, fallbackSprite, fallbackSprite];
       sprites = {

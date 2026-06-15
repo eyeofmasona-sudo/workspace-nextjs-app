@@ -13,6 +13,7 @@ import { EventTypes } from '../types/events';
 import { approvalSystem } from '../approval';
 import { toolExecutionService } from './ToolExecutionService';
 import { toolHub } from './ToolHub';
+import { loggers } from '@/lib/logger';
 
 let initialized = false;
 
@@ -41,7 +42,7 @@ export function initApprovalLifecycle(): void {
       const { execution, toolKey } = await toolExecutionService.resumeApprovedExecution(executionId);
 
       if (!execution) {
-        console.error(`[ApprovalLifecycle] Execution ${executionId} not found after resume`);
+        loggers.toolHub.error(`[ApprovalLifecycle] Execution ${executionId} not found after resume`);
         return;
       }
 
@@ -68,16 +69,13 @@ export function initApprovalLifecycle(): void {
         resumedFromApproval: true,
       });
 
-      console.log(
+      loggers.toolHub.info(
         `[ApprovalLifecycle] Execution ${executionId} resumed after approval ${payload.approvalId}: ${result.status}`
       );
     } catch (error) {
-      console.error(
-        `[ApprovalLifecycle] Failed to resume execution for approval ${payload.approvalId}:`,
-        error
-      );
+      loggers.toolHub.error({ err: error }, `[ApprovalLifecycle] Failed to resume execution for approval ${payload.approvalId}:`);
     }
   });
 
-  console.log('[ApprovalLifecycle] Initialized — approval.approved → ToolExecution resume wired');
+  loggers.toolHub.info('[ApprovalLifecycle] Initialized — approval.approved → ToolExecution resume wired');
 }

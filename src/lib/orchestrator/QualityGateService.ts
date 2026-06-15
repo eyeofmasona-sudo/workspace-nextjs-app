@@ -6,6 +6,7 @@ import { db } from '../db';
 import { eventBus } from '../event-bus';
 import { EventTypes } from '../types/events';
 import type { TaskContract, QualityGateResult, QualityStatus } from './TaskContract';
+import { loggers } from '@/lib/logger';
 
 // ─── Prohibited patterns (content safety) ────────────────────
 
@@ -144,7 +145,7 @@ class QualityGateService {
         approvalRequestId = await this.createEscalation(contract, agentId, issues, score);
         status = 'escalated';
       } catch (err) {
-        console.error('[QualityGate] Failed to create escalation:', err);
+        loggers.orchestrator.error({ err: err }, '[QualityGate] Failed to create escalation:');
       }
     }
 
@@ -276,7 +277,7 @@ class QualityGateService {
         });
       }
     } catch (err) {
-      console.error('[QualityGate] Event emission failed:', err);
+      loggers.orchestrator.error({ err: err }, '[QualityGate] Event emission failed:');
     }
   }
 }

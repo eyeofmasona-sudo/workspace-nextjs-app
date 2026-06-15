@@ -3,6 +3,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { approvalSystem } from '@/lib/approval';
+import { loggers } from '@/lib/logger';
 
 export async function POST(
   request: NextRequest,
@@ -40,7 +41,7 @@ export async function POST(
       return NextResponse.json({ error: message }, { status: 409 });
     }
 
-    console.error('[API] POST /approvals/:id/reject error:', error);
+    loggers.api.error({ err: error }, '[API] POST /approvals/:id/reject error:');
     return NextResponse.json({ error: 'Failed to reject request' }, { status: 500 });
   }
 }

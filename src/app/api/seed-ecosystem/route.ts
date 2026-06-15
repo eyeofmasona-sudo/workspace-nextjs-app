@@ -8,6 +8,7 @@ import { marketplaceService } from '@/lib/marketplace';
 import { workflowService } from '@/lib/workflows';
 import { capabilityScoreService } from '@/lib/capability';
 import { db } from '@/lib/db';
+import { loggers } from '@/lib/logger';
 
 export async function POST() {
   try {
@@ -52,7 +53,7 @@ export async function POST() {
       },
     }, { status: 201 });
   } catch (error) {
-    console.error('[API] POST /seed-ecosystem error:', error);
+    loggers.seed.error({ err: error }, '[API] POST /seed-ecosystem error:');
     return NextResponse.json(
       { error: 'Failed to seed ecosystem' },
       { status: 500 }

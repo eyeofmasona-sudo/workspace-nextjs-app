@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { toolHub } from '@/lib/tool-hub/ToolHub';
 import { executeToolSchema } from '@/lib/validations';
+import { loggers } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result, { status: statusCode });
   } catch (error) {
-    console.error('[API] POST /tools/execute error:', error);
+    loggers.toolHub.error({ err: error }, '[API] POST /tools/execute error:');
     return NextResponse.json({ error: 'Failed to execute tool' }, { status: 500 });
   }
 }

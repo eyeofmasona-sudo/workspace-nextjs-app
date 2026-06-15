@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { skillRegistryService } from '@/lib/skill-registry';
+import { loggers } from '@/lib/logger';
 
 export async function POST(
   request: NextRequest,
@@ -36,7 +37,7 @@ export async function POST(
     if (message.includes('not found') || message.includes('not installed')) {
       return NextResponse.json({ error: message }, { status: 404 });
     }
-    console.error('[API] POST /skills/:key/toggle error:', error);
+    loggers.api.error({ err: error }, '[API] POST /skills/:key/toggle error:');
     return NextResponse.json(
       { error: 'Failed to toggle skill' },
       { status: 500 }

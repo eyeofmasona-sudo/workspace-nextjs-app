@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import { analyticsService } from '@/lib/analytics';
+import { loggers } from '@/lib/logger';
 
 export async function GET() {
   try {
@@ -12,7 +13,7 @@ export async function GET() {
 
     return NextResponse.json({ usageStats, trending });
   } catch (error) {
-    console.error('[API] GET /analytics/skills error:', error);
+    loggers.api.error({ err: error }, '[API] GET /analytics/skills error:');
     return NextResponse.json(
       { error: 'Failed to fetch skill analytics' },
       { status: 500 }

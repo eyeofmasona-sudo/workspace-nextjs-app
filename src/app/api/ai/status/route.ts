@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { providerRegistry } from '@/lib/ai-provider/provider-registry';
 import { isOpenRouterConfigured } from '@/lib/ai-provider/openrouter/config';
 import { initProviders } from '@/lib/ai-provider';
+import { loggers } from '@/lib/logger';
 
 let providersInitialized = false;
 async function ensureProviders() {
@@ -32,7 +33,7 @@ export async function GET() {
       registeredProviderIds: providerRegistry.listIds(),
     });
   } catch (error) {
-    console.error('[API] GET /ai/status error:', error);
+    loggers.api.error({ err: error }, '[API] GET /ai/status error:');
     return NextResponse.json({
       configured: isOpenRouterConfigured(),
       providers: [],

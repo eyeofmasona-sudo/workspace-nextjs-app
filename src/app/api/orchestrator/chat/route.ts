@@ -9,6 +9,7 @@ import { loadAgentConfigs, registerBuiltinSkillsAndTools } from '@/lib/agent-cor
 import { durableEventWorker } from '@/lib/event-bus/DurableEventWorker';
 import { AGENT_CONFIGS } from '@/lib/agent-configs';
 import { z } from 'zod';
+import { loggers } from '@/lib/logger';
 
 // Ensure initialization
 let initialized = false;
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error('[API] POST /orchestrator/chat error:', error);
+    loggers.orchestrator.error({ err: error }, '[API] POST /orchestrator/chat error:');
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : 'Failed to process orchestrator chat',

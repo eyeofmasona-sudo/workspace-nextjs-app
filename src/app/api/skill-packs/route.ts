@@ -3,13 +3,14 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { skillPackService } from '@/lib/packs';
+import { loggers } from '@/lib/logger';
 
 export async function GET() {
   try {
     const packs = await skillPackService.listPacks();
     return NextResponse.json({ packs });
   } catch (error) {
-    console.error('[API] GET /skill-packs error:', error);
+    loggers.api.error({ err: error }, '[API] GET /skill-packs error:');
     return NextResponse.json(
       { error: 'Failed to fetch skill packs' },
       { status: 500 }
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   } catch (error) {
-    console.error('[API] POST /skill-packs error:', error);
+    loggers.api.error({ err: error }, '[API] POST /skill-packs error:');
     return NextResponse.json(
       { error: 'Failed to process skill packs request' },
       { status: 500 }

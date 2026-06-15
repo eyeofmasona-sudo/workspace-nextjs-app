@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { installationService } from '@/lib/installation';
+import { loggers } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ result }, { status: 201 });
   } catch (error) {
-    console.error('[API] POST /installation/skill error:', error);
+    loggers.api.error({ err: error }, '[API] POST /installation/skill error:');
     return NextResponse.json(
       { error: 'Failed to perform skill action' },
       { status: 500 }

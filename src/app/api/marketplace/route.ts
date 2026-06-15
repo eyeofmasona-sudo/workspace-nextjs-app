@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { marketplaceService } from '@/lib/marketplace';
 import type { MarketplaceFilters } from '@/lib/marketplace';
+import { loggers } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -20,7 +21,7 @@ export async function GET(request: NextRequest) {
     const items = await marketplaceService.listItems(filters);
     return NextResponse.json({ items });
   } catch (error) {
-    console.error('[API] GET /marketplace error:', error);
+    loggers.api.error({ err: error }, '[API] GET /marketplace error:');
     return NextResponse.json(
       { error: 'Failed to browse marketplace' },
       { status: 500 }
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest) {
     const item = await marketplaceService.publishItem(body);
     return NextResponse.json({ item }, { status: 201 });
   } catch (error) {
-    console.error('[API] POST /marketplace error:', error);
+    loggers.api.error({ err: error }, '[API] POST /marketplace error:');
     return NextResponse.json(
       { error: 'Failed to publish marketplace item' },
       { status: 500 }

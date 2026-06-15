@@ -17,6 +17,7 @@
 
 import type { BrowserTask, BrowserQueueEvent } from './BrowserOperatorTypes';
 import type { BrowserOperatorQueue } from './BrowserOperatorQueue';
+import { loggers } from '@/lib/logger';
 
 // ── Lazy imports for DB services ──────────────────────────────
 async function getToolExecutionService() {
@@ -166,7 +167,7 @@ export class BrowserOperatorToolBridge {
         // EventBus not available — not critical
       }
     } catch (err) {
-      console.error('[BrowserOperatorToolBridge] Failed to sync status:', err);
+      loggers.browser.error({ err: err }, '[BrowserOperatorToolBridge] Failed to sync status:');
     }
   }
 

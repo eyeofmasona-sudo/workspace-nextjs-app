@@ -14,6 +14,7 @@ import type {
   ResolvedModel,
 } from '../ai-provider/types';
 import { ProviderError } from '../ai-provider/types';
+import { loggers } from '@/lib/logger';
 
 // ─── Public request type ─────────────────────────────────────
 
@@ -119,7 +120,7 @@ class AgentExecutor {
           (c) => c.preferenceType === 'fallback' && c.enabled
         );
         if (fallback) {
-          console.log(
+          loggers.agentRuntime.info(
             `[AgentExecutor] Retrying with fallback model: ${fallback.provider}/${fallback.model}`
           );
           const fallbackProvider = providerRegistry.getOrThrow(fallback.provider);
@@ -146,7 +147,7 @@ class AgentExecutor {
 
     // 10. Set agent back to idle after a short delay
     setTimeout(() => {
-      this.updateAgentStatus(request.agentId, 'idle').catch(console.error);
+      this.updateAgentStatus(request.agentId, 'idle').catch(loggers.agentRuntime.error);
     }, 1500);
 
     return {
@@ -242,7 +243,7 @@ class AgentExecutor {
         source: 'agent-executor',
       });
     } catch (error) {
-      console.error('[AgentExecutor] Failed to update agent status:', error);
+      loggers.agentRuntime.error({ err: error }, '[AgentExecutor] Failed to update agent status:');
     }
   }
 
@@ -284,7 +285,7 @@ class AgentExecutor {
         source: 'agent-executor',
       });
     } catch (error) {
-      console.error('[AgentExecutor] Failed to log cost:', error);
+      loggers.agentRuntime.error({ err: error }, '[AgentExecutor] Failed to log cost:');
     }
   }
 

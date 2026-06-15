@@ -11,6 +11,7 @@ import { skillRegistry } from '../skills/registry';
 import { BUILTIN_SKILLS } from '../skills';
 import { toolRegistry } from '../tools/registry';
 import { BUILTIN_TOOLS } from '../tools';
+import { loggers } from '@/lib/logger';
 
 // ─── Initialization Flag ────────────────────────────────────
 
@@ -31,7 +32,7 @@ export function registerBuiltinSkillsAndTools(): void {
   const skillStats = skillRegistry.getStats();
   const toolStats = toolRegistry.getStats();
 
-  console.log(
+  loggers.agentRuntime.info(
     `[ConfigLoader] Registered ${skillStats.totalSkills} built-in skills, ` +
     `${toolStats.totalTools} built-in tools`
   );
@@ -76,7 +77,7 @@ export function loadAgentConfigs(configs: AgentConfig[]): {
     loaded++;
   }
 
-  console.log(
+  loggers.agentRuntime.info(
     `[ConfigLoader] Loaded ${loaded} agent configs, skipped ${skipped} (already registered)`
   );
 
@@ -115,7 +116,7 @@ export async function loadAgentsFromDb(workspaceId: string): Promise<{
       const fallback = agent.modelConfigs.find((c) => c.preferenceType === 'fallback');
 
       if (!preferred) {
-        console.warn(
+        loggers.agentRuntime.warn(
           `[ConfigLoader] Skipping agent ${agent.name}: no preferred model config`
         );
         skipped++;
@@ -175,13 +176,13 @@ export async function loadAgentsFromDb(workspaceId: string): Promise<{
       loaded++;
     }
 
-    console.log(
+    loggers.agentRuntime.info(
       `[ConfigLoader] Loaded ${loaded} agents from DB, skipped ${skipped}`
     );
 
     return { loaded, skipped };
   } catch (error) {
-    console.error('[ConfigLoader] Failed to load agents from DB:', error);
+    loggers.agentRuntime.error({ err: error }, '[ConfigLoader] Failed to load agents from DB:');
     return { loaded: 0, skipped: 0 };
   }
 }

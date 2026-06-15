@@ -13,6 +13,7 @@ import { agentModelConfigService } from '../agent-system/AgentModelConfigService
 import { agentRuntimeService } from '../agent-system/AgentRuntimeService';
 import { toolRegistryService } from '../tool-hub/ToolRegistryService';
 import { initApprovalLifecycle } from '../tool-hub/approval-lifecycle';
+import { loggers } from '@/lib/logger';
 
 const DEFAULT_USER_EMAIL = 'admin@agent-os.local';
 const DEFAULT_USER_NAME = 'Admin';
@@ -39,7 +40,7 @@ export async function initializeSystem() {
         }),
       },
     });
-    console.log('[Seed] Created default user:', user.id);
+    loggers.seed.info({ data: user.id }, '[Seed] Created default user:');
   }
 
   // 2. Ensure default workspace exists
@@ -55,45 +56,45 @@ export async function initializeSystem() {
         mode: 'single',
       },
     });
-    console.log('[Seed] Created default workspace:', workspace.id);
+    loggers.seed.info({ data: workspace.id }, '[Seed] Created default workspace:');
   }
 
   // 3. Seed default agents
   const agentResult = await agentRegistry.seedDefaultAgents(workspace.id);
   if (agentResult.created > 0) {
-    console.log(`[Seed] Created ${agentResult.created} default agents (skipped ${agentResult.skipped})`);
+    loggers.seed.info(`[Seed] Created ${agentResult.created} default agents (skipped ${agentResult.skipped})`);
   }
 
   // 4. Seed agent system sub-entities (Stage 3)
   const profileResult = await agentProfileService.ensureDefaultProfiles(workspace.id);
   if (profileResult.created > 0) {
-    console.log(`[Seed] Created ${profileResult.created} agent profiles (skipped ${profileResult.skipped})`);
+    loggers.seed.info(`[Seed] Created ${profileResult.created} agent profiles (skipped ${profileResult.skipped})`);
   }
 
   const capabilityResult = await agentCapabilityService.ensureDefaultCapabilities(workspace.id);
   if (capabilityResult.created > 0) {
-    console.log(`[Seed] Created ${capabilityResult.created} agent capabilities (skipped ${capabilityResult.skipped})`);
+    loggers.seed.info(`[Seed] Created ${capabilityResult.created} agent capabilities (skipped ${capabilityResult.skipped})`);
   }
 
   const permissionResult = await agentPermissionService.ensureDefaultPermissions(workspace.id);
   if (permissionResult.created > 0) {
-    console.log(`[Seed] Created ${permissionResult.created} agent permissions (skipped ${permissionResult.skipped})`);
+    loggers.seed.info(`[Seed] Created ${permissionResult.created} agent permissions (skipped ${permissionResult.skipped})`);
   }
 
   const modelResult = await agentModelConfigService.ensureDefaultModels(workspace.id);
   if (modelResult.created > 0) {
-    console.log(`[Seed] Created ${modelResult.created} agent model configs (skipped ${modelResult.skipped})`);
+    loggers.seed.info(`[Seed] Created ${modelResult.created} agent model configs (skipped ${modelResult.skipped})`);
   }
 
   const runtimeResult = await agentRuntimeService.ensureRuntimeStates(workspace.id);
   if (runtimeResult.created > 0) {
-    console.log(`[Seed] Created ${runtimeResult.created} agent runtime states (skipped ${runtimeResult.skipped})`);
+    loggers.seed.info(`[Seed] Created ${runtimeResult.created} agent runtime states (skipped ${runtimeResult.skipped})`);
   }
 
   // 5. Seed default tools and policies (Stage 4)
   const toolResult = await toolRegistryService.seedDefaultTools(workspace.id);
   if (toolResult.created > 0) {
-    console.log(`[Seed] Created ${toolResult.created} tools with policies (skipped ${toolResult.skipped})`);
+    loggers.seed.info(`[Seed] Created ${toolResult.created} tools with policies (skipped ${toolResult.skipped})`);
   }
 
   // 6. Wire approval lifecycle (Stage 4 audit)

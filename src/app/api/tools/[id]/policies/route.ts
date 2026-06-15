@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { toolRegistryService } from '@/lib/tool-hub/ToolRegistryService';
 import { toolPermissionService } from '@/lib/tool-hub/ToolPermissionService';
 import { updateToolPolicySchema } from '@/lib/validations';
+import { loggers } from '@/lib/logger';
 
 export async function GET(
   request: NextRequest,
@@ -22,7 +23,7 @@ export async function GET(
     const policies = await toolPermissionService.getToolPolicies(id);
     return NextResponse.json({ policies });
   } catch (error) {
-    console.error('[API] GET /tools/[id]/policies error:', error);
+    loggers.toolHub.error({ err: error }, '[API] GET /tools/[id]/policies error:');
     return NextResponse.json({ error: 'Failed to fetch policies' }, { status: 500 });
   }
 }
@@ -72,7 +73,7 @@ export async function PATCH(
 
     return NextResponse.json({ policies: results });
   } catch (error) {
-    console.error('[API] PATCH /tools/[id]/policies error:', error);
+    loggers.toolHub.error({ err: error }, '[API] PATCH /tools/[id]/policies error:');
     return NextResponse.json({ error: 'Failed to update policies' }, { status: 500 });
   }
 }

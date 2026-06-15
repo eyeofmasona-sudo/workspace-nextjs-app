@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { toolRegistryService } from '@/lib/tool-hub/ToolRegistryService';
 import { updateToolSchema } from '@/lib/validations';
+import { loggers } from '@/lib/logger';
 
 export async function GET(
   request: NextRequest,
@@ -19,7 +20,7 @@ export async function GET(
 
     return NextResponse.json({ tool });
   } catch (error) {
-    console.error('[API] GET /tools/[id] error:', error);
+    loggers.toolHub.error({ err: error }, '[API] GET /tools/[id] error:');
     return NextResponse.json({ error: 'Failed to fetch tool' }, { status: 500 });
   }
 }
@@ -47,7 +48,7 @@ export async function PATCH(
     if (message.includes('not found')) {
       return NextResponse.json({ error: message }, { status: 404 });
     }
-    console.error('[API] PATCH /tools/[id] error:', error);
+    loggers.toolHub.error({ err: error }, '[API] PATCH /tools/[id] error:');
     return NextResponse.json({ error: 'Failed to update tool' }, { status: 500 });
   }
 }

@@ -9,6 +9,7 @@ import { initProviders } from '@/lib/ai-provider';
 import { loadAgentConfigs, registerBuiltinSkillsAndTools } from '@/lib/agent-core/config-loader';
 import { AGENT_CONFIGS } from '@/lib/agent-configs';
 import { z } from 'zod';
+import { loggers } from '@/lib/logger';
 
 // Ensure initialization
 let initialized = false;
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
-    console.error('[API] POST /orchestrator/hire error:', error);
+    loggers.orchestrator.error({ err: error }, '[API] POST /orchestrator/hire error:');
     return NextResponse.json(
       { success: false, agentId: '', agentName: '', role: '', assignedSkills: [], assignedTools: [], model: '', error: 'Internal server error' },
       { status: 500 }

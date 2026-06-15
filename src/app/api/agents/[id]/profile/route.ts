@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { agentProfileService } from '@/lib/agent-system';
 import { updateProfileSchema } from '@/lib/validations';
+import { loggers } from '@/lib/logger';
 
 export async function GET(
   request: NextRequest,
@@ -26,7 +27,7 @@ export async function GET(
 
     return NextResponse.json({ profile });
   } catch (error) {
-    console.error('[API] GET /agents/:id/profile error:', error);
+    loggers.api.error({ err: error }, '[API] GET /agents/:id/profile error:');
     return NextResponse.json({ error: 'Failed to fetch agent profile' }, { status: 500 });
   }
 }
@@ -58,7 +59,7 @@ export async function PATCH(
     const profile = await agentProfileService.updateAgentProfile(id, parseResult.data);
     return NextResponse.json({ profile });
   } catch (error) {
-    console.error('[API] PATCH /agents/:id/profile error:', error);
+    loggers.api.error({ err: error }, '[API] PATCH /agents/:id/profile error:');
     return NextResponse.json({ error: 'Failed to update agent profile' }, { status: 500 });
   }
 }

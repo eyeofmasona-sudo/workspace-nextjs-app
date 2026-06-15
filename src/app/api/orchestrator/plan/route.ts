@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { orchestratorEngine } from '@/lib/orchestrator';
 import { orchestratorPlanSchema } from '@/lib/validations';
+import { loggers } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
       plan,
     }, { status: 200 });
   } catch (error) {
-    console.error('[API] POST /orchestrator/plan error:', error);
+    loggers.orchestrator.error({ err: error }, '[API] POST /orchestrator/plan error:');
     return NextResponse.json(
       {
         error: 'Failed to create plan',

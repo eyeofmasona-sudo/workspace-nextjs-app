@@ -10,6 +10,7 @@
  */
 
 import type { FurnitureCatalogEntry, SpriteData } from '../types';
+import { loggers } from '@/lib/logger';
 
 // ════════════════════════════════════════════════════════════════
 // Types
@@ -517,7 +518,7 @@ export function buildDynamicCatalog(assets: LoadedAssetData): boolean {
     .map((asset) => {
       const sprite = assets.sprites[asset.id];
       if (!sprite) {
-        console.warn(`No sprite data for asset ${asset.id}`);
+        loggers.pixel.warn(`No sprite data for asset ${asset.id}`);
         return null;
       }
       return {
@@ -732,7 +733,7 @@ export function buildDynamicCatalog(assets: LoadedAssetData): boolean {
 
   const rotGroupCount = new Set(Array.from(rotationGroups.values())).size;
   const animGroupCount = animationGroups.size;
-  console.log(
+  loggers.pixel.info(
     `✓ Built dynamic catalog with ${allEntries.length} assets (${visibleEntries.length} visible, ${rotGroupCount} rotation groups, ${stateGroups.size / 2} state pairs, ${animGroupCount} animation groups)`,
   );
   return true;

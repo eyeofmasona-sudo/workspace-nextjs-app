@@ -34,6 +34,7 @@ import { ScreenshotService } from './playwright/ScreenshotService';
 import { BrowserOperatorToolBridge } from './BrowserOperatorToolBridge';
 import { browserOperatorDbService } from './BrowserOperatorDbService';
 import defaultProvidersConfig from './config/providers.config.json';
+import { loggers } from '@/lib/logger';
 
 // ── Service Config ─────────────────────────────────────────────
 export interface BrowserOperatorConfig {
@@ -116,7 +117,7 @@ class BrowserOperatorService {
     try {
       await browserOperatorDbService.seedProviderConfigs(defaultProvidersSeedConfig);
     } catch (err) {
-      console.warn('[BrowserOperator] DB seed failed (non-critical):', err);
+      loggers.browser.warn({ data: err }, '[BrowserOperator] DB seed failed (non-critical):');
     }
 
     // Start processing loop
@@ -126,7 +127,7 @@ class BrowserOperatorService {
     this.toolBridge.attach(this.queue);
 
     this.initialized = true;
-    console.info('[BrowserOperator] Service initialized with 5 adapters (custom, chatgpt, claude, gemini, zai)');
+    loggers.browser.info('[BrowserOperator] Service initialized with 5 adapters (custom, chatgpt, claude, gemini, zai)');
   }
 
   // ── Task Submission ──────────────────────────────────────────
@@ -147,7 +148,7 @@ class BrowserOperatorService {
     }
 
     const task = this.queue.enqueue(input);
-    console.info(`[BrowserOperator] Task ${task.id} queued (${input.mode}, priority: ${input.priority ?? 'normal'})`);
+    loggers.browser.info(`[BrowserOperator] Task ${task.id} queued (${input.mode}, priority: ${input.priority ?? 'normal'})`);
 
     // Persist to DB (don't block on DB failure)
     try {
@@ -163,7 +164,7 @@ class BrowserOperatorService {
         toolExecutionId: input.options?.executionId as string | undefined,
       });
     } catch (err) {
-      console.warn('[BrowserOperator] DB createTask failed (non-critical):', err);
+      loggers.browser.warn({ data: err }, '[BrowserOperator] DB createTask failed (non-critical):');
     }
 
     // Try to process immediately
@@ -196,13 +197,13 @@ class BrowserOperatorService {
     await this.ensureReady();
     const task = this.queue.retry(taskId);
     if (!task) throw new Error(`Cannot retry task "${taskId}" (not found, not failed, or max retries reached)`);
-    console.info(`[BrowserOperator] Task ${taskId} retried (attempt ${task.retryCount})`);
+    loggers.browser.info(`[BrowserOperator] Task ${taskId} retried (attempt ${task.retryCount})`);
 
     // Update DB (don't block on DB failure)
     try {
       await browserOperatorDbService.updateTaskStatus(taskId, 'queued');
     } catch (err) {
-      console.warn('[BrowserOperator] DB updateTaskStatus (retry) failed (non-critical):', err);
+      loggers.browser.warn({ data: err }, '[BrowserOperator] DB updateTaskStatus (retry) failed (non-critical):');
     }
 
     this.processQueue();
@@ -240,10 +241,10 @@ class BrowserOperatorService {
         await browserOperatorDbService.addLogs(taskId, result.logs);
       }
     } catch (err) {
-      console.warn('[BrowserOperator] DB updateTaskStatus (resume) failed (non-critical):', err);
+      loggers.browser.warn({ data: err }, '[BrowserOperator] DB updateTaskStatus (resume) failed (non-critical):');
     }
 
-    console.info(`[BrowserOperator] Task ${taskId} resumed → ${result.status}`);
+    loggers.browser.info(`[BrowserOperator] Task ${taskId} resumed → ${result.status}`);
     return result;
   }
 
@@ -267,7 +268,7 @@ class BrowserOperatorService {
     try {
       await browserOperatorDbService.addScreenshot(taskId, filename, 'manual');
     } catch (err) {
-      console.warn('[BrowserOperator] DB addScreenshot failed (non-critical):', err);
+      loggers.browser.warn({ data: err }, '[BrowserOperator] DB addScreenshot failed (non-critical):');
     }
 
     return filename;
@@ -315,10 +316,10 @@ class BrowserOperatorService {
       try {
         await browserOperatorDbService.updateTaskStatus(task.id, 'running');
       } catch (err) {
-        console.warn('[BrowserOperator] DB updateTaskStatus (running) failed (non-critical):', err);
+        loggers.browser.warn({ data: err }, '[BrowserOperator] DB updateTaskStatus (running) failed (non-critical):');
       }
 
-      console.info(`[BrowserOperator] Processing task ${task.id} (${task.input.mode})`);
+      loggers.browser.info(`[BrowserOperator] Processing task ${task.id} (${task.input.mode})`);
 
       const registry = getBrowserProviderRegistry();
       const adapter = registry.getOrThrow(task.input.provider);
@@ -347,10 +348,10 @@ class BrowserOperatorService {
           }
         }
       } catch (err) {
-        console.warn('[BrowserOperator] DB sync after task completion failed (non-critical):', err);
+        loggers.browser.warn({ data: err }, '[BrowserOperator] DB sync after task completion failed (non-critical):');
       }
 
-      console.info(`[BrowserOperator] Task ${task.id} → ${result.status}`);
+      loggers.browser.info(`[BrowserOperator] Task ${task.id} → ${result.status}`);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       this.queue.updateStatus(task.id, 'failed', {
@@ -364,10 +365,10 @@ class BrowserOperatorService {
           error: errorMsg,
         });
       } catch (dbErr) {
-        console.warn('[BrowserOperator] DB updateTaskStatus (failed) failed (non-critical):', dbErr);
+        loggers.browser.warn({ data: dbErr }, '[BrowserOperator] DB updateTaskStatus (failed) failed (non-critical):');
       }
 
-      console.error(`[BrowserOperator] Task ${task.id} failed:`, errorMsg);
+      loggers.browser.error({ err: errorMsg }, `[BrowserOperator] Task ${task.id} failed:`);
     } finally {
       this.processing = false;
       // Process the next task in queue (if any)
@@ -397,7 +398,7 @@ class BrowserOperatorService {
     const registry = getBrowserProviderRegistry();
     await registry.shutdownAll();
     this.initialized = false;
-    console.info('[BrowserOperator] Service shut down');
+    loggers.browser.info('[BrowserOperator] Service shut down');
   }
 
   // ── Internal ─────────────────────────────────────────────────

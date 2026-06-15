@@ -11,6 +11,7 @@
 import type { ISkill, SkillContext } from '../types';
 import type { AgentResult } from '../../agent-core/types';
 import type { ToolDefinition } from '../../ai-provider/types';
+import { logger } from '@/lib/logger';
 
 // ─── Planning Tool Definition ────────────────────────────────
 
@@ -136,7 +137,7 @@ export const planningSkill: ISkill = {
   async onError(_context: SkillContext, error: Error): Promise<Error | null> {
     // Check if error is planning-related
     if (error.message.includes('create_plan') || error.message.includes('prioritize')) {
-      console.warn(`[PlanningSkill] Planning tool error: ${error.message}`);
+      logger.warn(`[PlanningSkill] Planning tool error: ${error.message}`);
       // Return null to propagate the error — don't swallow it
     }
     return null;

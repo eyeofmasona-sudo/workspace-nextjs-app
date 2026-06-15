@@ -24,6 +24,7 @@ import type { ChatMessage, CompletionRequest } from '../ai-provider/types';
 import type { AgentConfig } from '../agent-core/types';
 import { generateCorrelationId } from '../utils/correlation';
 import { isMarketingAgent, getAgentDepartment, Departments } from '../types/departments';
+import { loggers } from '@/lib/logger';
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -424,7 +425,7 @@ JSON only: {"delegations":[{"agentId":"id","task":"subtask","reason":"why"}]}`;
 
       return { success: true, decisions };
     } catch (error) {
-      console.error('[OrchestratorChatEngine] Delegation analysis failed:', error);
+      loggers.orchestrator.error({ err: error }, '[OrchestratorChatEngine] Delegation analysis failed:');
       return {
         success: false,
         error: `Failed to analyze delegation: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -461,7 +462,7 @@ JSON only: {"delegations":[{"agentId":"id","task":"subtask","reason":"why"}]}`;
       const parsed = JSON.parse(jsonStr);
 
       if (!parsed.delegations || !Array.isArray(parsed.delegations)) {
-        console.warn('[OrchestratorChatEngine] AI response missing delegations array');
+        loggers.orchestrator.warn('[OrchestratorChatEngine] AI response missing delegations array');
         return [];
       }
 
@@ -471,7 +472,7 @@ JSON only: {"delegations":[{"agentId":"id","task":"subtask","reason":"why"}]}`;
         .filter((d: Record<string, unknown>) => {
           if (!d.agentId || typeof d.agentId !== 'string') return false;
           if (!validAgentIds.has(d.agentId)) {
-            console.warn(
+            loggers.orchestrator.warn(
               `[OrchestratorChatEngine] AI suggested unknown agent: ${d.agentId}, skipping`
             );
             return false;
@@ -485,8 +486,8 @@ JSON only: {"delegations":[{"agentId":"id","task":"subtask","reason":"why"}]}`;
           reason: (d.reason as string) || '',
         }));
     } catch (parseError) {
-      console.error('[OrchestratorChatEngine] Failed to parse delegation response:', parseError);
-      console.error('[OrchestratorChatEngine] Raw content:', content.slice(0, 500));
+      loggers.orchestrator.error({ err: parseError }, '[OrchestratorChatEngine] Failed to parse delegation response:');
+      loggers.orchestrator.error({ data: content.slice(0, 500) }, '[OrchestratorChatEngine] Raw content:');
       return [];
     }
   }
@@ -631,7 +632,7 @@ ${agentSummaries}`;
         usage: response.usage,
       };
     } catch (error) {
-      console.error('[OrchestratorChatEngine] Synthesis failed:', error);
+      loggers.orchestrator.error({ err: error }, '[OrchestratorChatEngine] Synthesis failed:');
 
       // Fallback: build a simple response from the raw results
       const fallbackContent = delegationSteps

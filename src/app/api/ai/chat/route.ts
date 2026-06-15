@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { agentExecutor } from '@/lib/agent-runtime/agent-executor';
 import { initProviders } from '@/lib/ai-provider';
 import { z } from 'zod';
+import { loggers } from '@/lib/logger';
 
 // Ensure providers are initialized (idempotent)
 let providersInitialized = false;
@@ -68,7 +69,7 @@ export async function POST(request: NextRequest) {
       durationMs: result.durationMs,
     });
   } catch (error) {
-    console.error('[API] POST /ai/chat error:', error);
+    loggers.api.error({ err: error }, '[API] POST /ai/chat error:');
 
     if (error instanceof Error) {
       // Check for provider-specific errors

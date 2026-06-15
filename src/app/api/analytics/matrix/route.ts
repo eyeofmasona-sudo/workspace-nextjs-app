@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { analyticsService } from '@/lib/analytics';
+import { loggers } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
     const matrix = await analyticsService.getAgentSkillMatrix(workspaceId);
     return NextResponse.json({ matrix });
   } catch (error) {
-    console.error('[API] GET /analytics/matrix error:', error);
+    loggers.api.error({ err: error }, '[API] GET /analytics/matrix error:');
     return NextResponse.json(
       { error: 'Failed to fetch agent-skill matrix' },
       { status: 500 }

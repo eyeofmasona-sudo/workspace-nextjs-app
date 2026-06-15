@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { toolExecutionService } from '@/lib/tool-hub/ToolExecutionService';
+import { loggers } from '@/lib/logger';
 
 export async function GET(
   request: NextRequest,
@@ -17,7 +18,7 @@ export async function GET(
 
     return NextResponse.json({ execution });
   } catch (error) {
-    console.error('[API] GET /tools/executions/[executionId] error:', error);
+    loggers.toolHub.error({ err: error }, '[API] GET /tools/executions/[executionId] error:');
     return NextResponse.json({ error: 'Failed to fetch execution' }, { status: 500 });
   }
 }

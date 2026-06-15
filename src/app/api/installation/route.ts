@@ -3,6 +3,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { installationService } from '@/lib/installation';
+import { loggers } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ skills, tools });
   } catch (error) {
-    console.error('[API] GET /installation error:', error);
+    loggers.api.error({ err: error }, '[API] GET /installation error:');
     return NextResponse.json(
       { error: 'Failed to fetch installed items' },
       { status: 500 }
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ result }, { status: 201 });
   } catch (error) {
-    console.error('[API] POST /installation error:', error);
+    loggers.api.error({ err: error }, '[API] POST /installation error:');
     return NextResponse.json(
       { error: 'Failed to install item' },
       { status: 500 }

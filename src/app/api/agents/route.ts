@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { agentRegistry } from '@/lib/agent-registry';
 import { agentCapabilityService } from '@/lib/agent-system';
 import { db } from '@/lib/db';
+import { loggers } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
     const agents = await agentRegistry.getAgents(workspaceId ?? undefined);
     return NextResponse.json({ agents });
   } catch (error) {
-    console.error('[API] GET /agents error:', error);
+    loggers.api.error({ err: error }, '[API] GET /agents error:');
     return NextResponse.json({ error: 'Failed to fetch agents' }, { status: 500 });
   }
 }
@@ -85,7 +86,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ agent }, { status: 201 });
   } catch (error) {
-    console.error('[API] POST /agents error:', error);
+    loggers.api.error({ err: error }, '[API] POST /agents error:');
     return NextResponse.json({ error: 'Failed to create agent' }, { status: 500 });
   }
 }

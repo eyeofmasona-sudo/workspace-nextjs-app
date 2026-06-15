@@ -38,6 +38,7 @@ import { skillRegistry } from '../skills/registry';
 import type { SkillContext } from '../skills/types';
 import { toolRegistry } from '../tools/registry';
 import { toolExecutor } from '../tools/executor';
+import { loggers } from '@/lib/logger';
 
 // ─── Constants ───────────────────────────────────────────────
 
@@ -170,7 +171,7 @@ class AgentRuntime {
         resolvedModel.preferenceType === 'preferred' &&
         config.model.fallback
       ) {
-        console.log(
+        loggers.agentRuntime.info(
           `[AgentRuntime] Retrying with fallback model: ${config.model.fallback.provider}/${config.model.fallback.model}`
         );
 
@@ -250,7 +251,7 @@ class AgentRuntime {
 
     // 17. Emit cost event to DB
     if (result.status === 'success') {
-      this.logCostToDb(agentId, result).catch(console.error);
+      this.logCostToDb(agentId, result).catch(loggers.agentRuntime.error);
     }
 
     return result;
@@ -312,7 +313,7 @@ class AgentRuntime {
       try {
         const skill = skillRegistry.get(skillRef.skillId);
         if (!skill) {
-          console.warn(
+          loggers.agentRuntime.warn(
             `[AgentRuntime] Skill "${skillRef.skillId}" not found in registry, skipping`
           );
           continue;
@@ -332,16 +333,13 @@ class AgentRuntime {
         context.data = updatedContext.data;
         context.messages = updatedContext.messages;
 
-        console.log(
+        loggers.agentRuntime.info(
           `[AgentRuntime] Skill "${skillRef.skillId}" beforeRun completed. ` +
           `Injected ${updatedContext.injectedToolDefinitions.length} tools, ` +
           `appendix length: ${updatedContext.systemPromptAppendix.length}`
         );
       } catch (error) {
-        console.error(
-          `[AgentRuntime] Skill "${skillRef.skillId}" beforeRun failed:`,
-          error
-        );
+        loggers.agentRuntime.error({ err: error }, `[AgentRuntime] Skill "${skillRef.skillId}" beforeRun failed:`);
         // Continue with other skills — don't fail the entire execution
       }
     }
@@ -372,10 +370,7 @@ class AgentRuntime {
 
         currentResult = await skill.afterRun(skillContext, currentResult);
       } catch (error) {
-        console.error(
-          `[AgentRuntime] Skill "${skillRef.skillId}" afterRun failed:`,
-          error
-        );
+        loggers.agentRuntime.error({ err: error }, `[AgentRuntime] Skill "${skillRef.skillId}" afterRun failed:`);
         // Continue with other skills — don't fail
       }
     }
@@ -401,15 +396,12 @@ class AgentRuntime {
         const modifiedError = await skill.onError(skillContext, error);
         if (modifiedError !== null) {
           // Skill handled the error — update error message
-          console.log(
+          loggers.agentRuntime.info(
             `[AgentRuntime] Skill "${skillRef.skillId}" handled error: ${modifiedError.message}`
           );
         }
       } catch (skillError) {
-        console.error(
-          `[AgentRuntime] Skill "${skillRef.skillId}" onError failed:`,
-          skillError
-        );
+        loggers.agentRuntime.error({ err: skillError }, `[AgentRuntime] Skill "${skillRef.skillId}" onError failed:`);
       }
     }
   }
@@ -437,7 +429,7 @@ class AgentRuntime {
 
       const tool = toolRegistry.get(toolRef.toolId);
       if (!tool) {
-        console.warn(
+        loggers.agentRuntime.warn(
           `[AgentRuntime] Tool "${toolRef.toolId}" not found in registry, skipping`
         );
         continue;
@@ -489,7 +481,7 @@ class AgentRuntime {
         };
       }
 
-      console.log(
+      loggers.agentRuntime.info(
         `[AgentRuntime] Tool call round ${round + 1}: ${response.toolCalls.length} tool calls requested`
       );
 
@@ -515,7 +507,7 @@ class AgentRuntime {
           toolCallId: toolResult.toolCallId,
         });
 
-        console.log(
+        loggers.agentRuntime.info(
           `[AgentRuntime] Tool ${toolResult.functionName} → ${toolResult.success ? 'success' : 'error'} ` +
           `(${toolResult.durationMs}ms)`
         );
@@ -525,7 +517,7 @@ class AgentRuntime {
     }
 
     // If we hit max rounds, return the last response content or a summary
-    console.warn(
+    loggers.agentRuntime.warn(
       `[AgentRuntime] Max tool call rounds (${MAX_TOOL_CALL_ROUNDS}) reached for agent ${config.id}`
     );
 
@@ -579,7 +571,7 @@ class AgentRuntime {
       toStatus: status,
       timestamp: Date.now(),
       source: 'agent-runtime',
-    }).catch(console.error);
+    }).catch(loggers.agentRuntime.error);
   }
 
   private handleError(
@@ -636,7 +628,7 @@ class AgentRuntime {
         source: 'agent-runtime',
       });
     } catch (error) {
-      console.error('[AgentRuntime] Failed to log cost:', error);
+      loggers.agentRuntime.error({ err: error }, '[AgentRuntime] Failed to log cost:');
     }
   }
 

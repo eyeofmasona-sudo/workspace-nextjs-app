@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { approvalSystem } from '@/lib/approval';
+import { loggers } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
     const approvals = await approvalSystem.getPending(workspaceId ?? undefined, limit);
     return NextResponse.json({ approvals });
   } catch (error) {
-    console.error('[API] GET /approvals error:', error);
+    loggers.api.error({ err: error }, '[API] GET /approvals error:');
     return NextResponse.json({ error: 'Failed to fetch approvals' }, { status: 500 });
   }
 }

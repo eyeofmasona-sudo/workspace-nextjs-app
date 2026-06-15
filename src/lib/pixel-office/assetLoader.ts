@@ -4,6 +4,7 @@ import { buildDynamicCatalog } from './layout/furnitureCatalog';
 import { setFloorSprites } from './floorTiles';
 import { setWallSprites } from './wallTiles';
 import { setCharacterTemplates } from './sprites/spriteData';
+import { loggers } from '@/lib/logger';
 
 function pngToSpriteData(img: HTMLImageElement): SpriteData {
   const canvas = document.createElement('canvas');
@@ -172,7 +173,7 @@ export async function loadAllAssets(): Promise<boolean> {
       try {
         const img = await loadImage(`/assets/characters/char_${i}.png`);
         characterData.push(extractCharacterSprites(img));
-      } catch (e) { console.warn(`Failed to load character ${i}:`, e); }
+      } catch (e) { loggers.pixel.warn({ data: e }, `Failed to load character ${i}:`); }
     }
     if (characterData.length > 0) setCharacterTemplates(characterData);
 
@@ -191,7 +192,7 @@ export async function loadAllAssets(): Promise<boolean> {
     try {
       const wallImg = await loadImage(`/assets/walls/wall_0.png`);
       wallSets.push(extractTileSheet(wallImg, 16, 32));
-    } catch (e) { console.warn('Wall sprites not loaded:', e); }
+    } catch (e) { loggers.pixel.warn({ data: e }, 'Wall sprites not loaded:'); }
     setWallSprites(wallSets);
 
     // 4. Load furniture
@@ -254,19 +255,19 @@ export async function loadAllAssets(): Promise<boolean> {
               animationGroup: asset.animationGroup,
               frame: asset.frame,
             });
-          } catch (e) { console.warn(`Failed to load furniture asset ${asset.id}:`, e); }
+          } catch (e) { loggers.pixel.warn({ data: e }, `Failed to load furniture asset ${asset.id}:`); }
         }
-      } catch (e) { console.warn(`Failed to load furniture manifest ${dir}:`, e); }
+      } catch (e) { loggers.pixel.warn({ data: e }, `Failed to load furniture manifest ${dir}:`); }
     }
 
     if (catalogEntries.length > 0) {
       buildDynamicCatalog({ catalog: catalogEntries, sprites: spriteMap });
     }
 
-    console.log(`✓ Assets loaded: ${characterData.length} chars, ${floorSprites.length} floors, ${catalogEntries.length} furniture`);
+    loggers.pixel.info(`✓ Assets loaded: ${characterData.length} chars, ${floorSprites.length} floors, ${catalogEntries.length} furniture`);
     return true;
   } catch (e) {
-    console.error('Failed to load assets:', e);
+    loggers.pixel.error({ err: e }, 'Failed to load assets:');
     return false;
   }
 }

@@ -6,6 +6,7 @@
 import type { ISkill, SkillContext } from '../types';
 import type { AgentResult } from '../../agent-core/types';
 import type { ToolDefinition } from '../../ai-provider/types';
+import { logger } from '@/lib/logger';
 
 // ─── Validation Tool Definitions ─────────────────────────────
 
@@ -127,7 +128,7 @@ export const validationSkill: ISkill = {
 
   async onError(_context: SkillContext, error: Error): Promise<Error | null> {
     if (error.message.includes('validate_output') || error.message.includes('check_facts')) {
-      console.warn(`[ValidationSkill] Validation tool error: ${error.message}`);
+      logger.warn(`[ValidationSkill] Validation tool error: ${error.message}`);
     }
     return null;
   },

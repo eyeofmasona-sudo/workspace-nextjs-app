@@ -3,6 +3,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { workflowService } from '@/lib/workflows';
+import { loggers } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,7 +13,7 @@ export async function GET(request: NextRequest) {
     const templates = await workflowService.listTemplates(category);
     return NextResponse.json({ templates });
   } catch (error) {
-    console.error('[API] GET /workflows error:', error);
+    loggers.api.error({ err: error }, '[API] GET /workflows error:');
     return NextResponse.json(
       { error: 'Failed to fetch workflow templates' },
       { status: 500 }
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
     const template = await workflowService.createTemplate(body);
     return NextResponse.json({ template }, { status: 201 });
   } catch (error) {
-    console.error('[API] POST /workflows error:', error);
+    loggers.api.error({ err: error }, '[API] POST /workflows error:');
     return NextResponse.json(
       { error: 'Failed to create workflow template' },
       { status: 500 }

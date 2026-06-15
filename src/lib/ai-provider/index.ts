@@ -1,4 +1,5 @@
 // ─── Agent OS — AI Provider Barrel Export ─────────────────────
+import { logger } from '@/lib/logger';
 
 export * from './types';
 export { providerRegistry } from './provider-registry';
@@ -18,9 +19,9 @@ export async function initProviders(): Promise<void> {
   if (isOpenRouterConfigured()) {
     const openrouter = new OpenRouterProvider();
     providerRegistry.register(openrouter);
-    console.log('[AI Provider] OpenRouter registered');
+    logger.info('[AI Provider] OpenRouter registered');
   } else {
-    console.warn('[AI Provider] OpenRouter not configured — set OPENROUTER_API_KEY in .env');
+    logger.warn('[AI Provider] OpenRouter not configured — set OPENROUTER_API_KEY in .env');
   }
 
   // Future: register additional providers here

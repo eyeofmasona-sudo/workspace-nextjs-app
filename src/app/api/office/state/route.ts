@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { loggers } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -195,7 +196,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('[API] GET /office/state error:', error);
+    loggers.api.error({ err: error }, '[API] GET /office/state error:');
     return NextResponse.json({ error: 'Failed to fetch office state' }, { status: 500 });
   }
 }

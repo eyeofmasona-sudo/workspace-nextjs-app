@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { eventBus } from '@/lib/event-bus';
 import { EventTypes } from '@/lib/types/events';
+import { loggers } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ tasks });
   } catch (error) {
-    console.error('[API] GET /tasks error:', error);
+    loggers.api.error({ err: error }, '[API] GET /tasks error:');
     return NextResponse.json({ error: 'Failed to fetch tasks' }, { status: 500 });
   }
 }
@@ -98,7 +99,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ task }, { status: 201 });
   } catch (error) {
-    console.error('[API] POST /tasks error:', error);
+    loggers.api.error({ err: error }, '[API] POST /tasks error:');
     return NextResponse.json({ error: 'Failed to create task' }, { status: 500 });
   }
 }

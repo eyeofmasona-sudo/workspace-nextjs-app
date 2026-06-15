@@ -10,6 +10,7 @@ import {
   agentModelConfigService,
   agentRuntimeService,
 } from '@/lib/agent-system';
+import { loggers } from '@/lib/logger';
 
 export async function GET(
   request: NextRequest,
@@ -79,7 +80,7 @@ export async function GET(
         : null,
     });
   } catch (error) {
-    console.error('[API] GET /agents/:id error:', error);
+    loggers.api.error({ err: error }, '[API] GET /agents/:id error:');
     return NextResponse.json({ error: 'Failed to fetch agent' }, { status: 500 });
   }
 }
@@ -134,7 +135,7 @@ export async function PATCH(
       },
     });
   } catch (error) {
-    console.error('[API] PATCH /agents/:id error:', error);
+    loggers.api.error({ err: error }, '[API] PATCH /agents/:id error:');
     return NextResponse.json({ error: 'Failed to update agent' }, { status: 500 });
   }
 }

@@ -6,6 +6,7 @@
 import type { ISkill, SkillContext } from '../types';
 import type { AgentResult } from '../../agent-core/types';
 import type { ToolDefinition } from '../../ai-provider/types';
+import { logger } from '@/lib/logger';
 
 // ─── Summarization Tool Definition ───────────────────────────
 
@@ -113,7 +114,7 @@ export const summarizationSkill: ISkill = {
 
   async onError(_context: SkillContext, error: Error): Promise<Error | null> {
     if (error.message.includes('summarize') || error.message.includes('extract_key_points')) {
-      console.warn(`[SummarizationSkill] Summarization tool error: ${error.message}`);
+      logger.warn(`[SummarizationSkill] Summarization tool error: ${error.message}`);
     }
     return null;
   },

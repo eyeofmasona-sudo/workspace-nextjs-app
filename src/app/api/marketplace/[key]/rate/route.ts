@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { marketplaceService } from '@/lib/marketplace';
+import { loggers } from '@/lib/logger';
 
 export async function POST(
   request: NextRequest,
@@ -34,7 +35,7 @@ export async function POST(
 
     return NextResponse.json({ result }, { status: 201 });
   } catch (error) {
-    console.error('[API] POST /marketplace/[key]/rate error:', error);
+    loggers.api.error({ err: error }, '[API] POST /marketplace/[key]/rate error:');
     return NextResponse.json(
       { error: 'Failed to rate marketplace item' },
       { status: 500 }

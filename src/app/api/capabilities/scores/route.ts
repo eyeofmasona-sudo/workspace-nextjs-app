@@ -3,6 +3,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { capabilityScoreService } from '@/lib/capability';
+import { loggers } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
       categories: capabilityScoreService.getScoreCategories(),
     });
   } catch (error) {
-    console.error('[API] GET /capabilities/scores error:', error);
+    loggers.api.error({ err: error }, '[API] GET /capabilities/scores error:');
     return NextResponse.json(
       { error: 'Failed to fetch capability scores' },
       { status: 500 }
@@ -64,7 +65,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ score: result }, { status: 201 });
   } catch (error) {
-    console.error('[API] POST /capabilities/scores error:', error);
+    loggers.api.error({ err: error }, '[API] POST /capabilities/scores error:');
     return NextResponse.json(
       { error: 'Failed to update capability score' },
       { status: 500 }

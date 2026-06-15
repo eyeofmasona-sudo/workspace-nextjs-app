@@ -3,6 +3,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { discoveryService } from '@/lib/discovery';
+import { loggers } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
     const results = await discoveryService.search(q);
     return NextResponse.json({ results });
   } catch (error) {
-    console.error('[API] GET /discovery error:', error);
+    loggers.api.error({ err: error }, '[API] GET /discovery error:');
     return NextResponse.json(
       { error: 'Failed to search' },
       { status: 500 }
@@ -73,7 +74,7 @@ export async function POST(request: NextRequest) {
       ...(workspaceId && { gapRecommendations, agentRecommendations }),
     });
   } catch (error) {
-    console.error('[API] POST /discovery error:', error);
+    loggers.api.error({ err: error }, '[API] POST /discovery error:');
     return NextResponse.json(
       { error: 'Failed to find recommendations' },
       { status: 500 }

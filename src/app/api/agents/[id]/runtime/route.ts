@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { agentRuntimeService } from '@/lib/agent-system';
 import { updateRuntimeSchema } from '@/lib/validations';
+import { loggers } from '@/lib/logger';
 
 export async function GET(
   request: NextRequest,
@@ -22,7 +23,7 @@ export async function GET(
     const runtimeState = await agentRuntimeService.getRuntimeState(id);
     return NextResponse.json({ runtimeState });
   } catch (error) {
-    console.error('[API] GET /agents/:id/runtime error:', error);
+    loggers.api.error({ err: error }, '[API] GET /agents/:id/runtime error:');
     return NextResponse.json({ error: 'Failed to fetch agent runtime state' }, { status: 500 });
   }
 }
@@ -78,7 +79,7 @@ export async function PATCH(
 
     return NextResponse.json({ runtimeState: result });
   } catch (error) {
-    console.error('[API] PATCH /agents/:id/runtime error:', error);
+    loggers.api.error({ err: error }, '[API] PATCH /agents/:id/runtime error:');
     return NextResponse.json({ error: 'Failed to update agent runtime state' }, { status: 500 });
   }
 }

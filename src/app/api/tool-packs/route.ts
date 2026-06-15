@@ -3,13 +3,14 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { toolPackService } from '@/lib/packs';
+import { loggers } from '@/lib/logger';
 
 export async function GET() {
   try {
     const packs = await toolPackService.listPacks();
     return NextResponse.json({ packs });
   } catch (error) {
-    console.error('[API] GET /tool-packs error:', error);
+    loggers.api.error({ err: error }, '[API] GET /tool-packs error:');
     return NextResponse.json(
       { error: 'Failed to fetch tool packs' },
       { status: 500 }
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   } catch (error) {
-    console.error('[API] POST /tool-packs error:', error);
+    loggers.api.error({ err: error }, '[API] POST /tool-packs error:');
     return NextResponse.json(
       { error: 'Failed to process tool packs request' },
       { status: 500 }

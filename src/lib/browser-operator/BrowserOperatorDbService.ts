@@ -8,6 +8,7 @@
  */
 
 import type { BrowserTaskInput, BrowserTaskStatus, BrowserLogEntry } from './BrowserOperatorTypes';
+import { loggers } from '@/lib/logger';
 
 // ── Lazy DB import with graceful fallback ──────────────────────
 let db: any = null;
@@ -21,7 +22,7 @@ async function getDb(): Promise<any | null> {
     db = mod.db;
     return db;
   } catch {
-    console.warn('[BrowserOperatorDbService] Prisma DB not available — running in memory-only mode');
+    loggers.browser.warn('[BrowserOperatorDbService] Prisma DB not available — running in memory-only mode');
     return null;
   }
 }
@@ -93,11 +94,11 @@ class BrowserOperatorDbService {
           // Test connectivity
           await database.browserOperatorTask.count({ take: 1 });
           this.dbAvailable = true;
-          console.info('[BrowserOperatorDbService] DB available — persistence enabled');
+          loggers.browser.info('[BrowserOperatorDbService] DB available — persistence enabled');
         }
       } catch {
         this.dbAvailable = false;
-        console.warn('[BrowserOperatorDbService] DB unavailable — persistence disabled');
+        loggers.browser.warn('[BrowserOperatorDbService] DB unavailable — persistence disabled');
       }
     })();
 
@@ -130,7 +131,7 @@ class BrowserOperatorDbService {
 
       return record.id;
     } catch (err) {
-      console.error('[BrowserOperatorDbService] createTask failed:', err);
+      loggers.browser.error({ err: err }, '[BrowserOperatorDbService] createTask failed:');
       return null;
     }
   }
@@ -170,7 +171,7 @@ class BrowserOperatorDbService {
 
       return true;
     } catch (err) {
-      console.error('[BrowserOperatorDbService] updateTaskStatus failed:', err);
+      loggers.browser.error({ err: err }, '[BrowserOperatorDbService] updateTaskStatus failed:');
       return false;
     }
   }
@@ -193,7 +194,7 @@ class BrowserOperatorDbService {
 
       return record.id;
     } catch (err) {
-      console.error('[BrowserOperatorDbService] addLog failed:', err);
+      loggers.browser.error({ err: err }, '[BrowserOperatorDbService] addLog failed:');
       return null;
     }
   }
@@ -216,7 +217,7 @@ class BrowserOperatorDbService {
         })),
       });
     } catch (err) {
-      console.error('[BrowserOperatorDbService] addLogs failed:', err);
+      loggers.browser.error({ err: err }, '[BrowserOperatorDbService] addLogs failed:');
     }
   }
 
@@ -242,7 +243,7 @@ class BrowserOperatorDbService {
 
       return record.id;
     } catch (err) {
-      console.error('[BrowserOperatorDbService] addScreenshot failed:', err);
+      loggers.browser.error({ err: err }, '[BrowserOperatorDbService] addScreenshot failed:');
       return null;
     }
   }
@@ -261,7 +262,7 @@ class BrowserOperatorDbService {
         },
       });
     } catch (err) {
-      console.error('[BrowserOperatorDbService] getTask failed:', err);
+      loggers.browser.error({ err: err }, '[BrowserOperatorDbService] getTask failed:');
       return null;
     }
   }
@@ -287,7 +288,7 @@ class BrowserOperatorDbService {
         },
       });
     } catch (err) {
-      console.error('[BrowserOperatorDbService] listTasks failed:', err);
+      loggers.browser.error({ err: err }, '[BrowserOperatorDbService] listTasks failed:');
       return [];
     }
   }
@@ -304,7 +305,7 @@ class BrowserOperatorDbService {
         orderBy: { providerId: 'asc' },
       });
     } catch (err) {
-      console.error('[BrowserOperatorDbService] getProviderConfigs failed:', err);
+      loggers.browser.error({ err: err }, '[BrowserOperatorDbService] getProviderConfigs failed:');
       return [];
     }
   }
@@ -352,11 +353,11 @@ class BrowserOperatorDbService {
       }
 
       if (seeded > 0) {
-        console.info(`[BrowserOperatorDbService] Seeded ${seeded} provider configs`);
+        loggers.browser.info(`[BrowserOperatorDbService] Seeded ${seeded} provider configs`);
       }
       return seeded;
     } catch (err) {
-      console.error('[BrowserOperatorDbService] seedProviderConfigs failed:', err);
+      loggers.browser.error({ err: err }, '[BrowserOperatorDbService] seedProviderConfigs failed:');
       return 0;
     }
   }

@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { loggers } from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   try {
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
       message: 'Model configs reset to OpenRouter defaults',
     });
   } catch (error) {
-    console.error('[API] POST /ai/reset-models error:', error);
+    loggers.api.error({ err: error }, '[API] POST /ai/reset-models error:');
     return NextResponse.json(
       { error: 'Failed to reset model configs' },
       { status: 500 },

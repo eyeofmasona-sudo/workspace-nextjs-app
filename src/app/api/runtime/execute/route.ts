@@ -8,6 +8,7 @@ import { loadAgentConfigs } from '@/lib/agent-core/config-loader';
 import { AGENT_CONFIGS } from '@/lib/agent-configs';
 import { initProviders } from '@/lib/ai-provider';
 import { z } from 'zod';
+import { loggers } from '@/lib/logger';
 
 // Ensure initialization (idempotent)
 let initialized = false;
@@ -71,7 +72,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error('[API] POST /runtime/execute error:', error);
+    loggers.api.error({ err: error }, '[API] POST /runtime/execute error:');
 
     if (error instanceof Error) {
       if (error.message.includes('Provider not found') || error.message.includes('No available model')) {

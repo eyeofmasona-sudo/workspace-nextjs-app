@@ -3,6 +3,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { toolExecutionService } from '@/lib/tool-hub/ToolExecutionService';
+import { loggers } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest) {
       executions,
     });
   } catch (error) {
-    console.error('[API] GET /tools/executions/cleanup error:', error);
+    loggers.toolHub.error({ err: error }, '[API] GET /tools/executions/cleanup error:');
     return NextResponse.json({ error: 'Failed to fetch cleanup candidates' }, { status: 500 });
   }
 }
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest) {
       message: `Cleaned up ${result.deleted} old execution records`,
     });
   } catch (error) {
-    console.error('[API] POST /tools/executions/cleanup error:', error);
+    loggers.toolHub.error({ err: error }, '[API] POST /tools/executions/cleanup error:');
     return NextResponse.json({ error: 'Failed to cleanup executions' }, { status: 500 });
   }
 }

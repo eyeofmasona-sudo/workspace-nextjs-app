@@ -9,6 +9,7 @@ import { db } from '../db';
 import { eventBus } from '../event-bus';
 import { DEFAULT_TOOL_PACKS } from './defaults';
 import type { DefaultToolPackDef } from './defaults';
+import { logger } from '@/lib/logger';
 
 class ToolPackService {
   private static instance: ToolPackService | null = null;
@@ -148,7 +149,7 @@ class ToolPackService {
       source: 'tool-pack-service',
     } as any);
 
-    console.log(
+    logger.info(
       `[ToolPackService] Installed pack "${packKey}" to agent ${agentId}: ` +
       `${installed} installed, ${skipped} skipped, ${errors.length} errors`
     );
@@ -212,7 +213,7 @@ class ToolPackService {
       }
     }
 
-    console.log(
+    logger.info(
       `[ToolPackService] Uninstalled pack "${packKey}" from agent ${agentId}: ` +
       `${removed} removed, ${notInstalled} not installed, ${errors.length} errors`
     );
@@ -270,7 +271,7 @@ class ToolPackService {
         });
 
         if (!tool) {
-          console.warn(`[ToolPackService] Tool "${toolKey}" not found, skipping for pack "${packDef.key}"`);
+          logger.warn(`[ToolPackService] Tool "${toolKey}" not found, skipping for pack "${packDef.key}"`);
           itemsSkipped++;
           continue;
         }
@@ -300,7 +301,7 @@ class ToolPackService {
     }
 
     if (packsCreated > 0 || itemsCreated > 0) {
-      console.log(
+      logger.info(
         `[ToolPackService] Seeded ${packsCreated} packs, ${itemsCreated} items ` +
         `(skipped ${packsSkipped} packs, ${itemsSkipped} items)`
       );
