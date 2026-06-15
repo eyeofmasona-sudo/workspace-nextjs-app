@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       action: parsed.data.action,
       input: parsed.data.input,
       correlationId: parsed.data.correlationId,
-      resumedFromApproval: parsed.data.resumedFromApproval,
+      resumedFromApproval: false,
     });
 
     // Return appropriate status codes

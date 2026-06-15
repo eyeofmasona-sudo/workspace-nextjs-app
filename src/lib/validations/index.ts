@@ -276,7 +276,7 @@ export const executeToolSchema = z.object({
   action: z.string().min(1, 'action is required'),
   input: z.unknown().optional(),
   correlationId: z.string().optional(),
-  resumedFromApproval: z.boolean().optional(),
+
 });
 
 export const executionQuerySchema = z.object({
