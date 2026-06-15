@@ -817,3 +817,128 @@ model PublishingQueueItem {
 
   @@map("publishing_queue_items")
 }
+
+// ─── Mini CRM ─────────────────────────────────────────────────
+
+model Lead {
+  id                String    @id @default(cuid())
+  workspaceId       String
+
+  // Identity
+  name              String
+  company           String?
+  source            String    @default("manual")
+  // manual | telegram | email | website | instagram | whatsapp | referral
+
+  // Status pipeline
+  status            String    @default("new")
+  // new | contacted | qualified | proposal | won | lost | archived
+
+  // Assignment
+  assignedAgentId   String?
+
+  // Contact info
+  phone             String?
+  email             String?
+  telegramHandle    String?
+
+  // Scoring & timing
+  score             Int       @default(0)     // 0–100 lead quality score
+  lastMessageAt     DateTime?
+  nextFollowUpAt    DateTime?
+
+  // Notes
+  notes             String?
+  tags              String    @default("[]")  // JSON array
+  metadata          String    @default("{}")  // JSON (source data, budget, etc.)
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  contacts          Contact[]
+  conversations     Conversation[]
+  deals             Deal[]
+  followUps         FollowUp[]
+
+  @@map("leads")
+}
+
+model Contact {
+  id        String   @id @default(cuid())
+  leadId    String
+  name      String
+  phone     String?
+  email     String?
+  role      String?  // decision_maker | influencer | user | other
+  notes     String?
+  createdAt DateTime @default(now())
+
+  lead      Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@map("contacts")
+}
+
+model Conversation {
+  id               String    @id @default(cuid())
+  leadId           String
+  platform         String    // telegram | whatsapp | email | instagram | manual
+  externalThreadId String?   // platform-side thread/chat ID
+  title            String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  lead             Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  messages         ConversationMessage[]
+
+  @@map("conversations")
+}
+
+model ConversationMessage {
+  id             String   @id @default(cuid())
+  conversationId String
+  agentId        String?   // null = human / external
+  agentName      String?
+  content        String
+  direction      String    // in (from lead) | out (from agent/human)
+  timestamp      DateTime  @default(now())
+  metadata       String?   // JSON: attachments, message_id, etc.
+
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@map("conversation_messages")
+}
+
+model Deal {
+  id          String   @id @default(cuid())
+  leadId      String
+  title       String
+  value       Float    @default(0)
+  currency    String   @default("USD")
+  stage       String   @default("discovery")
+  // discovery | proposal | negotiation | won | lost
+  probability Int      @default(0)   // 0–100 %
+  closedAt    DateTime?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  lead        Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@map("deals")
+}
+
+model FollowUp {
+  id          String   @id @default(cuid())
+  leadId      String
+  agentId     String?
+  agentName   String?
+  date        DateTime
+  note        String?
+  done        Boolean  @default(false)
+  doneAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  lead        Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@map("follow_ups")
+}

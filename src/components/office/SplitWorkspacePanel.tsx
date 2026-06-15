@@ -9,6 +9,7 @@ import { PreviewPanel } from '@/components/preview/PreviewPanel';
 import { MemoryPanel } from '@/components/memory/MemoryPanel';
 import { ContentReviewWidget } from '@/components/marketing/ContentReviewBadge';
 import { ContentCalendarPanel } from '@/components/marketing/ContentCalendarPanel';
+import { CRMPanel } from '@/components/crm/CRMPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { OfficeApproval, OfficeEvent } from '@/hooks/useOfficeData';
@@ -33,6 +34,7 @@ const PANEL_TABS = [
   { key: 'knowledge', label: 'Memory', icon: '🧠' },
   { key: 'brand', label: 'Brand Check', icon: '🛡️' },
   { key: 'publishing', label: 'Publishing', icon: '📅' },
+  { key: 'crm', label: 'CRM', icon: '🎯' },
 ];
 
 export function SplitWorkspacePanel({ approvals, events, workspaceId }: SplitWorkspacePanelProps) {
@@ -61,7 +63,7 @@ export function SplitWorkspacePanel({ approvals, events, workspaceId }: SplitWor
 
         <div className="flex-1 min-h-0 overflow-hidden">
           {PANEL_TABS.map((tab) => (
-            <TabsContent key={tab.key} value={tab.key} className={`h-full m-0 ${tab.key === 'preview' || tab.key === 'publishing' ? '' : 'p-3'}`}>
+            <TabsContent key={tab.key} value={tab.key} className={`h-full m-0 ${['preview','publishing','crm'].includes(tab.key) ? '' : 'p-3'}`}>
               <TabContent tabKey={tab.key} approvals={approvals} events={events} workspaceId={workspaceId} />
             </TabsContent>
           ))}
@@ -135,6 +137,9 @@ function TabContent({ tabKey, approvals, events, workspaceId }: {
 
     case 'publishing':
       return <ContentCalendarPanel workspaceId={workspaceId} />;
+
+    case 'crm':
+      return <CRMPanel workspaceId={workspaceId} />;
 
     default:
       return (
