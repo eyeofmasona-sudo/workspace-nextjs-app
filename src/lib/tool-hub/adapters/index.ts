@@ -1,38 +1,54 @@
 // ─── Agent OS — Tool Adapters ────────────────────────────────
-// Skeleton adapters for all default tools.
-// IMPORTANT: No real dangerous execution (no shell, no SQL, no file writes, no deploy).
+// Real adapters for filesystem, git, and project tools.
+// Skeleton stubs retained for unimplemented tools.
 
 import type { ToolAdapter, ToolExecutionInput, ToolExecutionOutput } from '../types';
 
-// ─── Filesystem Adapters ─────────────────────────────────────
+// ─── Real Filesystem Adapters ────────────────────────────────
+export {
+  filesystemReadAdapter,
+  filesystemWriteAdapter,
+  filesystemListAdapter,
+  filesystemExistsAdapter,
+  filesystemSearchAdapter,
+} from './filesystem';
 
-export const filesystemReadAdapter: ToolAdapter = {
-  key: 'filesystem.read',
-  async execute(input: ToolExecutionInput): Promise<ToolExecutionOutput> {
-    return {
-      success: true,
-      data: {
-        message: '[Skeleton] Filesystem read executed',
-        path: input.input,
-        files: ['src/index.ts', 'README.md', 'package.json'],
-        content: '// Mock file content for path: ' + JSON.stringify(input.input),
-      },
-      metadata: { adapter: 'filesystem.read', skeleton: true },
-    };
-  },
-};
+// ─── Real Git Adapters ───────────────────────────────────────
+export {
+  gitStatusAdapter,
+  gitDiffAdapter,
+  gitBranchAdapter,
+  gitLogAdapter,
+} from './git';
 
-export const filesystemWriteAdapter: ToolAdapter = {
-  key: 'filesystem.write',
-  async execute(_input: ToolExecutionInput): Promise<ToolExecutionOutput> {
-    // BLOCKED: Should never reach here — requires approval first
-    return {
-      success: false,
-      error: '[Blocked] Filesystem write requires approval. No files were modified.',
-      metadata: { adapter: 'filesystem.write', blocked: true, skeleton: true },
-    };
-  },
-};
+// ─── Real Project Adapters ───────────────────────────────────
+export {
+  projectBuildAdapter,
+  projectTypecheckAdapter,
+  projectLintAdapter,
+  projectTestAdapter,
+} from './project';
+
+// ─── Local re-imports for ALL_ADAPTERS array ─────────────────
+import {
+  filesystemReadAdapter,
+  filesystemWriteAdapter,
+  filesystemListAdapter,
+  filesystemExistsAdapter,
+  filesystemSearchAdapter,
+} from './filesystem';
+import {
+  gitStatusAdapter,
+  gitDiffAdapter,
+  gitBranchAdapter,
+  gitLogAdapter,
+} from './git';
+import {
+  projectBuildAdapter,
+  projectTypecheckAdapter,
+  projectLintAdapter,
+  projectTestAdapter,
+} from './project';
 
 // ─── Terminal Adapter ────────────────────────────────────────
 
@@ -48,41 +64,8 @@ export const terminalRunAdapter: ToolAdapter = {
   },
 };
 
-// ─── Git Adapters ────────────────────────────────────────────
 
-export const gitStatusAdapter: ToolAdapter = {
-  key: 'git.status',
-  async execute(input: ToolExecutionInput): Promise<ToolExecutionOutput> {
-    return {
-      success: true,
-      data: {
-        message: '[Skeleton] Git status executed',
-        branch: 'main',
-        status: 'clean',
-        staged: [],
-        unstaged: [],
-        input: input.input,
-      },
-      metadata: { adapter: 'git.status', skeleton: true },
-    };
-  },
-};
-
-export const gitDiffAdapter: ToolAdapter = {
-  key: 'git.diff',
-  async execute(input: ToolExecutionInput): Promise<ToolExecutionOutput> {
-    return {
-      success: true,
-      data: {
-        message: '[Skeleton] Git diff executed',
-        diff: 'No changes detected (mock output)',
-        input: input.input,
-      },
-      metadata: { adapter: 'git.diff', skeleton: true },
-    };
-  },
-};
-
+// ─── Browser Search (Skeleton) ──────────────────────────────
 // ─── Browser Adapter ─────────────────────────────────────────
 
 export const browserSearchAdapter: ToolAdapter = {
@@ -366,11 +349,25 @@ export const browserAiProviderAdapter: ToolAdapter = {
 // ─── Adapter Registry ────────────────────────────────────────
 
 const ALL_ADAPTERS: ToolAdapter[] = [
+  // ── Real: Filesystem ──
   filesystemReadAdapter,
   filesystemWriteAdapter,
-  terminalRunAdapter,
+  filesystemListAdapter,
+  filesystemExistsAdapter,
+  filesystemSearchAdapter,
+  // ── Real: Git ──
   gitStatusAdapter,
   gitDiffAdapter,
+  gitBranchAdapter,
+  gitLogAdapter,
+  // ── Real: Project ──
+  projectBuildAdapter,
+  projectTypecheckAdapter,
+  projectLintAdapter,
+  projectTestAdapter,
+  // ── Skeleton: Terminal (blocked) ──
+  terminalRunAdapter,
+  // ── Skeleton: Other tools ──
   browserSearchAdapter,
   databaseQueryAdapter,
   documentParseAdapter,
@@ -381,6 +378,7 @@ const ALL_ADAPTERS: ToolAdapter[] = [
   deploymentDeployAdapter,
   modelResolveAdapter,
   notificationSendAdapter,
+  // ── Real: Browser ──
   browserAiProviderAdapter,
 ];
 

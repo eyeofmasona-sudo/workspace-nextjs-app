@@ -15,7 +15,8 @@
     "browser:smoke": "bun run scripts/smoke-browser-operator.ts",
     "bot": "ts-node --project tsconfig.bot.json src/telegram/bot.ts",
     "bot:build": "tsc --project tsconfig.bot.json",
-    "bot:start": "node dist/telegram/bot.js"
+    "bot:start": "node dist/telegram/bot.js",
+    "smoke:dev-tools": "ts-node --project tsconfig.bot.json scripts/smoke-dev-tools.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
