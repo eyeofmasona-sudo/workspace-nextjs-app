@@ -3,6 +3,7 @@
 // Skeleton stubs retained for unimplemented tools.
 
 import type { ToolAdapter, ToolExecutionInput, ToolExecutionOutput } from '../types';
+import { loggers } from '@/lib/logger';
 
 // ─── Real Filesystem Adapters ────────────────────────────────
 export {
@@ -50,6 +51,25 @@ import {
   projectTestAdapter,
 } from './project';
 
+
+// ─── Mock-gate helper ─────────────────────────────────────────
+// В продакшене все skeleton-адаптеры возвращают {success:false}.
+// Установить ENABLE_MOCK_TOOLS=true чтобы разрешить mock-ответы
+// (например, при локальной разработке без реальных бекендов).
+// По умолчанию: false — агенты не получают фиктивный success.
+
+const MOCKS_ENABLED = process.env.ENABLE_MOCK_TOOLS === 'true';
+
+function mockGate(adapterKey: string): ToolExecutionOutput | null {
+  if (MOCKS_ENABLED) return null; // разрешено — продолжаем выполнение
+  return {
+    success: false,
+    error: `[Not Implemented] The tool '${adapterKey}' has no real backend configured. ` +
+      `Set ENABLE_MOCK_TOOLS=true for local development stubs.`,
+    metadata: { adapter: adapterKey, stub: true, mockGated: true },
+  };
+}
+
 // ─── Terminal Adapter ────────────────────────────────────────
 
 export const terminalRunAdapter: ToolAdapter = {
@@ -71,17 +91,20 @@ export const terminalRunAdapter: ToolAdapter = {
 export const browserSearchAdapter: ToolAdapter = {
   key: 'browser.search',
   async execute(input: ToolExecutionInput): Promise<ToolExecutionOutput> {
+    const gated = mockGate('browser.search');
+    if (gated) return gated;
+    // MOCK (ENABLE_MOCK_TOOLS=true only)
     return {
       success: true,
       data: {
-        message: '[Skeleton] Browser search executed',
+        message: '[Mock] Browser search — stub output',
         query: input.input,
         results: [
           { title: 'Mock Search Result 1', url: 'https://example.com/1', snippet: 'This is a mock search result.' },
           { title: 'Mock Search Result 2', url: 'https://example.com/2', snippet: 'Another mock result.' },
         ],
       },
-      metadata: { adapter: 'browser.search', skeleton: true },
+      metadata: { adapter: 'browser.search', stub: true },
     };
   },
 };
@@ -105,16 +128,19 @@ export const databaseQueryAdapter: ToolAdapter = {
 export const documentParseAdapter: ToolAdapter = {
   key: 'document.parse',
   async execute(input: ToolExecutionInput): Promise<ToolExecutionOutput> {
+    const gated = mockGate('document.parse');
+    if (gated) return gated;
+    // MOCK (ENABLE_MOCK_TOOLS=true only)
     return {
       success: true,
       data: {
-        message: '[Skeleton] Document parse executed',
+        message: '[Mock] Document parse — stub output',
         input: input.input,
-        extractedText: 'Mock extracted document content. This is a skeleton adapter.',
+        extractedText: 'Mock extracted document content. This is a stub adapter.',
         pageCount: 1,
         format: 'pdf',
       },
-      metadata: { adapter: 'document.parse', skeleton: true },
+      metadata: { adapter: 'document.parse', stub: true },
     };
   },
 };
@@ -124,16 +150,19 @@ export const documentParseAdapter: ToolAdapter = {
 export const ocrExtractAdapter: ToolAdapter = {
   key: 'ocr.extract',
   async execute(input: ToolExecutionInput): Promise<ToolExecutionOutput> {
+    const gated = mockGate('ocr.extract');
+    if (gated) return gated;
+    // MOCK (ENABLE_MOCK_TOOLS=true only)
     return {
       success: true,
       data: {
-        message: '[Skeleton] OCR extract executed',
+        message: '[Mock] OCR extract — stub output',
         input: input.input,
         extractedText: 'Mock OCR extracted text from image.',
         confidence: 0.95,
         language: 'en',
       },
-      metadata: { adapter: 'ocr.extract', skeleton: true },
+      metadata: { adapter: 'ocr.extract', stub: true },
     };
   },
 };
@@ -143,16 +172,19 @@ export const ocrExtractAdapter: ToolAdapter = {
 export const translationTranslateAdapter: ToolAdapter = {
   key: 'translation.translate',
   async execute(input: ToolExecutionInput): Promise<ToolExecutionOutput> {
+    const gated = mockGate('translation.translate');
+    if (gated) return gated;
+    // MOCK (ENABLE_MOCK_TOOLS=true only)
     return {
       success: true,
       data: {
-        message: '[Skeleton] Translation executed',
+        message: '[Mock] Translation — stub output',
         input: input.input,
         translatedText: 'Mock translated text output.',
         sourceLanguage: 'en',
         targetLanguage: 'es',
       },
-      metadata: { adapter: 'translation.translate', skeleton: true },
+      metadata: { adapter: 'translation.translate', stub: true },
     };
   },
 };
@@ -162,16 +194,19 @@ export const translationTranslateAdapter: ToolAdapter = {
 export const ragIndexAdapter: ToolAdapter = {
   key: 'rag.index',
   async execute(input: ToolExecutionInput): Promise<ToolExecutionOutput> {
+    const gated = mockGate('rag.index');
+    if (gated) return gated;
+    // MOCK (ENABLE_MOCK_TOOLS=true only)
     return {
       success: true,
       data: {
-        message: '[Skeleton] RAG index executed',
+        message: '[Mock] RAG index — stub output',
         input: input.input,
         documentsIndexed: 0,
         chunksCreated: 0,
         indexStatus: 'mock_complete',
       },
-      metadata: { adapter: 'rag.index', skeleton: true },
+      metadata: { adapter: 'rag.index', stub: true },
     };
   },
 };
@@ -179,17 +214,20 @@ export const ragIndexAdapter: ToolAdapter = {
 export const ragQueryAdapter: ToolAdapter = {
   key: 'rag.query',
   async execute(input: ToolExecutionInput): Promise<ToolExecutionOutput> {
+    const gated = mockGate('rag.query');
+    if (gated) return gated;
+    // MOCK (ENABLE_MOCK_TOOLS=true only)
     return {
       success: true,
       data: {
-        message: '[Skeleton] RAG query executed',
+        message: '[Mock] RAG query — stub output',
         input: input.input,
         results: [
           { content: 'Mock RAG retrieval result 1', score: 0.92, source: 'doc1.md' },
           { content: 'Mock RAG retrieval result 2', score: 0.85, source: 'doc2.md' },
         ],
       },
-      metadata: { adapter: 'rag.query', skeleton: true },
+      metadata: { adapter: 'rag.query', stub: true },
     };
   },
 };
@@ -232,15 +270,19 @@ export const modelResolveAdapter: ToolAdapter = {
 export const notificationSendAdapter: ToolAdapter = {
   key: 'notification.send',
   async execute(input: ToolExecutionInput): Promise<ToolExecutionOutput> {
+    const gated = mockGate('notification.send');
+    if (gated) return gated;
+    // MOCK (ENABLE_MOCK_TOOLS=true only): логирует в консоль, не отправляет реально
+    loggers.api.info({ data: input.input }, '[notification.send] Mock notification (ENABLE_MOCK_TOOLS=true)');
     return {
       success: true,
       data: {
-        message: '[Skeleton] Notification sent (logged only)',
+        message: '[Mock] Notification logged only — not actually delivered',
         input: input.input,
-        delivered: true,
+        delivered: false,
         channel: 'log',
       },
-      metadata: { adapter: 'notification.send', skeleton: true },
+      metadata: { adapter: 'notification.send', stub: true },
     };
   },
 };
