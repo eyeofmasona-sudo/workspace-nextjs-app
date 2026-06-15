@@ -236,16 +236,38 @@ model AgentMemoryLink {
 // ─── Memory System ───────────────────────────────────────────
 
 model MemoryItem {
-  id        String   @id @default(cuid())
-  scope     String // global | workspace | project | agent | task
-  scopeId   String? // ID of the scope entity (workspace_id, project_id, etc.)
-  type      String // context | decision | fact | lesson | conversation_summary | error
-  content   String
-  metadata  String? // JSON
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  // ── Legacy scope fields (preserved for compatibility) ──────
+  scope       String   @default("workspace") // global | workspace | project | agent | task
+  scopeId     String?  // ID of the scope entity
 
-  agentLinks AgentMemoryLink[]
+  // ── New workspace-first fields ────────────────────────────
+  workspaceId String?  // direct workspace reference
+  projectId   String?  // optional project binding
+  agentId     String?  // which agent generated this
+
+  // ── Type and content ──────────────────────────────────────
+  type        String   // decision | fact | architecture | bug | task_result |
+                       // brand_rule | user_preference | risk | lead_note |
+                       // workflow_note | file_reference | context | lesson |
+                       // conversation_summary | error (extendable)
+  title       String   @default("") // brief label / search key
+  content     String
+  tags        String   @default("[]") // JSON array of string tags
+  metadata    String?  // JSON (legacy + extensions)
+
+  // ── Enrichment fields ─────────────────────────────────────
+  importance  String   @default("medium") // low | medium | high | critical
+  confidence  Float    @default(0.8)      // 0..1
+  visibility  String   @default("workspace") // global | workspace | agent_private
+
+  // ── Conflict tracking ─────────────────────────────────────
+  conflictIds String   @default("[]") // JSON array of conflicting item IDs
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  agentLinks  AgentMemoryLink[]
 
   @@map("memory_items")
 }

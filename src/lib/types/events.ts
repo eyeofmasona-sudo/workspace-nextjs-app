@@ -41,6 +41,9 @@ export const EventTypes = {
 
   // Memory events
   MEMORY_CREATED: 'memory.created',
+  MEMORY_UPDATED: 'memory.updated',
+  MEMORY_REMOVED: 'memory.removed',
+  MEMORY_CONFLICT: 'memory.conflict',
 
   // Cost events
   COST_LOGGED: 'cost.logged',
@@ -462,6 +465,29 @@ export interface PostLaunchReviewPayload extends BaseEventPayload {
 
 // ─── Event Map (for type-safe subscriptions) ─────────────────
 
+// ─── Extended Memory Payloads ────────────────────────────────
+
+export interface MemoryUpdatedPayload extends BaseEventPayload {
+  memoryId: string;
+  workspaceId?: string;
+  type: string;
+  title: string;
+}
+
+export interface MemoryRemovedPayload extends BaseEventPayload {
+  memoryId: string;
+  workspaceId?: string;
+  type: string;
+}
+
+export interface MemoryConflictPayload extends BaseEventPayload {
+  newItemId: string;
+  conflictingItemId: string;
+  workspaceId?: string;
+  type: string;
+  title: string;
+}
+
 // ─── Task Contract & Quality Gate Payloads ───────────────────
 
 export interface TaskContractCreatedPayload extends BaseEventPayload {
@@ -555,6 +581,9 @@ export interface EventMap {
   [EventTypes.CAMPAIGN_LIVE]: CampaignLivePayload;
   [EventTypes.MARKET_FEEDBACK_COLLECTED]: MarketFeedbackCollectedPayload;
   [EventTypes.POST_LAUNCH_REVIEW]: PostLaunchReviewPayload;
+  [EventTypes.MEMORY_UPDATED]: MemoryUpdatedPayload;
+  [EventTypes.MEMORY_REMOVED]: MemoryRemovedPayload;
+  [EventTypes.MEMORY_CONFLICT]: MemoryConflictPayload;
   [EventTypes.TASK_CONTRACT_CREATED]: TaskContractCreatedPayload;
   [EventTypes.TASK_ROUTING_DECIDED]: TaskRoutingDecidedPayload;
   [EventTypes.TASK_QUALITY_CHECKED]: TaskQualityCheckedPayload;

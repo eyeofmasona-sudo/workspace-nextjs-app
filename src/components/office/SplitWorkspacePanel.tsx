@@ -6,6 +6,7 @@
 
 import { useState } from 'react';
 import { PreviewPanel } from '@/components/preview/PreviewPanel';
+import { MemoryPanel } from '@/components/memory/MemoryPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { OfficeApproval, OfficeEvent } from '@/hooks/useOfficeData';
@@ -13,6 +14,7 @@ import type { OfficeApproval, OfficeEvent } from '@/hooks/useOfficeData';
 interface SplitWorkspacePanelProps {
   approvals: OfficeApproval[];
   events: OfficeEvent[];
+  workspaceId?: string | null;
 }
 
 const PANEL_TABS = [
@@ -26,9 +28,10 @@ const PANEL_TABS = [
   { key: 'translations', label: 'Translations', icon: '🌐' },
   { key: 'ocr', label: 'OCR/ISR', icon: '📷' },
   { key: 'approvals', label: 'Approvals', icon: '✅' },
+  { key: 'knowledge', label: 'Memory', icon: '🧠' },
 ];
 
-export function SplitWorkspacePanel({ approvals, events }: SplitWorkspacePanelProps) {
+export function SplitWorkspacePanel({ approvals, events, workspaceId }: SplitWorkspacePanelProps) {
   const [activeTab, setActiveTab] = useState('preview');
 
   return (
@@ -55,7 +58,7 @@ export function SplitWorkspacePanel({ approvals, events }: SplitWorkspacePanelPr
         <div className="flex-1 min-h-0 overflow-hidden">
           {PANEL_TABS.map((tab) => (
             <TabsContent key={tab.key} value={tab.key} className={`h-full m-0 ${tab.key === 'preview' ? '' : 'p-3'}`}>
-              <TabContent tabKey={tab.key} approvals={approvals} events={events} />
+              <TabContent tabKey={tab.key} approvals={approvals} events={events} workspaceId={workspaceId} />
             </TabsContent>
           ))}
         </div>
@@ -64,10 +67,11 @@ export function SplitWorkspacePanel({ approvals, events }: SplitWorkspacePanelPr
   );
 }
 
-function TabContent({ tabKey, approvals, events }: {
+function TabContent({ tabKey, approvals, events, workspaceId }: {
   tabKey: string;
   approvals: OfficeApproval[];
   events: OfficeEvent[];
+  workspaceId?: string | null;
 }) {
   switch (tabKey) {
     case 'approvals':
@@ -111,6 +115,9 @@ function TabContent({ tabKey, approvals, events }: {
 
     case 'preview':
       return <PreviewPanel />;
+
+    case 'knowledge':
+      return <MemoryPanel workspaceId={workspaceId} />;
 
     default:
       return (

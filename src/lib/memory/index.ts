@@ -25,7 +25,7 @@ class MemorySystem {
   async store(input: CreateMemoryInput) {
     const item = await db.memoryItem.create({
       data: {
-        scope: input.scope,
+        scope: (input.scope ?? 'workspace') as import('../types/domain').MemoryScope,
         scopeId: input.scopeId ?? null,
         type: input.type,
         content: input.content,
@@ -35,7 +35,7 @@ class MemorySystem {
 
     await eventBus.emit(EventTypes.MEMORY_CREATED, {
       memoryId: item.id,
-      scope: input.scope,
+      scope: (input.scope ?? 'workspace') as import('../types/domain').MemoryScope,
       type: input.type,
       timestamp: Date.now(),
       source: 'memory-system',
@@ -144,3 +144,7 @@ class MemorySystem {
 }
 
 export const memorySystem = MemorySystem.getInstance();
+
+// ─── Extended Memory Services ─────────────────────────────────
+export { sharedMemoryService, type MemoryItemInput, type RecallOptions, type MemoryUpdatePatch, type ProjectSummary } from './SharedMemoryService';
+export { memoryRouter } from './MemoryRouter';

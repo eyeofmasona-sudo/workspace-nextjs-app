@@ -139,15 +139,41 @@ export const MemoryScope = {
 export type MemoryScope = (typeof MemoryScope)[keyof typeof MemoryScope];
 
 export const MemoryType = {
+  // ── Original types ──
   CONTEXT: 'context',
   DECISION: 'decision',
   FACT: 'fact',
   LESSON: 'lesson',
   CONVERSATION_SUMMARY: 'conversation_summary',
   ERROR: 'error',
+  // ── Extended types ──
+  ARCHITECTURE: 'architecture',
+  BUG: 'bug',
+  TASK_RESULT: 'task_result',
+  BRAND_RULE: 'brand_rule',
+  USER_PREFERENCE: 'user_preference',
+  RISK: 'risk',
+  LEAD_NOTE: 'lead_note',
+  WORKFLOW_NOTE: 'workflow_note',
+  FILE_REFERENCE: 'file_reference',
 } as const;
 
 export type MemoryType = (typeof MemoryType)[keyof typeof MemoryType];
+
+export const MemoryImportance = {
+  LOW: 'low',
+  MEDIUM: 'medium',
+  HIGH: 'high',
+  CRITICAL: 'critical',
+} as const;
+export type MemoryImportance = (typeof MemoryImportance)[keyof typeof MemoryImportance];
+
+export const MemoryVisibility = {
+  GLOBAL: 'global',
+  WORKSPACE: 'workspace',
+  AGENT_PRIVATE: 'agent_private',
+} as const;
+export type MemoryVisibility = (typeof MemoryVisibility)[keyof typeof MemoryVisibility];
 
 // ─── Domain Entity Interfaces ────────────────────────────────
 
@@ -318,10 +344,20 @@ export interface CreateAgentInput {
 }
 
 export interface CreateMemoryInput {
-  scope: MemoryScope;
+  // Legacy fields (preserved for existing code)
+  scope?: MemoryScope;
   scopeId?: string;
+  // New fields
+  workspaceId?: string;
+  projectId?: string;
+  agentId?: string;
   type: MemoryType;
+  title?: string;
   content: string;
+  tags?: string[];
+  importance?: MemoryImportance;
+  confidence?: number;
+  visibility?: MemoryVisibility;
   metadata?: Record<string, unknown>;
 }
 

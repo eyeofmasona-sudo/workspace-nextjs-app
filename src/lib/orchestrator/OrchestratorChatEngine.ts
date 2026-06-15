@@ -14,6 +14,8 @@
 // 7. Returns complete response with delegation details
 
 import { agentRuntime } from '../agent-core/runtime';
+import { sharedMemoryService } from '../memory/SharedMemoryService';
+import { memoryRouter } from '../memory/MemoryRouter';
 import { agentRegistry } from '../agent-core/registry';
 import { providerRegistry } from '../ai-provider/provider-registry';
 import { eventBus } from '../event-bus';
@@ -143,6 +145,17 @@ class OrchestratorChatEngine {
       };
     }
 
+    // Step 2.5: Recall relevant memory context
+    let memoryContext = '';
+    if (input.workspaceId) {
+      try {
+        memoryContext = await sharedMemoryService.buildContextString(input.message, {
+          workspaceId: input.workspaceId,
+          limit: 5,
+        });
+      } catch {}
+    }
+
     // Step 3: Determine delegation plan
     let delegationDecisions: DelegationDecision[];
 
@@ -151,7 +164,8 @@ class OrchestratorChatEngine {
       delegationDecisions = this.buildManualDelegations(input.targetAgentIds, input.message, availableAgents);
     } else {
       // Auto mode: AI decides which agents to use
-      const analysisResult = await this.analyzeDelegation(input.message, availableAgents, input.history);
+      const messageWithContext = input.message + memoryContext;
+      const analysisResult = await this.analyzeDelegation(messageWithContext, availableAgents, input.history);
       if (!analysisResult.success) {
         return {
           orchestratorResponse: analysisResult.error!,
@@ -214,11 +228,53 @@ class OrchestratorChatEngine {
 
         step.durationMs = Date.now() - agentStartTime;
 
+        // Memory: route significant results to SharedMemoryService
+        if ((step.status as string) === 'completed' && step.result && input.workspaceId) {
+          const shouldStore = memoryRouter.shouldRemember({
+            content: step.result,
+            agentRole: availableAgents.find(a => a.id === decision.agentId)?.role,
+            success: true,
+          });
+          if (shouldStore) {
+            const memInput = memoryRouter.categorizeMemory({
+              content: step.result,
+              agentRole: availableAgents.find(a => a.id === decision.agentId)?.role,
+              agentId: decision.agentId,
+              workspaceId: input.workspaceId!,
+              success: true,
+            });
+            if (memInput) {
+              sharedMemoryService.remember(memInput).catch(() => {});
+            }
+          }
+        }
+
         return result;
       } catch (error) {
         step.status = 'failed';
         step.error = error instanceof Error ? error.message : 'Unknown execution error';
         step.durationMs = Date.now() - agentStartTime;
+
+        // Memory: route significant results to SharedMemoryService
+        if ((step.status as string) === 'completed' && step.result && input.workspaceId) {
+          const shouldStore = memoryRouter.shouldRemember({
+            content: step.result,
+            agentRole: availableAgents.find(a => a.id === decision.agentId)?.role,
+            success: true,
+          });
+          if (shouldStore) {
+            const memInput = memoryRouter.categorizeMemory({
+              content: step.result,
+              agentRole: availableAgents.find(a => a.id === decision.agentId)?.role,
+              agentId: decision.agentId,
+              workspaceId: input.workspaceId!,
+              success: true,
+            });
+            if (memInput) {
+              sharedMemoryService.remember(memInput).catch(() => {});
+            }
+          }
+        }
 
         // Attempt fallback: if the agent has a fallback provider, try it
         // This prevents the entire workflow from crashing on a single agent failure
@@ -236,6 +292,27 @@ class OrchestratorChatEngine {
               step.result = fallbackResult.content ?? undefined;
               step.error = undefined;
               step.durationMs = Date.now() - agentStartTime;
+
+        // Memory: route significant results to SharedMemoryService
+        if ((step.status as string) === 'completed' && step.result && input.workspaceId) {
+          const shouldStore = memoryRouter.shouldRemember({
+            content: step.result,
+            agentRole: availableAgents.find(a => a.id === decision.agentId)?.role,
+            success: true,
+          });
+          if (shouldStore) {
+            const memInput = memoryRouter.categorizeMemory({
+              content: step.result,
+              agentRole: availableAgents.find(a => a.id === decision.agentId)?.role,
+              agentId: decision.agentId,
+              workspaceId: input.workspaceId!,
+              success: true,
+            });
+            if (memInput) {
+              sharedMemoryService.remember(memInput).catch(() => {});
+            }
+          }
+        }
               return fallbackResult;
             }
           }
