@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { orchestratorChatEngine } from '@/lib/orchestrator';
 import { initProviders } from '@/lib/ai-provider';
 import { loadAgentConfigs, registerBuiltinSkillsAndTools } from '@/lib/agent-core/config-loader';
+import { durableEventWorker } from '@/lib/event-bus/DurableEventWorker';
 import { AGENT_CONFIGS } from '@/lib/agent-configs';
 import { z } from 'zod';
 
@@ -16,6 +17,7 @@ async function ensureInitialized() {
   await initProviders();
   loadAgentConfigs(AGENT_CONFIGS);
   registerBuiltinSkillsAndTools();
+  durableEventWorker.start(); // replay missed events after cold start
   initialized = true;
 }
 
