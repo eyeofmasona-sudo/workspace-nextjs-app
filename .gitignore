@@ -13,3 +13,8 @@ tsconfig.tsbuildinfo
 .next/
 node_modules/
 prisma/db/*.db
+
+# Runtime artifacts — не коммитить
+tool-results/
+download/
+.zscripts/dev.pid
