@@ -25,7 +25,7 @@ cp .env.example .env
 Edit `.env`:
 
 ```env
-DATABASE_URL="file:./db/custom.db"
+DATABASE_URL="postgresql://..." # see .env.example
 OPENROUTER_API_KEY="sk-or-your-key-here"
 OPENROUTER_BASE_URL="https://openrouter.ai/api/v1"
 ```
@@ -34,7 +34,8 @@ OPENROUTER_BASE_URL="https://openrouter.ai/api/v1"
 
 ```bash
 npx prisma generate
-npx prisma db push
+npm run db:deploy   # apply migrations (Supabase Postgres)
+npm run db:seed     # seed agents, skills, tools
 ```
 
 ### 4. Start development server
