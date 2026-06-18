@@ -1,70 +1,119 @@
 # Agent OS — Deployment Guide
 
-## Database: Migration-based workflow (Prisma Migrate)
+## Database: Supabase Postgres + Prisma Migrate
 
-This project uses **`prisma migrate`** (not `db push`) for schema management.  
-`db push` was used during initial development and is now replaced by migrations.
+Проект использует **Supabase Postgres** с двумя connection string и
+**`prisma migrate`** для управления схемой.
 
 ---
 
-## Local Development
+## Supabase Setup
 
-```bash
-# Apply any pending migrations to local DB
-npm run db:migrate
-# or: npx prisma migrate dev
+### Получение строк подключения
 
-# Check migration status
-npm run db:status
+1. Supabase Dashboard → Project → Settings → Database → Connection string
+2. Скопируй два URL:
 
-# Generate Prisma client after schema changes
-npm run db:generate
+| URL | Порт | Назначение |
+|-----|------|-----------|
+| Pooled (Transaction mode) | `:6543` | `DATABASE_URL` — runtime (Next.js, API, agents) |
+| Direct | `:5432` | `DIRECT_URL` — только migrate/introspect |
+
+### .env (production — НЕ коммитить)
+
+```env
+# Runtime (pgBouncer, transaction mode)
+DATABASE_URL="postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1"
+
+# Migrate only (direct connection)
+DIRECT_URL="postgresql://postgres.[PROJECT-REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:5432/postgres"
 ```
 
-## Production Deploy
+Параметры `?pgbouncer=true&connection_limit=1` **обязательны** для pooled URL —
+pgBouncer в transaction mode не поддерживает prepared statements, Prisma
+переключается на inline params при наличии этого флага.
+
+---
+
+## Первый деплой на новую БД
 
 ```bash
-# 1. Generate Prisma client
-npx prisma generate
+# 1. Установи переменные окружения (DATABASE_URL + DIRECT_URL)
 
-# 2. Apply pending migrations — NON-DESTRUCTIVE, runs only new migrations
+# 2. Примени миграции (использует DIRECT_URL — прямое соединение)
 npm run db:deploy
-# or: npx prisma migrate deploy
+# = npx prisma migrate deploy
 
-# 3. Start the server
+# 3. Запусти seed (создаёт агентов, навыки, инструменты)
+npm run db:seed
+# = npx prisma db seed
+
+# 4. Запусти сервер
 npm run start
 ```
 
-**`prisma migrate deploy`** is safe for production:
-- Applies only pending migrations in order
-- Never resets or drops existing data
-- Fails fast if a migration has already been partially applied
-- Idempotent if no pending migrations exist
-
-## Migration Files
-
-```
-prisma/migrations/
-├── migration_lock.toml                          # Lock file — commit this
-├── 20260615000000_init/
-│   └── migration.sql                            # Baseline: all tables (613 lines)
-└── 20260615112734_add_content_crm_indexes/
-    └── migration.sql                            # Delta: content/CRM tables + 136 indexes (567 lines)
-```
-
-## Adding Schema Changes
+## Деплой обновлений (schema changes)
 
 ```bash
-# 1. Edit prisma/schema.prisma
-# 2. Create and apply migration
-npx prisma migrate dev --name describe_your_change
-# 3. Commit both schema.prisma and the new migration file
+# 1. Создай миграцию локально (требует живой DIRECT_URL)
+npx prisma migrate dev --name describe_change
+
+# 2. Закоммить schema.prisma + новый файл в prisma/migrations/
+
+# 3. В production:
+npm run db:deploy   # применяет только новые миграции, не трогает данные
 ```
 
-## ⚠️ Do NOT use in production
+---
+
+## Скрипты package.json
+
+| Команда | Описание |
+|---------|---------|
+| `npm run db:migrate` | `prisma migrate dev` — создать новую миграцию (dev) |
+| `npm run db:deploy`  | `prisma migrate deploy` — применить миграции (prod) ✅ |
+| `npm run db:status`  | `prisma migrate status` — статус миграций |
+| `npm run db:generate`| `prisma generate` — перегенерировать клиент |
+
+---
+
+## Локальная разработка
 
 ```bash
-# These are DEVELOPMENT-ONLY commands:
-npx prisma db push        # Bypasses migrations — do not use in prod
-npx prisma migrate reset  # DROPS ALL DATA
+# Можно использовать локальный Supabase CLI или remote dev project
+# Обязательно ставить оба URL в .env.local
+npx prisma migrate dev   # создаёт миграции через DIRECT_URL
+npm run dev
 ```
+
+---
+
+## Migration files
+
+```
+prisma/
+├── schema.prisma                     # provider = "postgresql"
+├── migrations/
+│   ├── migration_lock.toml           # provider = "postgresql" — коммитить
+│   └── 20260618000000_init_postgres/
+│       └── migration.sql             # Полный pg baseline (1357 строк, 136 индексов)
+└── migrations_sqlite_archive/        # Старые SQLite миграции — только для истории
+    ├── 20260615000000_init/
+    ├── 20260615112734_add_content_crm_indexes/
+    └── 20260615214432_add_tool_execution_input_full/
+```
+
+---
+
+## ⚠️ Что НЕ делать
+
+```bash
+npx prisma db push        # Обходит миграции — НЕ использовать в prod
+npx prisma migrate reset  # УДАЛЯЕТ ВСЕ ДАННЫЕ
+```
+
+## Данные из SQLite
+
+Dev-данные из `db/custom.db` **не мигрировались** (умышленно).
+Они пересоздаются через `npm run db:seed` на новой БД.
+`db/custom.db` и `prisma/db/custom.db` исключены из git (`.gitignore`).
