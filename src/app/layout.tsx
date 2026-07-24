@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { ApiCatalogButton } from "@/components/integrations/ApiCatalogButton";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,9 +15,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Agent OS — Visual AI Platform",
-  description: "AI-powered development platform with a collaborative agent office. Built with Next.js, TypeScript, and Prisma.",
-  keywords: ["Agent OS", "AI", "agents", "automation", "Next.js", "TypeScript"],
+  title: "JARVIS Agent OS — Visual AI Platform",
+  description: "AI-powered development platform with a collaborative agent office and managed integration hub.",
+  keywords: ["JARVIS", "Agent OS", "AI", "agents", "automation", "Next.js", "TypeScript"],
   icons: {
     icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
   },
@@ -33,6 +34,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
         {children}
+        <ApiCatalogButton />
         <Toaster />
       </body>
     </html>
