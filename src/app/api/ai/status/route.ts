@@ -2,7 +2,6 @@
 
 import { NextResponse } from 'next/server';
 import { providerRegistry } from '@/lib/ai-provider/provider-registry';
-import { isOpenRouterConfigured } from '@/lib/ai-provider/openrouter/config';
 import { initProviders } from '@/lib/ai-provider';
 import { loggers } from '@/lib/logger';
 
@@ -17,27 +16,26 @@ async function ensureProviders() {
 export async function GET() {
   try {
     await ensureProviders();
-
     const providers = providerRegistry.listAll();
     const providerStatuses = await Promise.all(
-      providers.map(async (p) => ({
-        id: p.id,
-        name: p.name,
-        available: await p.isAvailable().catch(() => false),
+      providers.map(async (provider) => ({
+        id: provider.id,
+        name: provider.name,
+        available: await provider.isAvailable().catch(() => false),
       })),
     );
 
     return NextResponse.json({
-      configured: isOpenRouterConfigured(),
+      configured: providerStatuses.some((provider) => provider.available),
       providers: providerStatuses,
       registeredProviderIds: providerRegistry.listIds(),
     });
   } catch (error) {
     loggers.api.error({ err: error }, '[API] GET /ai/status error:');
     return NextResponse.json({
-      configured: isOpenRouterConfigured(),
+      configured: false,
       providers: [],
-      registeredProviderIds: [],
+      registeredProviderIds: providerRegistry.listIds(),
       error: error instanceof Error ? error.message : 'Unknown error',
     });
   }
