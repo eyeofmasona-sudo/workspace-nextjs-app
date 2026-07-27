@@ -5,26 +5,28 @@ export * from './types';
 export { providerRegistry } from './provider-registry';
 export { OpenRouterProvider } from './openrouter/adapter';
 export { getOpenRouterConfig, isOpenRouterConfigured } from './openrouter/config';
+export { OllamaProvider } from './ollama/adapter';
+export { getOllamaConfig, isOllamaConfigured } from './ollama/config';
 
-/**
- * Initialize all AI providers at application startup.
- * Call this once in a server-side module (e.g., instrumentation or seed).
- */
+/** Initialize configured cloud and local model providers once. */
 export async function initProviders(): Promise<void> {
   const { providerRegistry } = await import('./provider-registry');
   const { OpenRouterProvider } = await import('./openrouter/adapter');
   const { isOpenRouterConfigured } = await import('./openrouter/config');
+  const { OllamaProvider } = await import('./ollama/adapter');
+  const { isOllamaConfigured } = await import('./ollama/config');
 
-  // Register OpenRouter if configured
-  if (isOpenRouterConfigured()) {
-    const openrouter = new OpenRouterProvider();
-    providerRegistry.register(openrouter);
+  if (isOpenRouterConfigured() && !providerRegistry.has('openrouter')) {
+    providerRegistry.register(new OpenRouterProvider());
     logger.info('[AI Provider] OpenRouter registered');
-  } else {
-    logger.warn('[AI Provider] OpenRouter not configured — set OPENROUTER_API_KEY in .env');
   }
 
-  // Future: register additional providers here
-  // e.g., providerRegistry.register(new OpenAIProvider());
-  // e.g., providerRegistry.register(new AnthropicProvider());
+  if (isOllamaConfigured() && !providerRegistry.has('ollama')) {
+    providerRegistry.register(new OllamaProvider());
+    logger.info('[AI Provider] Ollama local provider registered');
+  }
+
+  if (!isOpenRouterConfigured()) {
+    logger.warn('[AI Provider] OpenRouter not configured; local Ollama remains available when running');
+  }
 }
